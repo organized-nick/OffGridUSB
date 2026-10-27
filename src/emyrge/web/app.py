@@ -44,6 +44,7 @@ from emyrge.knowledge.seed_corpus import DEFAULT_KHAN_LESSONS, DEFAULT_ZIM_ARTIC
 from emyrge.knowledge.zim_reader import ZimReader
 from emyrge.memory.memory_vault import MemoryVault
 from emyrge.mesh.packet_chunker import PacketChunker
+from emyrge.server import DEFAULT_PRODUCT_DESCRIPTOR, load_product_sku
 from emyrge.swarm.cluster_sim import ClusterCoordinator
 from emyrge.vision.visual_vault import VisualVault
 
@@ -215,6 +216,7 @@ class EmyrgeRuntime:
         self._lock = threading.RLock()
         self.simulated_tier: str = "auto"
         self.host_cpu_model: str = _detect_host_cpu_model()
+        self.product_info: Dict[str, Any] = load_product_sku(self.config.project_root)
 
         # Initialize Memory & Visual Vaults
         self.memory_vault = MemoryVault(db_path=self.config.vault_dir / "memory.sqlite", seed_if_empty=True)
@@ -306,6 +308,20 @@ class EmyrgeRuntime:
         kiwix_st = self.kiwix_runner.get_status()
         platforms_ready = llm_st.get("platforms_ready") or probe_usb_platforms(self.config.project_root)
 
+        product_meta = {
+            "sku": self.product_info.get("sku", "Product2"),
+            "product_id": self.product_info.get("product_id", "fieldready"),
+            "name": self.product_info.get("name", "OffGridUSB — FieldReady"),
+            "tagline": self.product_info.get("tagline", ""),
+            "tiers": self.product_info.get("tiers", [0, 1]),
+            "target_drive_size_gb": self.product_info.get("target_drive_size_gb", 32),
+            "features": list(self.product_info.get("features", [])),
+            "hidden_features": list(self.product_info.get("hidden_features", [])),
+            "active_models": list(self.product_info.get("active_models", [])),
+            "active_zim_archives": list(self.product_info.get("active_zim_archives", [])),
+            "default_model": self.product_info.get("default_model", ""),
+        }
+
         return {
             "ok": True,
             "status": "ready" if (llm_st.get("llm_ready") or llm_st.get("llm_running")) else "standby",
@@ -323,6 +339,7 @@ class EmyrgeRuntime:
             },
             "platforms_ready": platforms_ready,
             "simulated_tier": self.simulated_tier,
+            "product": product_meta,
         }
 
     def set_simulated_hardware(self, profile_name: str) -> Dict[str, Any]:
@@ -386,11 +403,11 @@ class EmyrgeRuntime:
             res = WaterCalculator.calculate(
                 {
                     "volume_liters": vol,
-                    "is_turbid": turbid,
+                    "is_turbid": turbid or cloudy,
                     "method": method,
                     "concentration_pct": conc,
                     "elevation_meters": max(0.0, elev),
-                    "is_cloudy": cloudy,
+                    "is_cloudy": cloudy or turbid,
                 }
             )
             res["summary"] = WaterCalculator.format_mesh_summary(res)
@@ -562,6 +579,7 @@ class EmyrgeRuntime:
             return {
                 "ok": True,
                 "answer": ans,
+                "source": str(citations[0].raw_tag if citations else ""),
                 "annotated_answer": ans,
                 "mode": "direct",
                 "engine_used": "direct-zim-khan-index (0 LLM tokens)",
@@ -652,6 +670,7 @@ class EmyrgeRuntime:
         return {
             "ok": True,
             "answer": draft_answer,
+            "source": str(final_cits[0].raw_tag if final_cits else (citations[0].raw_tag if citations else "")),
             "annotated_answer": audit_report.annotated_text,
             "mode": "harness",
             "engine_used": gen_res["engine"],
@@ -865,6 +884,13 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json(200, self.runtime.get_status_payload())
                 return
 
+            if path in ("/api/product", "/api/sku"):
+                prod = dict(self.runtime.product_info)
+                prod.setdefault("ok", True)
+                prod.setdefault("product", self.runtime.product_info)
+                self._send_json(200, prod)
+                return
+
             if path == "/api/knowledge/search":
                 q = (qs.get("q") or qs.get("query") or [""])[0]
                 self._send_json(200, self.runtime.handle_knowledge_search(q))
@@ -982,6 +1008,36 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                         "pending_count": self.runtime.memory_vault.pending_count(),
                     },
                 )
+                return
+
+            if path in ("/api/memory", "/api/vault"):
+                action = str(body.get("action", "query")).lower()
+                text = str(body.get("text", body.get("query", body.get("q", ""))))
+                if action == "store":
+                    answer = str(body.get("answer", body.get("content", text)))
+                    cits = body.get("citations", [])
+                    entry_id = self.runtime.memory_vault.store_interaction(
+                        query=text,
+                        answer=answer,
+                        citations=cits,
+                        mode="manual",
+                        model_tier=1,
+                        verified=True,
+                        needs_distillation=False,
+                    )
+                    self._send_json(200, {"ok": True, "action": "store", "id": entry_id, "text": text})
+                else:
+                    search_res = self.runtime.memory_vault.search(text)
+                    self._send_json(
+                        200,
+                        {
+                            "ok": True,
+                            "action": "query",
+                            "query": text,
+                            "entries": search_res.get("entries", []),
+                            "master_notes": search_res.get("master_notes", []),
+                        },
+                    )
                 return
 
             if path == "/api/vision/upload":

@@ -13,12 +13,12 @@
       <div class="brand-block">
         <div class="brand-logo" aria-hidden="true">OG</div>
         <div>
-          <h1 class="brand-title">
+          <h1 class="brand-title" id="brandTitle">
             OffGridUSB <span class="brand-sep">//</span>
-            <span class="brand-sub">Universal Offline Knowledge &amp; Adaptive AI Harness</span>
+            <span class="brand-sub" id="brandSub">Universal Offline Knowledge &amp; Adaptive AI Harness</span>
           </h1>
           <div class="brand-tagline">
-            <a href="https://offgridusb.com" target="_blank" rel="noopener noreferrer" class="seal-pill cta-buy-pill" title="Visit offgridusb.com to purchase a ready-made OffGridUSB drive and support our team!">🛒 BUY A DRIVE &amp; SUPPORT US • OFFGRIDUSB.COM ↗</a>
+            <span class="seal-pill emerald" id="skuBadge">OffGridUSB — FieldReady</span>
             <span class="dot">•</span>
             <span>USB Portable Edition</span>
             <span class="dot">•</span>
@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <!-- LIVE STAGE HARDWARE SIMULATOR -->
+      <!-- LIVE STAGE HARDWARE SIMULATOR & ACTIVE MODEL -->
       <div class="sim-control-box">
         <label for="hardwareSimSelect" class="sim-label">STAGE HARDWARE ELASTICITY SIMULATOR</label>
         <div class="sim-select-row">
@@ -45,6 +45,12 @@
             <option value="supercomputer">Supercomputer Rack (512 GB Multi-GPU -> Tier 4 / 70B)</option>
           </select>
           <button id="refreshStatusBtn" class="btn-icon" title="Re-probe Host Hardware">↻</button>
+        </div>
+        <div class="model-select-row" id="modelSelectContainer" style="margin-top:6px;display:flex;align-items:center;gap:8px;">
+          <label for="modelSelect" class="sim-label" style="margin-bottom:0;white-space:nowrap;">ACTIVE MODEL:</label>
+          <select id="modelSelect" class="tactical-select model-select" style="flex:1;">
+            <option value="auto">Auto Selection</option>
+          </select>
         </div>
       </div>
     </div>
@@ -90,22 +96,22 @@
 
     <!-- 6 CLEAN NAVIGATION TABS -->
     <nav class="main-tabs" role="tablist" aria-label="OffGridUSB Command Modules">
-      <button class="tab-btn active" data-tab="tab-harness" role="tab" aria-selected="true">
+      <button class="tab-btn active" id="nav-harness" data-tab="tab-harness" role="tab" aria-selected="true">
         <span class="tab-num">01</span> AI Professor Harness
       </button>
-      <button class="tab-btn" data-tab="tab-iiab" role="tab" aria-selected="false">
+      <button class="tab-btn" id="nav-iiab" data-tab="tab-iiab" role="tab" aria-selected="false">
         <span class="tab-num">02</span> Internet-in-a-Box (ZIM + Khan)
       </button>
-      <button class="tab-btn" data-tab="tab-calc" role="tab" aria-selected="false">
+      <button class="tab-btn" id="nav-calc" data-tab="tab-calc" role="tab" aria-selected="false">
         <span class="tab-num">03</span> Survival Calculators
       </button>
-      <button class="tab-btn" data-tab="tab-memory" role="tab" aria-selected="false">
+      <button class="tab-btn" id="nav-memory" data-tab="tab-memory" role="tab" aria-selected="false">
         <span class="tab-num">04</span> Memory &amp; Distillation
       </button>
-      <button class="tab-btn" data-tab="tab-vision" role="tab" aria-selected="false">
+      <button class="tab-btn" id="nav-vision" data-tab="tab-vision" role="tab" aria-selected="false">
         <span class="tab-num">05</span> Visual Field Vault
       </button>
-      <button class="tab-btn" data-tab="tab-swarm" role="tab" aria-selected="false">
+      <button class="tab-btn" id="nav-swarm" data-tab="tab-swarm" role="tab" aria-selected="false">
         <span class="tab-num">06</span> Exo Swarm &amp; Chromebook
       </button>
     </nav>
@@ -219,13 +225,13 @@
     <section id="tab-iiab" class="tab-panel" role="tabpanel">
       <div class="subtab-bar">
         <div class="subtab-group">
-          <button type="button" class="subtab-btn active" data-subtab="iiab-kiwix">
+          <button type="button" class="subtab-btn active" id="subtab-kiwix" data-subtab="iiab-kiwix">
             📚 Live Kiwix ZIM Library Browser (:8081)
           </button>
-          <button type="button" class="subtab-btn" data-subtab="iiab-khan">
+          <button type="button" class="subtab-btn" id="subtab-khan" data-subtab="iiab-khan">
             🎓 Khan Academy Offline STEM &amp; Survival Tutor
           </button>
-          <button type="button" class="subtab-btn" data-subtab="iiab-search">
+          <button type="button" class="subtab-btn" id="subtab-search" data-subtab="iiab-search">
             🔍 Unified Instant Article Search (Zero-AI)
           </button>
         </div>
@@ -452,7 +458,7 @@
     <!-- TAB 4: SELF-IMPROVING MEMORY & DISTILLATION-ON-DOCK                -->
     <!-- ================================================================== -->
     <section id="tab-memory" class="tab-panel" role="tabpanel">
-      <div class="distill-hero-card">
+      <div class="distill-hero-card" id="nav-distill">
         <div class="distill-hero-text">
           <div class="section-eyebrow">SELF-IMPROVING USB INTELLIGENCE ("DISTILLATION-ON-DOCK")</div>
           <h2 class="banner-title">Retain 70B Supercomputer Mastery on a 4GB Scavenged Laptop</h2>
@@ -621,18 +627,10 @@
     </section>
   </main>
 
-  <!-- SUPPORT OFFGRIDUSB & PURCHASE CALL-TO-ACTION BANNER -->
-  <footer class="support-cta-footer" aria-label="Support OffGridUSB">
-    <div class="support-cta-box">
-      <div>
-        <h3 class="support-cta-title">⚡ Support OffGridUSB — Want a Pre-Built, Plug-and-Play Drive for Your Go-Bag, Family, or Team?</h3>
-        <p class="support-cta-sub">
-          Every purchase funds open-source offline knowledge &amp; survival engineering by <strong>@TheBlindHacker</strong>, <strong>@johndikeman</strong>, <strong>@organized-nick</strong> &amp; the OffGridUSB Team. Please visit <strong>offgridusb.com</strong> and buy one!
-        </p>
-      </div>
-      <a href="https://offgridusb.com" target="_blank" rel="noopener noreferrer" class="btn-cta-gold">
-        🛒 Visit offgridusb.com &amp; Buy One ↗
-      </a>
+  <!-- AIR-GAPPED OFFLINE SYSTEM FOOTER -->
+  <footer class="offline-footer" aria-label="OffGridUSB Offline System">
+    <div class="offline-footer-box">
+      <span class="mono">OffGridUSB Air-Gapped Command Center • 100% Offline • Zero WAN/Internet Access Required</span>
     </div>
   </footer>
 

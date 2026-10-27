@@ -1,4 +1,4 @@
-# OffGridUSB (`offgridusb.com`) — Consumer User Guide
+# OffGridUSB — Consumer User Guide
 **Universal Portable Offline Knowledge & Adaptive AI Drive**
 
 Welcome to **OffGridUSB**, a zero-cloud, 100% air-gapped portable knowledge vault and local AI engine. OffGridUSB runs entirely from this flash drive without installing any software, docker containers, or cloud dependencies on your host computer.
@@ -84,4 +84,4 @@ Ask questions in natural language. Answers are strictly grounded in offline Open
 ---
 
 *OffGridUSB is an open-source project by @TheBlindHacker, @johndikeman, @organized-nick, and the OffGridUSB team.*  
-*Visit **https://offgridusb.com** for updates, documentation, and pre-built drives.*
+*100% Air-gapped offline emergency survival knowledge & intelligence platform.*

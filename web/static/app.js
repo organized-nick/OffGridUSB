@@ -17,6 +17,7 @@
     activeKhanId: null,
     memoryData: { master_notes: [], ledger: [] },
     visionItems: [],
+    product: null,
   };
 
   // --------------------------------------------------------------------------
@@ -284,7 +285,222 @@
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Dynamic Product SKU Gating, Branding & Air-Gap Hygiene
+  // --------------------------------------------------------------------------
+  const DEFAULT_SKU_DATA = {
+    sku: "Product2",
+    product_id: "fieldready",
+    name: "OffGridUSB — FieldReady",
+    tagline: "Tactical Field Survival, Clinical Medical Vault, STEM Education & 3.8B Offline AI",
+    tiers: [0, 1],
+    target_drive_size_gb: 32,
+    features: [
+      "kiwix_reader",
+      "grounded_ai_professor",
+      "survival_calculators",
+      "memory_vault",
+      "photo_ocr_vault",
+      "stem_tutor",
+    ],
+    hidden_features: [
+      "swarm_cluster",
+      "lan_mesh_rpc",
+      "settlement_hub",
+      "distillation_on_dock",
+      "lora_mesh_agent",
+    ],
+    active_models: [
+      "smollm2-135m-instruct-q4_k_m.gguf",
+      "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+    ],
+  };
+
+  function applySkuGating(product) {
+    const p = product || state.product || DEFAULT_SKU_DATA;
+    state.product = p;
+
+    const sku = String(p.sku || "Product2");
+    const name = String(p.name || `OffGridUSB — ${sku}`);
+    const tagline = String(p.tagline || "");
+    const activeModels = Array.isArray(p.active_models) ? p.active_models : [];
+
+    // 1. Dynamic Branding: Document Title, Header Tagline, and SKU Badge
+    document.title = name;
+    const brandSub = $("#brandSub");
+    if (brandSub) {
+      brandSub.textContent = tagline || "Universal Offline Knowledge & Adaptive AI Harness";
+    }
+    const skuBadge = $("#skuBadge");
+    if (skuBadge) {
+      skuBadge.textContent = name;
+      const tierStr = Array.isArray(p.tiers) ? `Tiers ${p.tiers.join(", ")}` : "";
+      skuBadge.title = `Active Product SKU: ${sku} (${tierStr})`;
+    }
+
+    // 2. Filter Model Selection Dropdowns
+    const modelSelects = $$("#modelSelect, .model-select, select[name='model']");
+    modelSelects.forEach((sel) => {
+      const curVal = sel.value;
+      sel.innerHTML = "";
+      if (!activeModels.length) {
+        const opt = document.createElement("option");
+        opt.value = "auto";
+        opt.textContent = "Auto Model";
+        sel.appendChild(opt);
+      } else {
+        activeModels.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m;
+          const clean = m.replace(/\.gguf$/i, "").replace(/-instruct/i, "");
+          opt.textContent = `${clean} (${m})`;
+          sel.appendChild(opt);
+        });
+      }
+      if (activeModels.includes(curVal)) {
+        sel.value = curVal;
+      } else if (activeModels.length > 0) {
+        sel.value = activeModels[0];
+      }
+    });
+
+    // 3. Dynamic Hardware Sim Filtering
+    const simSelect = $("#hardwareSimSelect");
+    if (simSelect) {
+      const isP1 = sku === "Product1" || sku.toLowerCase().includes("pocket");
+      const isP2 = sku === "Product2" || sku.toLowerCase().includes("field");
+      Array.from(simSelect.options).forEach((opt) => {
+        if (["swarm", "supercomputer"].includes(opt.value)) {
+          opt.hidden = isP1 || isP2;
+          opt.disabled = isP1 || isP2;
+        } else if (opt.value === "old_laptop") {
+          opt.hidden = isP1;
+          opt.disabled = isP1;
+        } else {
+          opt.hidden = false;
+          opt.disabled = false;
+        }
+      });
+    }
+
+    // 4. Dynamic Tab Gating per SKU:
+    // Product 1 (PocketSurvival): Show tabs 1-3 only. Hide Memory Vault (4), Photo OCR (5), Swarm Cluster (6), Dock Distillation, STEM Tutor.
+    // Product 2 (FieldReady): Show tabs 1-5 (Reader, Professor, Calculators, Memory Vault, Photo OCR, STEM Tutor). Hide Swarm Cluster (6), Dock Distillation.
+    // Product 3 (CivilizationArk): Show all available tabs.
+    const isProduct1 = sku === "Product1" || sku.toLowerCase().includes("pocket");
+    const isProduct2 = sku === "Product2" || sku.toLowerCase().includes("field");
+
+    // Main navigation tabs & panel elements
+    const navHarness = $("#nav-harness") || $('button[data-tab="tab-harness"]');
+    const navIiab = $("#nav-iiab") || $('button[data-tab="tab-iiab"]');
+    const navCalc = $("#nav-calc") || $('button[data-tab="tab-calc"]');
+    const navMemory = $("#nav-memory") || $('button[data-tab="tab-memory"]');
+    const panelMemory = $("#tab-memory");
+    const navVision = $("#nav-vision") || $('button[data-tab="tab-vision"]');
+    const panelVision = $("#tab-vision");
+    const navSwarm = $("#nav-swarm") || $('button[data-tab="tab-swarm"]');
+    const panelSwarm = $("#tab-swarm");
+
+    // Dock Distillation in Tab 4
+    const navDistill = $("#nav-distill");
+    const distillDockBtn = $("#distillDockBtn");
+
+    // STEM Tutor in Tab 2
+    const subtabKhan = $("#subtab-khan") || $('button[data-subtab="iiab-khan"]');
+    const panelKhan = $("#iiab-khan");
+
+    if (isProduct1) {
+      // Product 1: Show 1-3 only. Hide 4-6, Dock Distillation, STEM Tutor
+      if (navMemory) navMemory.classList.add("hidden-sku-tab");
+      if (panelMemory) panelMemory.classList.add("hidden-sku-tab");
+      if (navVision) navVision.classList.add("hidden-sku-tab");
+      if (panelVision) panelVision.classList.add("hidden-sku-tab");
+      if (navSwarm) navSwarm.classList.add("hidden-sku-tab");
+      if (panelSwarm) panelSwarm.classList.add("hidden-sku-tab");
+
+      if (navDistill) navDistill.classList.add("hidden-sku-feature");
+      if (distillDockBtn) distillDockBtn.classList.add("hidden-sku-feature");
+
+      if (subtabKhan) subtabKhan.classList.add("hidden-sku-feature");
+      if (panelKhan) panelKhan.classList.add("hidden-sku-feature");
+
+      // Switch away if currently viewing a hidden tab
+      const activeBtn = $(".tab-btn.active");
+      if (activeBtn && ["tab-memory", "tab-vision", "tab-swarm"].includes(activeBtn.dataset.tab)) {
+        if (navHarness) navHarness.click();
+      }
+    } else if (isProduct2) {
+      // Product 2: Show 1-5 (including STEM Tutor & Memory & Vision). Hide Swarm (6) and Dock Distillation.
+      if (navMemory) navMemory.classList.remove("hidden-sku-tab");
+      if (panelMemory) panelMemory.classList.remove("hidden-sku-tab");
+      if (navVision) navVision.classList.remove("hidden-sku-tab");
+      if (panelVision) panelVision.classList.remove("hidden-sku-tab");
+
+      if (subtabKhan) subtabKhan.classList.remove("hidden-sku-feature");
+      if (panelKhan) panelKhan.classList.remove("hidden-sku-feature");
+
+      // Hide Swarm Cluster
+      if (navSwarm) navSwarm.classList.add("hidden-sku-tab");
+      if (panelSwarm) panelSwarm.classList.add("hidden-sku-tab");
+
+      // Hide Dock Distillation
+      if (navDistill) navDistill.classList.add("hidden-sku-feature");
+      if (distillDockBtn) distillDockBtn.classList.add("hidden-sku-feature");
+
+      // Switch away if on Swarm tab
+      const activeBtn = $(".tab-btn.active");
+      if (activeBtn && activeBtn.dataset.tab === "tab-swarm") {
+        if (navHarness) navHarness.click();
+      }
+    } else {
+      // Product 3: Show all available tabs
+      if (navMemory) navMemory.classList.remove("hidden-sku-tab");
+      if (panelMemory) panelMemory.classList.remove("hidden-sku-tab");
+      if (navVision) navVision.classList.remove("hidden-sku-tab");
+      if (panelVision) panelVision.classList.remove("hidden-sku-tab");
+      if (navSwarm) navSwarm.classList.remove("hidden-sku-tab");
+      if (panelSwarm) panelSwarm.classList.remove("hidden-sku-tab");
+
+      if (subtabKhan) subtabKhan.classList.remove("hidden-sku-feature");
+      if (panelKhan) panelKhan.classList.remove("hidden-sku-feature");
+
+      if (navDistill) navDistill.classList.remove("hidden-sku-feature");
+      if (distillDockBtn) distillDockBtn.classList.remove("hidden-sku-feature");
+    }
+
+    // 5. Air-Gap Hygiene & Commercial Link Elimination
+    sanitizeAirGapHygiene();
+  }
+
+  function sanitizeAirGapHygiene() {
+    // Remove all external links pointing to offgridusb.com and commercial buy pills
+    $$("a[href*='offgridusb.com'], .cta-buy-pill").forEach((el) => el.remove());
+
+    // Remove legacy support cta footer
+    $$(".support-cta-footer").forEach((el) => el.remove());
+
+    // Guarantee ZERO download, provision, upgrade, or install buttons exist anywhere in UI
+    const bannedPattern = /\b(download|provision|upgrade drive|upgrade firmware|buy drive|install package|install dependencies)\b/i;
+    $$("button, a.btn").forEach((btn) => {
+      const text = btn.textContent.trim();
+      const id = btn.id || "";
+      if (bannedPattern.test(text) || bannedPattern.test(id)) {
+        if (btn.id !== "distillDockBtn") {
+          btn.remove();
+        }
+      }
+    });
+  }
+
   function renderStatus(data) {
+    if (data && data.product) {
+      applySkuGating(data.product);
+    } else if (data && data.sku) {
+      applySkuGating(data);
+    }
+
     const hw = data.hardware || data.profile || data.system || data || {};
     const svc = data.services || {};
     const flagsObj = hw.cpu_flags || data.cpu_flags || {};
@@ -389,7 +605,16 @@
     try {
       const data = await apiGet("/api/status");
       renderStatus(data);
+      if (data.product) {
+        applySkuGating(data.product);
+      }
     } catch (_) {
+      try {
+        const prod = await apiGet("/api/product");
+        applySkuGating(prod.product || prod);
+      } catch (__) {
+        applySkuGating(DEFAULT_SKU_DATA);
+      }
       renderStatus({});
     }
   }
@@ -1744,6 +1969,7 @@
   // Boot!
   document.addEventListener("DOMContentLoaded", () => {
     initEvents();
+    applySkuGating(DEFAULT_SKU_DATA);
     probeWasmPath();
     refreshStatus();
     loadKhanCurriculum();

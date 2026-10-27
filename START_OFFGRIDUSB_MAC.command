@@ -90,7 +90,7 @@ cat <<'BANNER'
   macOS USB Portable Edition (Apple Silicon ARM64 & Intel x86_64)
   Zero Docker  |  Zero Cloud  |  100% Air-Gapped
   Signed: @TheBlindHacker  •  @johndikeman  •  @organized-nick  •  OffGridUSB Team
-  [*] Support Us & Buy Pre-Built Drives: Please visit https://offgridusb.com !
+  [*] 100% Air-Gapped Offline Operation: Zero External Network Access Required
 ================================================================================
 BANNER
 echo "  Local Command Center : http://127.0.0.1:${PORT}"

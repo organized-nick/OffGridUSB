@@ -89,7 +89,7 @@ cat <<'BANNER'
    \____/|_| |_|  \_____|_|  |_|\__,_|\____/|_____/|____/   OFFGRIDUSB.COM
 --------------------------------------------------------------------------------
   Signed: @TheBlindHacker  •  @johndikeman  •  @organized-nick  •  OffGridUSB Team
-  [*] Support Us & Buy Pre-Built Drives: Please visit https://offgridusb.com !
+  [*] 100% Air-Gapped Offline Operation: Zero External Network Access Required
 ================================================================================
 BANNER
 echo "  Linux & Raspberry Pi USB Portable Edition (${ARCH} — x86_64 & ARM64)"
