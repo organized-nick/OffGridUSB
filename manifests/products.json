@@ -1,0 +1,343 @@
+{
+  "schema_version": "1.0",
+  "catalog_name": "OffGridUSB Commercial Product & Tier Catalog",
+  "description": "Defines cumulative Tiers 0-4 and commercial hardware SKUs (Product 1: PocketSurvival, Product 2: FieldReady, Product 3: CivilizationArk, Tier 3: SwarmCluster, Tier 4: SettlementHub)",
+  "products": [
+    {
+      "sku": "Product1",
+      "product_id": "pocketsurvival",
+      "name": "OffGridUSB — PocketSurvival",
+      "tagline": "Ultra-Compact 8 GB Tactical Survival, Medical Reference & Offline AI USB",
+      "tiers": [0],
+      "target_drive_type": "Standard 8 GB USB Flash Drive",
+      "target_drive_size_gb": 8,
+      "min_drive_capacity_bytes": 7700000000,
+      "max_payload_bytes": 6979321856,
+      "payload_profiles": {
+        "lean": {
+          "description": "Zero-download instant deployment using verified local cache (1.39 GB)",
+          "total_bytes": 1396142649,
+          "total_gb": 1.39,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim"
+          ]
+        },
+        "full": {
+          "description": "Full expanded catalog with extended offline textbooks (< 6.5 GB)",
+          "total_bytes": 3482700000,
+          "total_gb": 3.48,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-food-preparation_en_2025-04.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "mdwiki_en_all_2024-06.zim",
+            "wikipedia_en_top_mini_2026-09.zim",
+            "wikipedia_en_simple_all_nopic_2026-06.zim"
+          ]
+        }
+      },
+      "active_features": [
+        "kiwix_reader",
+        "grounded_ai_professor",
+        "survival_calculators"
+      ],
+      "hidden_features": [
+        "memory_vault",
+        "photo_ocr_vault",
+        "stem_tutor",
+        "wikipedia_rag",
+        "multi_model_auto_selector",
+        "swarm_cluster",
+        "lan_mesh_rpc",
+        "settlement_hub",
+        "distillation_on_dock",
+        "lora_mesh_agent"
+      ],
+      "default_model": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "fallback_model": "smollm2-135m-instruct-q4_k_m.gguf"
+    },
+    {
+      "sku": "Product2",
+      "product_id": "fieldready",
+      "name": "OffGridUSB — FieldReady",
+      "tagline": "Tactical Field Survival, Clinical Medical Vault, STEM Education & 3.8B Offline AI",
+      "tiers": [0, 1],
+      "target_drive_type": "Standard 32 GB USB 3.2 Flash Drive (e.g. attached Drive D:)",
+      "target_drive_size_gb": 32,
+      "min_drive_capacity_bytes": 31450000000,
+      "max_payload_bytes": 29000000000,
+      "payload_profiles": {
+        "lean": {
+          "description": "Zero-download instant deployment on 32 GB drive using local verified bundle (4.69 GB)",
+          "total_bytes": 4692223737,
+          "total_gb": 4.69,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim"
+          ]
+        },
+        "full": {
+          "description": "Full expanded field catalog with Wikibooks STEM & WikiMed Maxi (~16-20 GB)",
+          "total_bytes": 18500000000,
+          "total_gb": 18.5,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim",
+            "wikibooks_en_all_maxi_2026-04.zim",
+            "wikipedia_en_medicine_maxi_2026-06.zim",
+            "zimgit-post-disaster_en_2025-05.zim"
+          ]
+        }
+      },
+      "active_features": [
+        "kiwix_reader",
+        "grounded_ai_professor",
+        "survival_calculators",
+        "memory_vault",
+        "photo_ocr_vault",
+        "stem_tutor"
+      ],
+      "hidden_features": [
+        "wikipedia_rag",
+        "multi_model_auto_selector",
+        "swarm_cluster",
+        "lan_mesh_rpc",
+        "settlement_hub",
+        "distillation_on_dock",
+        "lora_mesh_agent"
+      ],
+      "default_model": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "fallback_model": "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    },
+    {
+      "sku": "Product3",
+      "product_id": "civilizationark",
+      "name": "OffGridUSB — CivilizationArk",
+      "tagline": "Complete Human Knowledge Repository with 6.8M English Wikipedia & Multi-Model AI",
+      "tiers": [0, 1, 2],
+      "target_drive_type": "128 GB USB 3.2 Flash Drive or SSD (Note: 64 GB is insufficient)",
+      "target_drive_size_gb": 128,
+      "min_drive_capacity_bytes": 120000000000,
+      "max_payload_bytes": 115000000000,
+      "payload_profiles": {
+        "full": {
+          "description": "Full Civilization Ark payload including 50.2 GB Wikipedia No-Pic (~68.5 GB)",
+          "total_bytes": 68500000000,
+          "total_gb": 68.5,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "llama-3.2-3b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim",
+            "wikibooks_en_all_maxi_2026-04.zim",
+            "wikipedia_en_medicine_maxi_2026-06.zim",
+            "zimgit-post-disaster_en_2025-05.zim",
+            "wikipedia_en_all_nopic_2026-06.zim"
+          ]
+        }
+      },
+      "active_features": [
+        "kiwix_reader",
+        "grounded_ai_professor",
+        "survival_calculators",
+        "memory_vault",
+        "photo_ocr_vault",
+        "stem_tutor",
+        "wikipedia_rag",
+        "multi_model_auto_selector"
+      ],
+      "hidden_features": [
+        "swarm_cluster",
+        "lan_mesh_rpc",
+        "settlement_hub",
+        "distillation_on_dock",
+        "lora_mesh_agent"
+      ],
+      "default_model": "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+      "fallback_model": "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    },
+    {
+      "sku": "Tier3",
+      "product_id": "swarmcluster",
+      "name": "OffGridUSB — SwarmCluster",
+      "tagline": "Distributed LAN Computing Swarm & 32B Scavenged Cluster",
+      "tiers": [0, 1, 2, 3],
+      "target_drive_type": "256 GB Portable SSD (USB 3.2 Gen 2)",
+      "target_drive_size_gb": 256,
+      "min_drive_capacity_bytes": 240000000000,
+      "max_payload_bytes": 230000000000,
+      "payload_profiles": {
+        "full": {
+          "description": "Tiers 0-2 plus Qwen2.5-32B Swarm model and Exo clustering UI (~88.8 GB)",
+          "total_bytes": 88800000000,
+          "total_gb": 88.8,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "llama-3.2-3b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "qwen2.5-32b-instruct-q4_k_m.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim",
+            "wikibooks_en_all_maxi_2026-04.zim",
+            "wikipedia_en_medicine_maxi_2026-06.zim",
+            "zimgit-post-disaster_en_2025-05.zim",
+            "wikipedia_en_all_nopic_2026-06.zim"
+          ]
+        }
+      },
+      "active_features": [
+        "kiwix_reader",
+        "grounded_ai_professor",
+        "survival_calculators",
+        "memory_vault",
+        "photo_ocr_vault",
+        "stem_tutor",
+        "wikipedia_rag",
+        "multi_model_auto_selector",
+        "swarm_cluster",
+        "lan_mesh_rpc"
+      ],
+      "hidden_features": [
+        "settlement_hub",
+        "distillation_on_dock",
+        "lora_mesh_agent"
+      ],
+      "default_model": "qwen2.5-32b-instruct-q4_k_m.gguf",
+      "fallback_model": "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+    },
+    {
+      "sku": "Tier4",
+      "product_id": "settlementhub",
+      "name": "OffGridUSB — SettlementHub",
+      "tagline": "Autonomous Community Hub with 110 GB Illustrated Wikipedia, 70B AI & LoRa Mesh",
+      "tiers": [0, 1, 2, 3, 4],
+      "target_drive_type": "512 GB / 1 TB NVMe SSD in Rugged Enclosure",
+      "target_drive_size_gb": 512,
+      "min_drive_capacity_bytes": 480000000000,
+      "max_payload_bytes": 460000000000,
+      "payload_profiles": {
+        "full": {
+          "description": "Complete human civilization knowledge, 70B AI, LoRa gateway, and distillation-on-dock (~242 GB)",
+          "total_bytes": 242000000000,
+          "total_gb": 242.0,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "llama-3.2-3b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "qwen2.5-32b-instruct-q4_k_m.gguf",
+            "llama-3.3-70b-instruct-q4_k_m.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim",
+            "wikibooks_en_all_maxi_2026-04.zim",
+            "wikipedia_en_medicine_maxi_2026-06.zim",
+            "zimgit-post-disaster_en_2025-05.zim",
+            "wikipedia_en_all_nopic_2026-06.zim",
+            "wikipedia_en_all_maxi_2026-06.zim"
+          ]
+        }
+      },
+      "active_features": [
+        "kiwix_reader",
+        "grounded_ai_professor",
+        "survival_calculators",
+        "memory_vault",
+        "photo_ocr_vault",
+        "stem_tutor",
+        "wikipedia_rag",
+        "multi_model_auto_selector",
+        "swarm_cluster",
+        "lan_mesh_rpc",
+        "settlement_hub",
+        "distillation_on_dock",
+        "lora_mesh_agent"
+      ],
+      "hidden_features": [],
+      "default_model": "llama-3.3-70b-instruct-q4_k_m.gguf",
+      "fallback_model": "qwen2.5-32b-instruct-q4_k_m.gguf"
+    }
+  ],
+  "tiers": [
+    {
+      "tier": 0,
+      "name": "Tier 0: Pocket Survival & Micro AI",
+      "description": "Ultra-lightweight survival references and micro AI (135M-500M) running on any CPU, Pi Zero 2, or browser Wasm.",
+      "target_hardware": "8 GB USB Flash Drive, 512 MB - 2 GB RAM, any 64-bit CPU",
+      "min_ram_mb": 512
+    },
+    {
+      "tier": 1,
+      "name": "Tier 1: Field Ready & Practical STEM",
+      "description": "Full practical textbooks, memory vault, OCR, and 1.5B-3.8B reasoning AI running on legacy 4 GB RAM laptops.",
+      "target_hardware": "32 GB USB 3.2 Flash Drive, 4 GB RAM, SSE4.2 CPU",
+      "min_ram_mb": 4096
+    },
+    {
+      "tier": 2,
+      "name": "Tier 2: Civilization Ark & Full Wikipedia",
+      "description": "The entirety of English Wikipedia (6.8M articles) with dual 3B-3.8B AI and dynamic hardware auto-routing.",
+      "target_hardware": "128 GB USB 3.2 Flash Drive / SSD, 8 GB RAM, AVX2 / Metal / CUDA",
+      "min_ram_mb": 8192
+    },
+    {
+      "tier": 3,
+      "name": "Tier 3: Swarm Cluster & 32B LAN Pooling",
+      "description": "Distributed LAN inference pooling multiple scavenged computers via Exo/llama.cpp RPC to run 32B models.",
+      "target_hardware": "256 GB Portable SSD, 16-32 GB RAM (pooled over LAN)",
+      "min_ram_mb": 16384
+    },
+    {
+      "tier": 4,
+      "name": "Tier 4: Settlement Hub & 70B Autonomous Workstation",
+      "description": "Community headquarters hub with 110 GB Illustrated Wikipedia, 70B AI, distillation-on-dock, and LoRa query mesh.",
+      "target_hardware": "512 GB NVMe SSD, 64 GB RAM / Dual RTX GPUs, LoRa Gateway",
+      "min_ram_mb": 49152
+    }
+  ]
+}

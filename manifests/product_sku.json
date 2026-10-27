@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "sku": "Product2",
+  "product_id": "fieldready",
+  "name": "OffGridUSB — FieldReady",
+  "tagline": "Tactical Field Survival, Clinical Medical Vault, STEM Education & 3.8B Offline AI",
+  "tiers": [0, 1],
+  "target_drive_size_gb": 32,
+  "min_drive_capacity_bytes": 31450000000,
+  "features": [
+    "kiwix_reader",
+    "grounded_ai_professor",
+    "survival_calculators",
+    "memory_vault",
+    "photo_ocr_vault",
+    "stem_tutor"
+  ],
+  "hidden_features": [
+    "wikipedia_rag",
+    "multi_model_auto_selector",
+    "swarm_cluster",
+    "lan_mesh_rpc",
+    "settlement_hub",
+    "distillation_on_dock",
+    "lora_mesh_agent"
+  ],
+  "active_models": [
+    "smollm2-135m-instruct-q4_k_m.gguf",
+    "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+    "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+  ],
+  "active_zim_archives": [
+    "zimgit-water_en_2024-08.zim",
+    "zimgit-medicine_en_2024-08.zim",
+    "wikipedia_en_medicine_mini_2026-10.zim",
+    "wikipedia_en_top_mini_2026-09.zim"
+  ],
+  "default_model": "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+  "services": {
+    "command_center_port": 8000,
+    "kiwix_port": 8081,
+    "llama_port": 8082
+  },
+  "provisioning": {
+    "provisioned_at": "2026-10-27T16:00:00Z",
+    "provisioner_version": "1.0.0",
+    "filesystem": "exFAT",
+    "cluster_size_bytes": 131072,
+    "target_drive_serial": "121220160204",
+    "target_drive_letter": "D:"
+  }
+}

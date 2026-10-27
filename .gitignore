@@ -1,0 +1,158 @@
+# ==============================================================================
+# OffGridUSB (github.com/organized-nick/OffGridUSB) — Git Ignore Configuration
+# Tracks clean source code, manifests, documentation, and folder skeletons.
+# Strictly ignores binary payloads, model weights, ZIM archives, and caches.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Agent Scratchpads, Local Metadata & Editor Settings
+# ------------------------------------------------------------------------------
+.agents/
+.gemini/
+.claude/
+.cursor/
+scratch/
+notes/
+*.scratch*
+*.tmp
+*.bak
+PROJECT.md
+ORIGINAL_REQUEST.md
+TEST_INFRA.md
+TEST_READY.md
+
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ------------------------------------------------------------------------------
+# 2. Python Bytecode, Caches & Virtual Environments
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.venv/
+venv/
+env/
+ENV/
+
+# ------------------------------------------------------------------------------
+# 3. Host Factory Provisioning Caches & Temporary Staging
+# ------------------------------------------------------------------------------
+tmp_dl/
+staging/
+cache/
+build/
+dist/
+*.egg-info/
+provisioning/cache/
+provisioning/downloads/
+provisioning/staging/
+
+# ------------------------------------------------------------------------------
+# 4. Large Binary Payloads & Neural Models (Strictly Excluded from Git)
+# ------------------------------------------------------------------------------
+*.gguf
+*.zim
+*.safetensors
+*.onnx
+*.tar.gz
+*.zip
+*.7z
+*.iso
+*.img
+*.exe
+*.dll
+*.so
+*.so.*
+*.dylib
+*.pyd
+
+# ------------------------------------------------------------------------------
+# 5. Directory Skeleton Preservation (Track Folders, Ignore Binaries)
+# ------------------------------------------------------------------------------
+# Runtime binaries: preserve structure and runner scripts
+bin/*
+!bin/README.md
+!bin/run_windows.bat
+!bin/run_linux.sh
+!bin/run_macos.command
+!bin/windows_x86_64/
+bin/windows_x86_64/*
+!bin/windows_x86_64/README.md
+!bin/windows_arm64/
+bin/windows_arm64/*
+!bin/windows_arm64/README.md
+!bin/linux_x86_64/
+bin/linux_x86_64/*
+!bin/linux_x86_64/README.md
+!bin/linux_arm64/
+bin/linux_arm64/*
+!bin/linux_arm64/README.md
+!bin/macos_arm64/
+bin/macos_arm64/*
+!bin/macos_arm64/README.md
+!bin/macos_x86_64/
+bin/macos_x86_64/*
+!bin/macos_x86_64/README.md
+!bin/polyglot/
+bin/polyglot/*
+!bin/polyglot/README.md
+
+# Customer data directories: track skeletons & configs, ignore multi-GB archives
+data/*
+!data/README.md
+!data/library.xml
+!data/.integrity_canary
+!data/zim/
+data/zim/*
+!data/zim/README.md
+!data/models/
+data/models/*
+!data/models/README.md
+!data/vault/
+data/vault/*
+!data/vault/README.md
+!data/uploads/
+data/uploads/*
+!data/uploads/README.md
+
+# ------------------------------------------------------------------------------
+# 6. Runtime Databases, Logs & Process Files
+# ------------------------------------------------------------------------------
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+
+# ------------------------------------------------------------------------------
+# 7. OS Metadata & Sync Conflicts
+# ------------------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*-DESKTOP-*
+*-JoeWorkTop*
+
+# ------------------------------------------------------------------------------
+# 8. Secrets & Environment Files
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key

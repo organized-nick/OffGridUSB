@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="100%" height="100%" role="img" aria-label="OffGridUSB — Universal Offline Knowledge, Internet-in-a-Box and Adaptive AI Harness">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#060911" />
+      <stop offset="50%" stop-color="#0b1220" />
+      <stop offset="100%" stop-color="#07151f" />
+    </linearGradient>
+    <linearGradient id="usbBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="55%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#090d16" />
+    </linearGradient>
+    <linearGradient id="usbMetal" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#cbd5e1" />
+      <stop offset="45%" stop-color="#94a3b8" />
+      <stop offset="100%" stop-color="#475569" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="55%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#818cf8" />
+    </linearGradient>
+    <filter id="glowCyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+    <pattern id="tacGrid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M 28 0 L 0 0 0 28" fill="none" stroke="#1e293b" stroke-width="0.7" stroke-opacity="0.55" />
+    </pattern>
+  </defs>
+
+  <!-- Outer Frame & Tactical Grid -->
+  <rect x="2" y="2" width="1196" height="336" rx="16" fill="url(#bgGrad)" stroke="#1e293b" stroke-width="2" />
+  <rect x="2" y="2" width="1196" height="336" rx="16" fill="url(#tacGrid)" />
+  <rect x="2" y="2" width="1196" height="4" rx="2" fill="url(#accentGrad)" />
+
+  <!-- Subtle Radar / Signal Rings Behind USB -->
+  <circle cx="235" cy="168" r="128" fill="none" stroke="#38bdf8" stroke-opacity="0.10" stroke-width="1" stroke-dasharray="5 5" />
+  <circle cx="235" cy="168" r="92" fill="none" stroke="#10b981" stroke-opacity="0.16" stroke-width="1" />
+
+  <!-- Circuit Bus Traces Radiating from USB to Subsystems -->
+  <g fill="none" stroke-width="2" stroke-linecap="round">
+    <path d="M 358 142 L 415 142 L 438 112 L 485 112" stroke="#10b981" stroke-opacity="0.7" />
+    <path d="M 358 168 L 485 168" stroke="#38bdf8" stroke-opacity="0.85" />
+    <path d="M 358 194 L 415 194 L 438 224 L 485 224" stroke="#f59e0b" stroke-opacity="0.7" />
+    <circle cx="485" cy="112" r="4" fill="#10b981" />
+    <circle cx="485" cy="168" r="4" fill="#38bdf8" />
+    <circle cx="485" cy="224" r="4" fill="#f59e0b" />
+  </g>
+
+  <!-- Armored OffGridUSB Hardware Stick Illustration -->
+  <g transform="translate(52, 114)">
+    <!-- USB-A Metallic Plug -->
+    <rect x="0" y="22" width="66" height="64" rx="5" fill="url(#usbMetal)" stroke="#e2e8f0" stroke-width="1.2" />
+    <rect x="14" y="33" width="18" height="14" rx="2" fill="#0f172a" />
+    <rect x="14" y="61" width="18" height="14" rx="2" fill="#0f172a" />
+    <!-- Gold Contact Pins -->
+    <rect x="38" y="34" width="22" height="5" rx="1" fill="#fbbf24" />
+    <rect x="38" y="45" width="22" height="5" rx="1" fill="#fbbf24" />
+    <rect x="38" y="58" width="22" height="5" rx="1" fill="#fbbf24" />
+    <rect x="38" y="69" width="22" height="5" rx="1" fill="#fbbf24" />
+
+    <!-- Ruggedized USB Chassis -->
+    <rect x="64" y="6" width="242" height="96" rx="14" fill="url(#usbBody)" stroke="#38bdf8" stroke-width="2" />
+    <rect x="74" y="15" width="222" height="78" rx="9" fill="none" stroke="#1e293b" stroke-width="1.2" />
+
+    <!-- Internal NPU / NAND Die Window -->
+    <rect x="92" y="26" width="60" height="56" rx="6" fill="#05080f" stroke="#10b981" stroke-width="1.5" />
+    <g stroke="#10b981" stroke-width="1.2" stroke-opacity="0.75">
+      <line x1="102" y1="20" x2="102" y2="26" />
+      <line x1="115" y1="20" x2="115" y2="26" />
+      <line x1="128" y1="20" x2="128" y2="26" />
+      <line x1="141" y1="20" x2="141" y2="26" />
+      <line x1="102" y1="82" x2="102" y2="88" />
+      <line x1="115" y1="82" x2="115" y2="88" />
+      <line x1="128" y1="82" x2="128" y2="88" />
+      <line x1="141" y1="82" x2="141" y2="88" />
+    </g>
+    <text x="122" y="52" text-anchor="middle" fill="#10b981" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">AI+ZIM</text>
+    <text x="122" y="68" text-anchor="middle" fill="#38bdf8" font-family="Consolas, 'SF Mono', monospace" font-size="9">exFAT</text>
+
+    <!-- Laser-Etched Chassis Label -->
+    <text x="166" y="48" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="800" letter-spacing="0.8">OFFGRID</text>
+    <text x="249" y="48" fill="#38bdf8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="17" font-weight="800" letter-spacing="0.8">USB</text>
+    <text x="166" y="66" fill="#94a3b8" font-family="Consolas, 'SF Mono', monospace" font-size="10.5" letter-spacing="0.6">AIR-GAPPED CORE</text>
+
+    <!-- Live Air-Gap Status LED -->
+    <circle cx="282" cy="62" r="5" fill="#10b981" filter="url(#glowCyan)" />
+    <circle cx="282" cy="62" r="2.2" fill="#ecfdf5" />
+
+    <!-- Tactical Lanyard Tail Loop -->
+    <path d="M 306 34 L 324 34 A 10 10 0 0 1 334 44 L 334 64 A 10 10 0 0 1 324 74 L 306 74" fill="none" stroke="#64748b" stroke-width="5" />
+  </g>
+
+  <!-- Right-Side Headline & Capability Matrix -->
+  <g transform="translate(510, 56)">
+    <!-- Top Pill Badges -->
+    <rect x="0" y="0" width="152" height="24" rx="12" fill="#064e3b" stroke="#10b981" stroke-width="1" />
+    <text x="76" y="16" text-anchor="middle" fill="#6ee7b7" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">OFFGRIDUSB.COM</text>
+
+    <rect x="162" y="0" width="144" height="24" rx="12" fill="#0c2d48" stroke="#38bdf8" stroke-width="1" />
+    <text x="234" y="16" text-anchor="middle" fill="#7dd3fc" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">1-CLICK ZERO-INSTALL</text>
+
+    <rect x="316" y="0" width="138" height="24" rx="12" fill="#1e1b4b" stroke="#818cf8" stroke-width="1" />
+    <text x="385" y="16" text-anchor="middle" fill="#c7d2fe" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">100% AIR-GAPPED</text>
+
+    <rect x="464" y="0" width="176" height="24" rx="12" fill="#3b2106" stroke="#f59e0b" stroke-width="1" />
+    <text x="552" y="16" text-anchor="middle" fill="#fde68a" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">ZERO DOCKER • ZERO CLOUD</text>
+
+    <!-- Main Title -->
+    <text x="0" y="68" fill="#f8fafc" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="42" font-weight="900" letter-spacing="-0.5">OffGrid<tspan fill="#38bdf8">USB</tspan></text>
+    <text x="242" y="66" fill="#64748b" font-family="Consolas, 'SF Mono', monospace" font-size="18" font-weight="600">// INTERNET-IN-A-BOX + ADAPTIVE AI</text>
+
+    <!-- Subtitle -->
+    <text x="0" y="98" fill="#cbd5e1" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15.5">
+      Wikipedia, WikiMed, Khan Academy STEM, Deterministic CDC/WHO/IEEE Calculators &amp; Elastic 0.13B–70B Local AI
+    </text>
+    <text x="0" y="120" fill="#94a3b8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14">
+      Scales from a 10-year-old 4 GB laptop, Raspberry Pi, or locked Chromebook (Wasm) up to an Exo / RPC Supercomputer Swarm.
+    </text>
+
+    <!-- 4 Capability Cards -->
+    <g transform="translate(0, 140)">
+      <rect x="0" y="0" width="154" height="58" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1.2" />
+      <text x="12" y="21" fill="#10b981" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">MULTI-OS + WASM</text>
+      <text x="12" y="38" fill="#e2e8f0" font-family="-apple-system, sans-serif" font-size="12">Win • Mac • Linux</text>
+      <text x="12" y="51" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">ARM64 Pi &amp; Chromebook</text>
+
+      <rect x="164" y="0" width="154" height="58" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1.2" />
+      <text x="176" y="21" fill="#38bdf8" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">GROUNDED ZIM + STEM</text>
+      <text x="176" y="38" fill="#e2e8f0" font-family="-apple-system, sans-serif" font-size="12">Kiwix :8081 + Khan</text>
+      <text x="176" y="51" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Clickable Citations</text>
+
+      <rect x="328" y="0" width="154" height="58" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1.2" />
+      <text x="340" y="21" fill="#f59e0b" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">2-PASS SAFETY AUDIT</text>
+      <text x="340" y="38" fill="#e2e8f0" font-family="-apple-system, sans-serif" font-size="12">CDC • WHO • IEEE</text>
+      <text x="340" y="51" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">Zero-Hallucination Math</text>
+
+      <rect x="492" y="0" width="156" height="58" rx="8" fill="#0f172a" stroke="#1e293b" stroke-width="1.2" />
+      <text x="504" y="21" fill="#a78bfa" font-family="Consolas, 'SF Mono', monospace" font-size="11" font-weight="700">SELF-UPGRADING USB</text>
+      <text x="504" y="38" fill="#e2e8f0" font-family="-apple-system, sans-serif" font-size="12">Distillation-on-Dock</text>
+      <text x="504" y="51" fill="#94a3b8" font-family="-apple-system, sans-serif" font-size="11">+ Exo / RPC LAN Swarm</text>
+    </g>
+
+    <!-- Bottom CTA Pill + Team Signature Line -->
+    <rect x="0" y="210" width="648" height="32" rx="8" fill="#064e3b" fill-opacity="0.55" stroke="#10b981" stroke-width="1.2" />
+    <text x="14" y="230" fill="#fbbf24" font-family="Consolas, 'SF Mono', monospace" font-size="11.5" font-weight="700">
+      SUPPORT US &amp; BUY PRE-BUILT DRIVES AT HTTPS://OFFGRIDUSB.COM
+    </text>
+    <text x="636" y="230" text-anchor="end" fill="#a7f3d0" font-family="Consolas, 'SF Mono', monospace" font-size="10.5">
+      @TheBlindHacker • @johndikeman • @organized-nick
+    </text>
+  </g>
+</svg>

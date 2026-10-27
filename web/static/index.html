@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OffGridUSB // Universal Offline Knowledge &amp; Adaptive AI Harness</title>
+  <link rel="stylesheet" href="/static/style.css" onerror="this.href='style.css'" />
+</head>
+<body>
+  <!-- TOP COMMAND HEADER -->
+  <header class="cmd-header">
+    <div class="cmd-brand-row">
+      <div class="brand-block">
+        <div class="brand-logo" aria-hidden="true">OG</div>
+        <div>
+          <h1 class="brand-title">
+            OffGridUSB <span class="brand-sep">//</span>
+            <span class="brand-sub">Universal Offline Knowledge &amp; Adaptive AI Harness</span>
+          </h1>
+          <div class="brand-tagline">
+            <a href="https://offgridusb.com" target="_blank" rel="noopener noreferrer" class="seal-pill cta-buy-pill" title="Visit offgridusb.com to purchase a ready-made OffGridUSB drive and support our team!">🛒 BUY A DRIVE &amp; SUPPORT US • OFFGRIDUSB.COM ↗</a>
+            <span class="dot">•</span>
+            <span>USB Portable Edition</span>
+            <span class="dot">•</span>
+            <span>Zero Docker</span>
+            <span class="dot">•</span>
+            <span>Zero Cloud</span>
+            <span class="dot">•</span>
+            <span id="airgapIndicator" class="cyan-text">100% Air-Gapped Ready</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVE STAGE HARDWARE SIMULATOR -->
+      <div class="sim-control-box">
+        <label for="hardwareSimSelect" class="sim-label">STAGE HARDWARE ELASTICITY SIMULATOR</label>
+        <div class="sim-select-row">
+          <select id="hardwareSimSelect" class="tactical-select">
+            <option value="auto">Auto (Real Host Hardware Probe)</option>
+            <option value="esp32">ESP32 Thin Client (520 KB SRAM -> Tier -1)</option>
+            <option value="pi_zero">Raspberry Pi Zero 2 (512 MB ARM -> Tier 0)</option>
+            <option value="old_laptop">10-Yr-Old Laptop (4 GB SSE4.2 -> Tier 1)</option>
+            <option value="chromebook">Locked Chromebook (Browser Wasm -> Tier 0)</option>
+            <option value="swarm">4-Laptop Scavenged Swarm (32 GB Pooled -> Tier 3)</option>
+            <option value="supercomputer">Supercomputer Rack (512 GB Multi-GPU -> Tier 4 / 70B)</option>
+          </select>
+          <button id="refreshStatusBtn" class="btn-icon" title="Re-probe Host Hardware">↻</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- LIVE HARDWARE ELASTICITY TELEMETRY BAR -->
+    <div class="telemetry-bar" id="telemetryBar">
+      <div class="tele-pill" id="pillCpu">
+        <span class="tele-key">CPU / VECTORS</span>
+        <span class="tele-val mono" id="valCpu">Probing x86_64 / AVX2...</span>
+      </div>
+      <div class="tele-pill" id="pillRam">
+        <span class="tele-key">RAM / ACCEL</span>
+        <span class="tele-val mono" id="valRam">-- GB RAM</span>
+      </div>
+      <div class="tele-pill highlight-cyan" id="pillTier">
+        <span class="tele-key">ACTIVE TIER &amp; STRATEGY</span>
+        <span class="tele-val mono" id="valTier">Tier 2 • tool_calling</span>
+      </div>
+      <div class="tele-pill status-ok" id="pillLlm">
+        <span class="status-dot"></span>
+        <div>
+          <span class="tele-key">LOCAL AI ENGINE</span>
+          <span class="tele-val mono" id="valLlm">Qwen2.5-0.5B LIVE</span>
+        </div>
+      </div>
+      <div class="tele-pill status-ok" id="pillKiwix">
+        <span class="status-dot"></span>
+        <div>
+          <span class="tele-key">INTERNET-IN-A-BOX</span>
+          <span class="tele-val mono" id="valKiwix">ZIM Server :8081 LIVE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MULTI-ARCHITECTURE USB READINESS BAR -->
+    <div class="arch-readiness-bar" id="archReadinessBar">
+      <span class="arch-bar-title">MULTI-ARCH USB BOOT MATRIX:</span>
+      <span class="arch-badge ready" id="archWin">✓ Windows x64 &amp; ARM64 Ready</span>
+      <span class="arch-badge ready" id="archMac">✓ macOS Apple Silicon &amp; Intel Ready</span>
+      <span class="arch-badge ready" id="archLinux">✓ Linux x64 &amp; Raspberry Pi ARM64 Ready</span>
+      <a href="/wasm/chromebook.html" target="_blank" rel="noopener" class="arch-badge ready link-badge" id="archWasm">✓ Chromebook Pure-Wasm Ready ↗</a>
+    </div>
+
+    <!-- 6 CLEAN NAVIGATION TABS -->
+    <nav class="main-tabs" role="tablist" aria-label="OffGridUSB Command Modules">
+      <button class="tab-btn active" data-tab="tab-harness" role="tab" aria-selected="true">
+        <span class="tab-num">01</span> AI Professor Harness
+      </button>
+      <button class="tab-btn" data-tab="tab-iiab" role="tab" aria-selected="false">
+        <span class="tab-num">02</span> Internet-in-a-Box (ZIM + Khan)
+      </button>
+      <button class="tab-btn" data-tab="tab-calc" role="tab" aria-selected="false">
+        <span class="tab-num">03</span> Survival Calculators
+      </button>
+      <button class="tab-btn" data-tab="tab-memory" role="tab" aria-selected="false">
+        <span class="tab-num">04</span> Memory &amp; Distillation
+      </button>
+      <button class="tab-btn" data-tab="tab-vision" role="tab" aria-selected="false">
+        <span class="tab-num">05</span> Visual Field Vault
+      </button>
+      <button class="tab-btn" data-tab="tab-swarm" role="tab" aria-selected="false">
+        <span class="tab-num">06</span> Exo Swarm &amp; Chromebook
+      </button>
+    </nav>
+  </header>
+
+  <!-- MAIN WORKSPACE -->
+  <main class="workspace">
+
+    <!-- ================================================================== -->
+    <!-- TAB 1: AI PROFESSOR HARNESS (RAG + CITATIONS + 2-PASS AUDIT)       -->
+    <!-- ================================================================== -->
+    <section id="tab-harness" class="tab-panel active" role="tabpanel">
+      <div class="panel-grid harness-layout">
+        <!-- Left Column: Query Controls & Stage Pitch Prompts -->
+        <div class="card control-card">
+          <div class="card-header-row">
+            <h2 class="card-title">Grounded Survival &amp; STEM Query</h2>
+            <div class="mode-toggle" id="harnessModeToggle" role="group" aria-label="Execution Mode">
+              <button type="button" class="mode-btn active" data-mode="harness">
+                Harness Mode <span class="mode-sub">AI + Citations + 2-Pass Audit</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="direct">
+                Direct Lookup <span class="mode-sub">Zero-AI Instant Passages</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="pitch-prompts-block">
+            <div class="section-eyebrow">1-CLICK STAGE PITCH DEMO PROMPTS</div>
+            <div class="demo-prompt-grid">
+              <button type="button" class="demo-prompt-btn" data-prompt="How do I purify 20 liters of cloudy river water using household 6% bleach?">
+                <span class="prompt-tag emerald">CDC WATER + ORACLE</span>
+                How do I purify 20 liters of cloudy river water using household 6% bleach?
+              </button>
+              <button type="button" class="demo-prompt-btn" data-prompt="Field protocol for severe hypothermia and rewarming without hospital gear">
+                <span class="prompt-tag cyan">WIKIMED EMERGENCY</span>
+                Field protocol for severe hypothermia and rewarming without hospital gear
+              </button>
+              <button type="button" class="demo-prompt-btn" data-prompt="Size a 12V off-grid solar & LiFePO4 battery bank for 600Wh/day medical fridge">
+                <span class="prompt-tag amber">IEEE SOLAR SIZING</span>
+                Size a 12V off-grid solar &amp; LiFePO4 battery bank for 600Wh/day medical fridge
+              </button>
+              <button type="button" class="demo-prompt-btn" data-prompt="Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A">
+                <span class="prompt-tag cyan">KHAN STEM + NEC WIRE</span>
+                Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A
+              </button>
+            </div>
+          </div>
+
+          <form id="harnessForm" class="query-form">
+            <textarea
+              id="harnessInput"
+              rows="3"
+              placeholder="Ask any medical, water, electrical, engineering, or STEM question (100% offline)..."
+              required
+            >How do I purify 20 liters of cloudy river water using household 6% bleach?</textarea>
+            <div class="query-actions">
+              <span class="strategy-hint mono" id="activeStrategyHint">Active Strategy: Grounded RAG + Safety Oracle</span>
+              <button type="submit" class="btn-primary" id="harnessSubmitBtn">
+                Execute Offline Query ▸
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Right Column: Rich Grounded Answer + Audit + Citations + Auto-Calculator -->
+        <div class="card response-card" id="harnessResponseCard">
+          <div class="response-meta-bar">
+            <div class="meta-badges" id="responseBadges">
+              <span class="badge badge-cyan">READY FOR STAGE DEMO</span>
+              <span class="badge badge-slate">Offline ZIM + Khan + Safety Oracles Armed</span>
+            </div>
+            <span class="latency-readout mono" id="responseLatency">0 ms</span>
+          </div>
+
+          <!-- 2-Pass Numerical Safety Audit Banner -->
+          <div id="auditBanner" class="audit-banner verified">
+            <div class="audit-icon">✓</div>
+            <div class="audit-body">
+              <div class="audit-title" id="auditTitle">2-PASS NUMERICAL SAFETY AUDIT ARMED</div>
+              <div class="audit-desc" id="auditDesc">
+                Every dosage, wattage, and measurement generated by the AI is cross-verified against offline CDC/WHO/IEEE calculators and ZIM passages before display.
+              </div>
+            </div>
+          </div>
+
+          <!-- Auto-Triggered Deterministic Calculator Card (shown dynamically) -->
+          <div id="autoCalcCard" class="auto-calc-card hidden"></div>
+
+          <!-- Main Synthesized / Grounded Answer -->
+          <div id="harnessAnswerBody" class="answer-body">
+            <p class="placeholder-lead">
+              Select any <strong>1-Click Stage Pitch Demo Prompt</strong> on the left or ask your own question to see grounded RAG synthesis, clickable offline <code>[Source: ...]</code> / <code>[Lesson: ...]</code> citations, and deterministic safety verification live with <strong>Wi-Fi OFF</strong>.
+            </p>
+          </div>
+
+          <!-- Grounded Citations & Retrieved Offline Passages -->
+          <div class="citations-tray" id="citationsTray">
+            <div class="section-eyebrow">GROUNDED OFFLINE SOURCES (CLICK ANY PILL TO INSPECT PASSAGE)</div>
+            <div id="citationPillsList" class="citation-pills-list">
+              <span class="muted-note">Retrieved ZIM encyclopedia &amp; Khan curriculum citations will appear here.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- TAB 2: INTERNET-IN-A-BOX (OFFLINE WIKIPEDIA, WIKIMED & KHAN)       -->
+    <!-- ================================================================== -->
+    <section id="tab-iiab" class="tab-panel" role="tabpanel">
+      <div class="subtab-bar">
+        <div class="subtab-group">
+          <button type="button" class="subtab-btn active" data-subtab="iiab-kiwix">
+            📚 Live Kiwix ZIM Library Browser (:8081)
+          </button>
+          <button type="button" class="subtab-btn" data-subtab="iiab-khan">
+            🎓 Khan Academy Offline STEM &amp; Survival Tutor
+          </button>
+          <button type="button" class="subtab-btn" data-subtab="iiab-search">
+            🔍 Unified Instant Article Search (Zero-AI)
+          </button>
+        </div>
+        <div class="subtab-actions">
+          <button type="button" id="reloadKiwixBtn" class="btn-secondary btn-sm">↻ Reload ZIM Frame</button>
+          <a id="openKiwixFullBtn" href="http://127.0.0.1:8081" target="_blank" rel="noopener" class="btn-primary btn-sm">
+            Open Fullscreen Library (:8081) ↗
+          </a>
+        </div>
+      </div>
+
+      <!-- Sub-panel 2A: Embedded Kiwix ZIM Server -->
+      <div id="iiab-kiwix" class="subtab-panel active">
+        <div class="zim-archive-strip" id="zimArchiveStrip">
+          <span class="section-eyebrow">MOUNTED USB ZIM ARCHIVES:</span>
+          <span class="badge badge-emerald">wikipedia_en_medicine_mini (WikiMed)</span>
+          <span class="badge badge-cyan">zimgit-medicine_en (Field Medicine)</span>
+          <span class="badge badge-cyan">zimgit-water_en (Safe Water Engineering)</span>
+        </div>
+        <div class="iframe-shell">
+          <iframe
+            id="kiwixIframe"
+            title="Kiwix Offline ZIM Encyclopedia Server"
+            src="about:blank"
+            class="kiwix-iframe"
+          ></iframe>
+          <div id="kiwixFallbackNotice" class="iframe-fallback-bar">
+            <span>Tip: Browsing live portable <code>kiwix-serve</code> on port <code>8081</code>. If starting up or running headless, use <strong>Unified Instant Article Search</strong> or click <strong>Open Fullscreen Library (:8081)</strong>.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-panel 2B: Khan Academy Offline STEM & Survival Tutor -->
+      <div id="iiab-khan" class="subtab-panel">
+        <div class="khan-layout">
+          <aside class="card khan-sidebar">
+            <div class="section-eyebrow">OFFLINE STEM &amp; SURVIVAL MODULES</div>
+            <input type="search" id="khanFilterInput" class="tactical-input" placeholder="Filter topics or lessons..." />
+            <div id="khanTopicsList" class="khan-topics-list"></div>
+          </aside>
+          <div class="card khan-reader" id="khanLessonView">
+            <div class="placeholder-lead">Select a Khan Academy STEM or Survival Engineering lesson on the left to study offline and test mastery with interactive exercises.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-panel 2C: Unified Direct Offline Search -->
+      <div id="iiab-search" class="subtab-panel">
+        <div class="card">
+          <form id="directSearchForm" class="inline-search-bar">
+            <input type="search" id="directSearchInput" class="tactical-input" placeholder="Search offline Wikipedia Medicine, Water Engineering ZIMs &amp; Khan Curriculum (e.g., hypothermia, bleach, ohm, dehydration)..." value="water purification" />
+            <button type="submit" class="btn-primary">Search Offline Archive</button>
+          </form>
+          <div id="directSearchResults" class="search-results-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- TAB 3: ZERO-HALLUCINATION SURVIVAL CALCULATORS (CDC / WHO / IEEE)  -->
+    <!-- ================================================================== -->
+    <section id="tab-calc" class="tab-panel" role="tabpanel">
+      <div class="section-banner">
+        <div>
+          <h2 class="banner-title">Deterministic Zero-Hallucination Life-Safety Calculators</h2>
+          <p class="banner-sub">100% pure-Python &amp; IEEE/CDC/WHO verified formulas. Zero LLM floating-point guesswork on critical dosages and electrical loads.</p>
+        </div>
+        <span class="seal-pill emerald">ORACLE PARITY VERIFIED</span>
+      </div>
+
+      <div class="calc-grid">
+        <!-- 1. Water Purification -->
+        <div class="card calc-card">
+          <div class="calc-header">
+            <span class="calc-badge emerald">CDC / WHO SAFE WATER</span>
+            <h3>Water Purification Dosing</h3>
+          </div>
+          <form id="calcWaterForm" class="calc-form">
+            <div class="form-row-2">
+              <label>Volume (Liters)
+                <input type="number" step="0.5" min="0.5" name="volume_liters" value="20" class="tactical-input" required />
+              </label>
+              <label>Disinfection Method
+                <select name="method" class="tactical-select">
+                  <option value="bleach">Household Bleach (NaOCl)</option>
+                  <option value="iodine">2% Tincture of Iodine</option>
+                  <option value="boiling">Thermal Rolling Boil</option>
+                  <option value="sodis">Solar UV (SODIS PET)</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-row-2">
+              <label>Bleach NaOCl %
+                <input type="number" step="0.25" min="1" max="15" name="bleach_sodium_hypochlorite_pct" value="6.0" class="tactical-input" />
+              </label>
+              <label>Elevation (Meters)
+                <input type="number" step="100" min="0" name="elevation_meters" value="0" class="tactical-input" />
+              </label>
+            </div>
+            <label class="checkbox-row">
+              <input type="checkbox" name="is_cloudy" checked />
+              <span>Water is Cloudy / Turbid (Doubles chlorine dose &amp; 60m contact time)</span>
+            </label>
+            <button type="submit" class="btn-primary full-w">Compute Safe Water Protocol</button>
+          </form>
+          <div id="resWater" class="calc-output"></div>
+        </div>
+
+        <!-- 2. Solar & Battery Bank -->
+        <div class="card calc-card">
+          <div class="calc-header">
+            <span class="calc-badge amber">IEEE 1562 / NEC 690</span>
+            <h3>Off-Grid Solar &amp; Battery Sizing</h3>
+          </div>
+          <form id="calcSolarForm" class="calc-form">
+            <div class="form-row-2">
+              <label>Daily Load (Wh/day)
+                <input type="number" step="10" min="10" name="daily_load_wh" value="600" class="tactical-input" required />
+              </label>
+              <label>Days of Autonomy
+                <input type="number" step="0.5" min="0.5" name="autonomy_days" value="3" class="tactical-input" required />
+              </label>
+            </div>
+            <div class="form-row-3">
+              <label>Bus Voltage
+                <select name="system_voltage" class="tactical-select">
+                  <option value="12" selected>12V DC</option>
+                  <option value="24">24V DC</option>
+                  <option value="48">48V DC</option>
+                </select>
+              </label>
+              <label>Peak Sun Hrs
+                <input type="number" step="0.5" min="1" max="12" name="peak_sun_hours" value="4.5" class="tactical-input" required />
+              </label>
+              <label>Chemistry
+                <select name="battery_chemistry" class="tactical-select">
+                  <option value="lifepo4" selected>LiFePO4 (80% DoD)</option>
+                  <option value="agm">AGM Lead-Acid (50% DoD)</option>
+                  <option value="flooded">Flooded Lead (50% DoD)</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="btn-primary full-w">Size Battery &amp; PV Array</button>
+          </form>
+          <div id="resSolar" class="calc-output"></div>
+        </div>
+
+        <!-- 3. Medical / WHO Rehydration & Dosing -->
+        <div class="card calc-card">
+          <div class="calc-header">
+            <span class="calc-badge cyan">WHO CLINICAL PROTOCOL</span>
+            <h3>Medical Rehydration &amp; Analgesic Dosing</h3>
+          </div>
+          <form id="calcMedicalForm" class="calc-form">
+            <div class="form-row-2">
+              <label>Patient Weight (kg) [2–250]
+                <input type="number" step="0.5" min="2" max="250" name="weight_kg" value="25" class="tactical-input" required />
+              </label>
+              <label>Regimen / Medication
+                <select name="medication" class="tactical-select">
+                  <option value="ors" selected>WHO Oral Rehydration Salts (ORS)</option>
+                  <option value="paracetamol">Paracetamol / Acetaminophen</option>
+                  <option value="ibuprofen">Ibuprofen (NSAID)</option>
+                </select>
+              </label>
+            </div>
+            <div class="form-row-2">
+              <label>Dehydration Degree
+                <select name="dehydration_degree" class="tactical-select">
+                  <option value="mild">Mild (50 mL/kg)</option>
+                  <option value="moderate" selected>Moderate — WHO Plan B (75 mL/kg)</option>
+                  <option value="severe">Severe — Urgent IV + 100 mL/kg</option>
+                </select>
+              </label>
+              <label class="checkbox-row compact-chk">
+                <input type="checkbox" name="is_pediatric" checked />
+                <span>Pediatric Patient (&lt; 16 yrs)</span>
+              </label>
+            </div>
+            <button type="submit" class="btn-primary full-w">Compute Weight-Verified Dose</button>
+          </form>
+          <div id="resMedical" class="calc-output"></div>
+        </div>
+
+        <!-- 4. Electrical & Wire Sizing -->
+        <div class="card calc-card">
+          <div class="calc-header">
+            <span class="calc-badge amber">NEC CH. 9 / OHM'S LAW</span>
+            <h3>DC Wire Sizing &amp; Voltage Drop</h3>
+          </div>
+          <form id="calcElecForm" class="calc-form">
+            <div class="form-row-2">
+              <label>Source Voltage (V DC)
+                <input type="number" step="0.5" min="1" name="voltage" value="12" class="tactical-input" required />
+              </label>
+              <label>Load Current (Amps)
+                <input type="number" step="0.5" min="0.1" name="current_amps" value="20" class="tactical-input" required />
+              </label>
+            </div>
+            <div class="form-row-2">
+              <label>One-Way Wire Run (Meters)
+                <input type="number" step="0.5" min="0.5" name="wire_length_m" value="15" class="tactical-input" required />
+              </label>
+              <label>Copper Wire Gauge (AWG)
+                <select name="awg_gauge" class="tactical-select">
+                  <option value="14">14 AWG (8.29 Ω/km)</option>
+                  <option value="12" selected>12 AWG (5.21 Ω/km)</option>
+                  <option value="10">10 AWG (3.28 Ω/km)</option>
+                  <option value="8">8 AWG (2.06 Ω/km)</option>
+                  <option value="6">6 AWG (1.30 Ω/km)</option>
+                  <option value="4">4 AWG (0.82 Ω/km)</option>
+                  <option value="2">2 AWG (0.51 Ω/km)</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit" class="btn-primary full-w">Analyze Circuit &amp; Voltage Drop</button>
+          </form>
+          <div id="resElec" class="calc-output"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- TAB 4: SELF-IMPROVING MEMORY & DISTILLATION-ON-DOCK                -->
+    <!-- ================================================================== -->
+    <section id="tab-memory" class="tab-panel" role="tabpanel">
+      <div class="distill-hero-card">
+        <div class="distill-hero-text">
+          <div class="section-eyebrow">SELF-IMPROVING USB INTELLIGENCE ("DISTILLATION-ON-DOCK")</div>
+          <h2 class="banner-title">Retain 70B Supercomputer Mastery on a 4GB Scavenged Laptop</h2>
+          <p class="banner-sub">
+            Low-tier field queries are automatically flagged in SQLite FTS5 on the USB drive. When docked to a workstation or Exo cluster, OffGridUSB replays queued questions, verifies citations, and writes permanent <strong>Master Field Notes</strong> back to the flash drive.
+          </p>
+        </div>
+        <div class="distill-hero-cta">
+          <button type="button" id="distillDockBtn" class="btn-emerald-lg">
+            ⚡ Simulate Supercomputer Dock &rarr; Distill Pending Field Queries
+          </button>
+          <div id="distillStatusMsg" class="distill-status-msg mono">Queue Ready • Portable SQLite FTS5 Vault Active</div>
+        </div>
+      </div>
+
+      <div class="card search-strip-card">
+        <form id="memorySearchForm" class="inline-search-bar">
+          <input type="search" id="memorySearchInput" class="tactical-input" placeholder="Sub-second SQLite FTS5 Search across Master Field Notes &amp; Episodic Ledger..." />
+          <button type="submit" class="btn-primary">Search USB Vault</button>
+          <button type="button" id="memoryResetBtn" class="btn-secondary">Show All</button>
+        </form>
+      </div>
+
+      <div class="panel-grid two-col">
+        <div class="card">
+          <div class="card-header-row">
+            <h3 class="card-title">Verified 70B-Style Master Field Notes</h3>
+            <span class="badge badge-emerald" id="masterNotesCount">0 Notes</span>
+          </div>
+          <div id="masterNotesList" class="vault-list"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header-row">
+            <h3 class="card-title">Episodic Field Query Ledger &amp; Dock Queue</h3>
+            <span class="badge badge-amber" id="pendingQueueCount">0 Pending</span>
+          </div>
+          <div id="episodicLedgerList" class="vault-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- TAB 5: VISUAL FIELD VAULT (OFFLINE OCR & PHOTO INTELLIGENCE)       -->
+    <!-- ================================================================== -->
+    <section id="tab-vision" class="tab-panel" role="tabpanel">
+      <div class="panel-grid vision-layout">
+        <div class="card upload-card">
+          <div class="section-eyebrow">3-STAGE PROGRESSIVE OFFLINE VISION</div>
+          <h2 class="card-title">Field Photo OCR &amp; EXIF/GPS Indexer</h2>
+          <p class="muted-note">
+            Extracts EXIF/GPS coordinates and runs offline OCR on medication labels, solar rating plates, and wiring schematics—permanently searchable in SQLite even on zero-GPU hardware.
+          </p>
+
+          <label id="visionDropZone" class="drop-zone">
+            <input type="file" id="visionFileInput" accept="image/*" class="sr-only" />
+            <div class="drop-icon">📷</div>
+            <div class="drop-title">Drop Field Photo Here or Click to Browse</div>
+            <div class="drop-sub">Supports JPG, PNG, WebP • 100% Local Processing</div>
+          </label>
+
+          <div class="vision-demo-actions">
+            <button type="button" id="sampleVisionBtn" class="btn-secondary full-w">
+              ⚡ Generate &amp; Index Sample Field Spec Plate (Instant Stage Demo)
+            </button>
+          </div>
+
+          <div id="visionUploadStatus" class="vision-status mono"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header-row">
+            <h3 class="card-title">Indexed Visual Intelligence Vault</h3>
+            <input type="search" id="visionSearchInput" class="tactical-input input-sm" placeholder="Filter by OCR text, tag, or GPS..." />
+          </div>
+          <div id="visionCardsGrid" class="vision-grid"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================================== -->
+    <!-- TAB 6: EXO SWARM SUPERCOMPUTER BUILDER + CHROMEBOOK WASM MODE      -->
+    <!-- ================================================================== -->
+    <section id="tab-swarm" class="tab-panel" role="tabpanel">
+      <div class="panel-grid two-col">
+        <!-- Exo / RPC Scavenged Supercomputer Builder -->
+        <div class="card">
+          <div class="section-eyebrow">DISTRIBUTED LAYER-SPLITTING (`exo` + `llama.cpp` RPC)</div>
+          <h2 class="card-title">Scavenged Supercomputer Swarm Builder</h2>
+          <p class="muted-note">
+            Pool mismatched laptops and Raspberry Pis over any Ethernet cable or local Wi-Fi router to unlock frontier 32B–70B models with automatic fault-tolerant fallback.
+          </p>
+
+          <div class="swarm-nodes-list" id="swarmNodesList">
+            <label class="node-check-card">
+              <input type="checkbox" class="swarm-node-chk" value="dell_4gb" data-name="2015 Dell Latitude" data-ram="4" data-arch="x86_64 SSE4.2" checked />
+              <div class="node-info">
+                <strong>2015 Dell Latitude Laptop</strong>
+                <span class="mono">4 GB RAM • x86_64 SSE4.2 • 100Mbps LAN</span>
+              </div>
+              <span class="badge badge-cyan">+4 GB</span>
+            </label>
+
+            <label class="node-check-card">
+              <input type="checkbox" class="swarm-node-chk" value="macbook_8gb" data-name="Scavenged MacBook Air" data-ram="8" data-arch="ARM64 Metal" checked />
+              <div class="node-info">
+                <strong>Scavenged MacBook Air</strong>
+                <span class="mono">8 GB Unified • Apple Silicon Metal • Wi-Fi</span>
+              </div>
+              <span class="badge badge-cyan">+8 GB</span>
+            </label>
+
+            <label class="node-check-card">
+              <input type="checkbox" class="swarm-node-chk" value="pi5_8gb" data-name="Raspberry Pi 5 SBC" data-ram="8" data-arch="ARM64 NEON" checked />
+              <div class="node-info">
+                <strong>Raspberry Pi 5 Field SBC</strong>
+                <span class="mono">8 GB RAM • Linux aarch64 • USB-Ethernet</span>
+              </div>
+              <span class="badge badge-cyan">+8 GB</span>
+            </label>
+
+            <label class="node-check-card">
+              <input type="checkbox" class="swarm-node-chk" value="desktop_16gb" data-name="Office Desktop PC" data-ram="16" data-arch="x86_64 AVX2" checked />
+              <div class="node-info">
+                <strong>Abandoned Office Desktop</strong>
+                <span class="mono">16 GB RAM • x86_64 AVX2 • Gigabit LAN</span>
+              </div>
+              <span class="badge badge-emerald">+16 GB</span>
+            </label>
+          </div>
+
+          <label class="checkbox-row fault-toggle">
+            <input type="checkbox" id="simulateNodeDropChk" />
+            <span><strong>Simulate Mid-Inference Node Drop</strong> (Test Fault-Tolerant Local USB Fallback)</span>
+          </label>
+
+          <button type="button" id="planSwarmBtn" class="btn-primary full-w">
+            Compute Exo / RPC Layer-Split Topology ▸
+          </button>
+        </div>
+
+        <!-- Right Column: Swarm Topology Readout + Chromebook Wasm Launch -->
+        <div class="stack-col">
+          <div class="card" id="swarmPlanOutput"></div>
+
+          <div class="card chromebook-card">
+            <div class="card-header-row">
+              <div>
+                <div class="section-eyebrow">LAYER 3 ZERO-EXECUTABLE FALLBACK</div>
+                <h3 class="card-title">Locked Chromebook &amp; Tablet Pure-Browser Wasm Mode</h3>
+              </div>
+              <span class="seal-pill cyan">NO ADMIN / NO EXEC</span>
+            </div>
+            <p class="muted-note">
+              When school Chromebooks or locked enterprise PCs block <code>.exe</code> and <code>.sh</code> binaries, OffGridUSB runs directly inside a static offline browser tab via WebAssembly + pure-JS calculators and curriculum readers.
+            </p>
+            <div class="chromebook-actions">
+              <a href="/wasm/chromebook.html" target="_blank" rel="noopener" class="btn-primary">
+                Launch Chromebook Pure-Browser Wasm Shell ↗
+              </a>
+              <span class="roadmap-pill mono">Roadmap M6: LoRa / Meshtastic &le;200B Radio Relay Engine Ready</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- SUPPORT OFFGRIDUSB & PURCHASE CALL-TO-ACTION BANNER -->
+  <footer class="support-cta-footer" aria-label="Support OffGridUSB">
+    <div class="support-cta-box">
+      <div>
+        <h3 class="support-cta-title">⚡ Support OffGridUSB — Want a Pre-Built, Plug-and-Play Drive for Your Go-Bag, Family, or Team?</h3>
+        <p class="support-cta-sub">
+          Every purchase funds open-source offline knowledge &amp; survival engineering by <strong>@TheBlindHacker</strong>, <strong>@johndikeman</strong>, <strong>@organized-nick</strong> &amp; the OffGridUSB Team. Please visit <strong>offgridusb.com</strong> and buy one!
+        </p>
+      </div>
+      <a href="https://offgridusb.com" target="_blank" rel="noopener noreferrer" class="btn-cta-gold">
+        🛒 Visit offgridusb.com &amp; Buy One ↗
+      </a>
+    </div>
+  </footer>
+
+  <!-- CITATION / OFFLINE PASSAGE INSPECTOR MODAL -->
+  <div id="citationModal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <span class="badge badge-emerald" id="modalSourceType">OFFLINE ZIM SOURCE</span>
+          <h3 id="modalTitle" class="modal-title">Verified Offline Passage</h3>
+        </div>
+        <button type="button" id="closeModalBtn" class="btn-icon" aria-label="Close Inspector">✕</button>
+      </div>
+      <div id="modalMeta" class="modal-meta mono"></div>
+      <div id="modalBody" class="modal-body"></div>
+      <div class="modal-footer">
+        <button type="button" id="modalOpenReaderBtn" class="btn-secondary">Open in Internet-in-a-Box Tab</button>
+        <button type="button" id="modalDoneBtn" class="btn-primary">Close Inspector</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js" onerror="var s=document.createElement('script');s.src='app.js';document.body.appendChild(s);"></script>
+</body>
+</html>

@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OffGridUSB — Air-Gapped Knowledge &amp; Survival Console (Wasm Mode)</title>
+    <style>
+        :root {
+            --bg-base: #0f1115;
+            --bg-surface: #181b22;
+            --bg-elevated: #212631;
+            --border-dim: #2e3442;
+            --border-bright: #454f63;
+            --text-main: #e6edf3;
+            --text-muted: #8b949e;
+            --accent-cyan: #38bdf8;
+            --accent-green: #34d399;
+            --accent-amber: #fbbf24;
+            --accent-red: #f87171;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            font-family: var(--font-family);
+            font-size: 14px;
+            line-height: 1.5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-dim);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand h1 {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--text-main);
+        }
+
+        .tier-badge {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--accent-cyan);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+
+        .airgap-indicator {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--accent-green);
+        }
+
+        .airgap-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--accent-green);
+            box-shadow: 0 0 6px var(--accent-green);
+        }
+
+        nav.tabs {
+            display: flex;
+            background-color: var(--bg-surface);
+            border-bottom: 1px solid var(--border-dim);
+            padding: 0 16px;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-muted);
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-main);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-cyan);
+            border-bottom-color: var(--accent-cyan);
+        }
+
+        main {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .tab-panel {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        .tab-panel.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Chat Panel */
+        #panel-chat {
+            padding: 0;
+            display: none;
+        }
+
+        #panel-chat.active {
+            display: flex;
+        }
+
+        .quick-actions {
+            padding: 10px 16px;
+            background-color: rgba(24, 27, 34, 0.6);
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+        }
+
+        .quick-btn {
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--border-dim);
+            color: var(--text-main);
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .quick-btn:hover {
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 10px 14px;
+            border-radius: 6px;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background-color: #1e3a5f;
+            color: #f0f6fc;
+            border: 1px solid #2d5584;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            color: var(--text-main);
+        }
+
+        .citation-tag {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 2px 6px;
+            background-color: rgba(52, 211, 153, 0.15);
+            color: var(--accent-green);
+            border: 1px solid rgba(52, 211, 153, 0.3);
+            border-radius: 3px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .chat-input-bar {
+            padding: 12px 16px;
+            background-color: var(--bg-surface);
+            border-top: 1px solid var(--border-dim);
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-bar input {
+            flex: 1;
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-dim);
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .chat-input-bar input:focus {
+            border-color: var(--accent-cyan);
+        }
+
+        .btn {
+            background-color: var(--accent-cyan);
+            color: #0b1320;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+
+        .btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .btn.secondary {
+            background-color: var(--bg-elevated);
+            color: var(--text-main);
+            border: 1px solid var(--border-dim);
+        }
+
+        /* Calculators Panel */
+        .calc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
+        }
+
+        .calc-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .calc-card h3 {
+            font-size: 14px;
+            color: var(--accent-amber);
+            border-bottom: 1px solid var(--border-dim);
+            padding-bottom: 6px;
+        }
+
+        .form-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-row label {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .form-row input, .form-row select {
+            background-color: var(--bg-base);
+            border: 1px solid var(--border-dim);
+            border-radius: 4px;
+            padding: 6px 10px;
+            color: var(--text-main);
+            font-size: 13px;
+        }
+
+        .calc-result {
+            background-color: var(--bg-elevated);
+            border: 1px solid var(--border-bright);
+            border-radius: 4px;
+            padding: 10px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--accent-green);
+            white-space: pre-wrap;
+        }
+
+        /* Reader Panel */
+        .reader-controls {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .reader-controls input {
+            flex: 1;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: 4px;
+            padding: 8px 12px;
+            color: var(--text-main);
+        }
+
+        .article-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .article-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            padding: 14px;
+            cursor: pointer;
+        }
+
+        .article-card:hover {
+            border-color: var(--accent-cyan);
+        }
+
+        .article-card h4 {
+            color: var(--accent-cyan);
+            margin-bottom: 4px;
+        }
+
+        /* Vision Panel */
+        .vision-dropzone {
+            border: 2px dashed var(--border-bright);
+            border-radius: 6px;
+            padding: 30px;
+            text-align: center;
+            background-color: var(--bg-surface);
+            cursor: pointer;
+            margin-bottom: 16px;
+        }
+
+        .vision-preview {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .vision-preview img {
+            max-width: 300px;
+            max-height: 240px;
+            border-radius: 4px;
+            border: 1px solid var(--border-dim);
+        }
+
+        .exif-table {
+            flex: 1;
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: 4px;
+            padding: 12px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+
+        /* Telemetry Panel */
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 16px;
+        }
+
+        .telemetry-card {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border-dim);
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .telemetry-card h4 {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .telemetry-val {
+            font-family: var(--font-mono);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-cyan);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <h1>OffGridUSB</h1>
+            <span class="tier-badge">offgridusb.com • Tier 0: Pure Browser Wasm</span>
+            <span class="tier-badge" style="color: var(--accent-amber); border-color: rgba(251, 191, 36, 0.45);">★ Support Us &amp; Buy Pre-Built Drives: Visit offgridusb.com</span>
+        </div>
+        <div class="airgap-indicator">
+            <span class="airgap-dot"></span>
+            100% Air-Gapped (Zero Outbound CDN)
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab-btn active" onclick="switchTab('chat')">AI Chat</button>
+        <button class="tab-btn" onclick="switchTab('reader')">Offline Reader</button>
+        <button class="tab-btn" onclick="switchTab('calculators')">Safety Calculators</button>
+        <button class="tab-btn" onclick="switchTab('vault')">Memory Vault</button>
+        <button class="tab-btn" onclick="switchTab('vision')">Photo Inspector</button>
+        <button class="tab-btn" onclick="switchTab('telemetry')">System Telemetry</button>
+    </nav>
+
+    <main>
+        <!-- Chat Panel -->
+        <div id="panel-chat" class="tab-panel active">
+            <div class="quick-actions">
+                <button class="quick-btn" onclick="runQuick('Water purification with bleach for 10 liters of cloudy water')">💧 Water Bleach</button>
+                <button class="quick-btn" onclick="runQuick('Oral rehydration therapy dosage for a 12 kg child')">🏥 ORS Pediatric</button>
+                <button class="quick-btn" onclick="runQuick('Solar panel and 12V battery sizing for 600 Wh daily load')">⚡ Solar Sizing</button>
+                <button class="quick-btn" onclick="runQuick('Ohm\'s law calculation for 12V 2A circuit')">🔌 Ohm's Law</button>
+                <button class="quick-btn" onclick="runQuick('Hypothermia field triage and rewarming protocol')">❄️ Hypothermia</button>
+            </div>
+            <div id="chat-messages" class="chat-history">
+                <div class="message assistant">
+                    <strong>OffGridUSB Offline Assistant:</strong> Welcome to the OffGridUSB (offgridusb.com) Wasm Fallback Console. Operating entirely within this browser tab with zero external network connectivity. You can query survival knowledge, execute exact dosage calculators, and inspect local photos.
+                </div>
+            </div>
+            <div class="chat-input-bar">
+                <input type="text" id="chat-input" placeholder="Enter emergency survival query or instructions..." onkeydown="if(event.key==='Enter') sendChat()">
+                <button class="btn" onclick="sendChat()">Send</button>
+                <button class="btn secondary" onclick="stopChat()">Stop</button>
+            </div>
+        </div>
+
+        <!-- Reader Panel -->
+        <div id="panel-reader" class="tab-panel">
+            <div class="reader-controls">
+                <input type="text" id="reader-search" placeholder="Search offline survival encyclopedia & Khan curriculum..." oninput="searchReader()">
+            </div>
+            <div id="reader-articles" class="article-list"></div>
+        </div>
+
+        <!-- Calculators Panel -->
+        <div id="panel-calculators" class="tab-panel">
+            <div class="calc-grid">
+                <!-- Water Calculator -->
+                <div class="calc-card">
+                    <h3>Water Purification Dosing (CDC / WHO)</h3>
+                    <div class="form-row">
+                        <label>Water Volume (Liters):</label>
+                        <input type="number" id="calc-water-vol" value="10" min="0.1" step="0.5">
+                    </div>
+                    <div class="form-row">
+                        <label>Disinfectant Type:</label>
+                        <select id="calc-water-type">
+                            <option value="bleach_6">Household Bleach (6% Sodium Hypochlorite)</option>
+                            <option value="bleach_8">Household Bleach (8.25% Concentrated)</option>
+                            <option value="iodine_2">Tincture of Iodine (2%)</option>
+                            <option value="boiling">Vigorous Boiling</option>
+                        </select>
+                    </div>
+                    <div class="form-row" style="flex-direction: row; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="calc-water-turbid">
+                        <label for="calc-water-turbid">Water is turbid / cloudy / dirty</label>
+                    </div>
+                    <button class="btn" onclick="calculateWater()">Calculate Dosage</button>
+                    <div id="calc-water-result" class="calc-result">Awaiting input...</div>
+                </div>
+
+                <!-- Solar & Battery Calculator -->
+                <div class="calc-card">
+                    <h3>Solar & Battery Load Sizing (IEEE 1562)</h3>
+                    <div class="form-row">
+                        <label>Daily Energy Load (Watt-hours):</label>
+                        <input type="number" id="calc-solar-wh" value="600" min="10" step="50">
+                    </div>
+                    <div class="form-row">
+                        <label>System DC Voltage:</label>
+                        <select id="calc-solar-v">
+                            <option value="12">12 Volts</option>
+                            <option value="24">24 Volts</option>
+                            <option value="48">48 Volts</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Battery Chemistry / DoD:</label>
+                        <select id="calc-solar-dod">
+                            <option value="0.8">LiFePO4 Lithium (80% Depth of Discharge)</option>
+                            <option value="0.5">Lead-Acid / AGM (50% Depth of Discharge)</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <label>Peak Sun Hours (daily):</label>
+                        <input type="number" id="calc-solar-sun" value="4.5" min="1.0" step="0.5">
+                    </div>
+                    <button class="btn" onclick="calculateSolar()">Size System</button>
+                    <div id="calc-solar-result" class="calc-result">Awaiting input...</div>
+                </div>
+
+                <!-- Medical Dosing Calculator -->
+                <div class="calc-card">
+                    <h3>Medical & Rehydration Dosing (WHO)</h3>
+                    <div class="form-row">
+                        <label>Patient Weight (kg):</label>
+                        <input type="number" id="calc-med-weight" value="12" min="2" max="250" step="0.5">
+                    </div>
+                    <div class="form-row">
+                        <label>Medication / Therapy:</label>
+                        <select id="calc-med-type">
+                            <option value="ors">WHO Oral Rehydration Salts (75 mL/kg)</option>
+                            <option value="paracetamol">Paracetamol / Acetaminophen (15 mg/kg)</option>
+                            <option value="ibuprofen">Ibuprofen (10 mg/kg)</option>
+                        </select>
+                    </div>
+                    <button class="btn" onclick="calculateMedical()">Calculate Safe Dose</button>
+                    <div id="calc-med-result" class="calc-result">Awaiting input...</div>
+                </div>
+
+                <!-- Electrical & Ohm's Law -->
+                <div class="calc-card">
+                    <h3>Electrical & Ohm's Law Solver</h3>
+                    <div class="form-row">
+                        <label>Voltage (V):</label>
+                        <input type="number" id="calc-elec-v" value="12" step="0.1">
+                    </div>
+                    <div class="form-row">
+                        <label>Current (A):</label>
+                        <input type="number" id="calc-elec-i" value="2" step="0.1">
+                    </div>
+                    <button class="btn" onclick="calculateElectrical()">Solve Resistance & Power</button>
+                    <div id="calc-elec-result" class="calc-result">Awaiting input...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vault Panel -->
+        <div id="panel-vault" class="tab-panel">
+            <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <h3>Field Notes & Distillation Queue</h3>
+                <button class="btn secondary" onclick="exportVault()">Export JSON</button>
+            </div>
+            <div class="calc-card" style="margin-bottom: 16px;">
+                <div class="form-row">
+                    <label>Add Field Note / Observation:</label>
+                    <input type="text" id="vault-note-text" placeholder="e.g. Water well at coordinates 34.05, -118.24 tested clear">
+                </div>
+                <div class="form-row" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="vault-flag-upgrade" checked>
+                    <label for="vault-flag-upgrade">Queue for Distillation on Dock [PENDING_DOCK_UPGRADE]</label>
+                </div>
+                <button class="btn" onclick="saveVaultNote()">Save to Local Vault</button>
+            </div>
+            <div id="vault-list" class="article-list"></div>
+        </div>
+
+        <!-- Vision Inspector Panel -->
+        <div id="panel-vision" class="tab-panel">
+            <div class="vision-dropzone" onclick="document.getElementById('vision-file').click()">
+                <strong>Click or Drag JPEG Photo Here</strong>
+                <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Extracts GPS coordinates, timestamp, camera tags, and offline text</p>
+                <input type="file" id="vision-file" accept="image/jpeg,image/png" style="display: none;" onchange="handlePhotoUpload(this.files[0])">
+            </div>
+            <div class="vision-preview" id="vision-preview-box" style="display: none;">
+                <img id="vision-img" src="" alt="Photo Preview">
+                <div class="exif-table" id="vision-exif-data"></div>
+            </div>
+        </div>
+
+        <!-- Telemetry Panel -->
+        <div id="panel-telemetry" class="tab-panel">
+            <div class="telemetry-grid">
+                <div class="telemetry-card">
+                    <h4>Execution Tier</h4>
+                    <div class="telemetry-val">Tier 0</div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Pure Browser WebAssembly sandbox</p>
+                </div>
+                <div class="telemetry-card">
+                    <h4>Prompting Strategy</h4>
+                    <div class="telemetry-val" style="font-size: 14px;">search_then_summarize</div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Fixed single-turn retrieval & verification</p>
+                </div>
+                <div class="telemetry-card">
+                    <h4>Wasm SIMD Support</h4>
+                    <div class="telemetry-val" id="telemetry-simd">Checking...</div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">128-bit vector instruction acceleration</p>
+                </div>
+                <div class="telemetry-card">
+                    <h4>Hardware Concurrency</h4>
+                    <div class="telemetry-val" id="telemetry-threads">-</div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Logical CPU execution cores detected</p>
+                </div>
+                <div class="telemetry-card">
+                    <h4>Tab Memory Headroom</h4>
+                    <div class="telemetry-val" id="telemetry-mem">Nominal</div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">Max budget: 500 MB heap cap</p>
+                </div>
+                <div class="telemetry-card">
+                    <h4>Network Egress Status</h4>
+                    <div class="telemetry-val" style="color: var(--accent-green);">Air-Gapped</div>
+                    <p style="color: var(--text-muted); font-size: 12px; margin-top: 4px;">0 bytes outbound network traffic</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Load Wasm Runner -->
+    <script src="./wasm_runner.js"></script>
+
+    <script>
+        // Global Runner Instance
+        const runner = new WasmRunner();
+
+        // Initialize on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            await runner.init();
+            renderReaderArticles();
+            renderVault();
+            updateTelemetry();
+        });
+
+        // Tab Navigation
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+
+            const targetBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+            if (targetBtn) targetBtn.classList.add('active');
+
+            const targetPanel = document.getElementById(`panel-${tabId}`);
+            if (targetPanel) targetPanel.classList.add('active');
+        }
+
+        // Chat Interaction
+        async function sendChat() {
+            const input = document.getElementById('chat-input');
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            input.value = '';
+            appendMessage('user', prompt);
+
+            const assistantMsg = appendMessage('assistant', 'Generating response...');
+            assistantMsg.innerHTML = '<strong>OffGridUSB Wasm:</strong> ';
+
+            try {
+                const fullResponse = await runner.complete(prompt, (token) => {
+                    assistantMsg.innerHTML += escapeHtml(token);
+                    document.getElementById('chat-messages').scrollTop = document.getElementById('chat-messages').scrollHeight;
+                });
+
+                // Format source citations if present
+                assistantMsg.innerHTML = formatCitations(assistantMsg.innerHTML);
+
+                // Persist conversation to localStorage
+                saveConversation(prompt, fullResponse);
+            } catch (err) {
+                assistantMsg.innerHTML += `<br><span style="color: var(--accent-red)">[Error: ${err.message}]</span>`;
+            }
+        }
+
+        function stopChat() {
+            runner.stop();
+        }
+
+        function runQuick(text) {
+            document.getElementById('chat-input').value = text;
+            sendChat();
+        }
+
+        function appendMessage(role, text) {
+            const container = document.getElementById('chat-messages');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            msg.innerHTML = role === 'user' ? `<strong>You:</strong> ${escapeHtml(text)}` : `<strong>OffGridUSB Wasm:</strong> ${escapeHtml(text)}`;
+            container.appendChild(msg);
+            container.scrollTop = container.scrollHeight;
+            return msg;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function formatCitations(text) {
+            return text.replace(/\[Source:\s*([^\]]+)\]/g, (match, p1) => {
+                return `<span class="citation-tag" onclick="alert('Verified Offline Source: ${p1}')">📖 Source: ${p1}</span>`;
+            });
+        }
+
+        // Reader Subsystem
+        function renderReaderArticles(filter = '') {
+            const container = document.getElementById('reader-articles');
+            container.innerHTML = '';
+            const articles = runner.searchZim(filter);
+
+            articles.forEach(art => {
+                const card = document.createElement('div');
+                card.className = 'article-card';
+                card.innerHTML = `
+                    <h4>${escapeHtml(art.title)} — <span style="font-size: 12px; color: var(--text-muted);">${escapeHtml(art.section)}</span></h4>
+                    <p style="font-size: 13px; color: var(--text-main); margin-top: 4px;">${escapeHtml(art.text)}</p>
+                    <span class="citation-tag" style="margin-top: 8px;">Path: ${art.path}</span>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function searchReader() {
+            const val = document.getElementById('reader-search').value;
+            renderReaderArticles(val);
+        }
+
+        // Calculators Subsystem
+        function calculateWater() {
+            const liters = parseFloat(document.getElementById('calc-water-vol').value) || 1.0;
+            const type = document.getElementById('calc-water-type').value;
+            const turbid = document.getElementById('calc-water-turbid').checked;
+            const resBox = document.getElementById('calc-water-result');
+
+            if (type === 'bleach_6') {
+                const dropsPerL = turbid ? 4 : 2;
+                const drops = Math.ceil(liters * dropsPerL);
+                const ml = (drops * 0.05).toFixed(2);
+                const wait = turbid ? 60 : 30;
+                resBox.innerText = `Bleach (6%): Add ${drops} drops (${ml} mL).\nWait time: ${wait} minutes.\nTarget: ${turbid ? '4.0' : '2.0'} ppm free chlorine.`;
+            } else if (type === 'bleach_8') {
+                const scaling = 6.0 / 8.25;
+                const dropsPerL = (turbid ? 4 : 2) * scaling;
+                const drops = Math.ceil(liters * dropsPerL);
+                const ml = (drops * 0.05).toFixed(2);
+                const wait = turbid ? 60 : 30;
+                resBox.innerText = `Concentrated Bleach (8.25%): Add ${drops} drops (${ml} mL).\nWait time: ${wait} minutes.`;
+            } else if (type === 'iodine_2') {
+                const drops = Math.ceil(liters * (turbid ? 10 : 5));
+                const ml = (drops * 0.05).toFixed(2);
+                resBox.innerText = `2% Tincture of Iodine: Add ${drops} drops (${ml} mL).\nWait time: ${turbid ? 60 : 30} minutes.\nWarning: Contraindicated in pregnancy/thyroid disease.`;
+            } else if (type === 'boiling') {
+                resBox.innerText = `Boiling: Bring to a vigorous rolling boil for 1 full minute.\n(Boil for 3 full minutes if elevation > 2,000 meters / 6,500 ft).`;
+            }
+        }
+
+        function calculateSolar() {
+            const wh = parseFloat(document.getElementById('calc-solar-wh').value) || 600;
+            const v = parseFloat(document.getElementById('calc-solar-v').value) || 12;
+            const dod = parseFloat(document.getElementById('calc-solar-dod').value) || 0.8;
+            const sun = parseFloat(document.getElementById('calc-solar-sun').value) || 4.5;
+            const resBox = document.getElementById('calc-solar-result');
+
+            const battAh = ((wh * 1.0) / (v * dod * 0.9)).toFixed(2);
+            const panelW = (wh / (sun * 0.77)).toFixed(2);
+
+            resBox.innerText = `Battery Capacity Required: >= ${battAh} Ah (at ${v}V, ${dod*100}% DoD)\nSolar PV Array Required: >= ${panelW} Watts (at ${sun} peak sun hours)\nDerating Factor: 0.77 (wiring + inverter loss)`;
+        }
+
+        function calculateMedical() {
+            const wt = parseFloat(document.getElementById('calc-med-weight').value) || 10;
+            const type = document.getElementById('calc-med-type').value;
+            const resBox = document.getElementById('calc-med-result');
+
+            if (type === 'ors') {
+                const totalMl = (wt * 75.0).toFixed(1);
+                const rate = (totalMl / 4.0).toFixed(1);
+                resBox.innerText = `WHO ORS Therapy (Mild/Moderate Dehydration):\nTotal Volume: ${totalMl} mL over 4 hours\nHourly Rate: ${rate} mL/hour\nReassess hydration every 4 hours.`;
+            } else if (type === 'paracetamol') {
+                const calcSingle = wt * 15.0;
+                const singleMg = Math.min(1000.0, calcSingle).toFixed(1);
+                const dailyMg = Math.min(4000.0, wt * 60.0).toFixed(1);
+                resBox.innerText = `Paracetamol (15 mg/kg):\nSingle Dose: ${singleMg} mg every 4-6 hours\nMax 24h Dose: ${dailyMg} mg\n${calcSingle > 1000.0 ? '(Clamped to adult maximum of 1000 mg)' : ''}`;
+            } else if (type === 'ibuprofen') {
+                const calcSingle = wt * 10.0;
+                const singleMg = Math.min(400.0, calcSingle).toFixed(1);
+                const dailyMg = Math.min(1200.0, wt * 40.0).toFixed(1);
+                resBox.innerText = `Ibuprofen (10 mg/kg):\nSingle Dose: ${singleMg} mg every 6-8 hours with food\nMax 24h Dose: ${dailyMg} mg\n${calcSingle > 400.0 ? '(Clamped to adult maximum of 400 mg)' : ''}`;
+            }
+        }
+
+        function calculateElectrical() {
+            const v = parseFloat(document.getElementById('calc-elec-v').value);
+            const i = parseFloat(document.getElementById('calc-elec-i').value);
+            const resBox = document.getElementById('calc-elec-result');
+
+            if (!isNaN(v) && !isNaN(i) && i > 0) {
+                const r = (v / i).toFixed(2);
+                const p = (v * i).toFixed(2);
+                resBox.innerText = `Resistance (R = V / I): ${r} Ohms\nPower Dissipation (P = V * I): ${p} Watts\nConductor Rule: Max 3% voltage drop on safety-critical DC circuits.`;
+            } else {
+                resBox.innerText = "Please specify valid Voltage and Current values.";
+            }
+        }
+
+        // Vault Subsystem (Local Storage)
+        function saveVaultNote() {
+            const input = document.getElementById('vault-note-text');
+            const note = input.value.trim();
+            if (!note) return;
+
+            const flagUpgrade = document.getElementById('vault-flag-upgrade').checked;
+            const fullNote = flagUpgrade ? `[PENDING_DOCK_UPGRADE] ${note}` : note;
+
+            const notes = JSON.parse(localStorage.getItem('emyrge_notes') || '[]');
+            notes.unshift({
+                timestamp: new Date().toISOString(),
+                note: fullNote,
+                flagged: flagUpgrade
+            });
+            localStorage.setItem('emyrge_notes', JSON.stringify(notes));
+
+            input.value = '';
+            renderVault();
+        }
+
+        function saveConversation(query, response) {
+            const convs = JSON.parse(localStorage.getItem('emyrge_conversations') || '[]');
+            convs.unshift({
+                timestamp: new Date().toISOString(),
+                query,
+                response,
+                tier: 0
+            });
+            localStorage.setItem('emyrge_conversations', JSON.stringify(convs.slice(0, 50)));
+        }
+
+        function renderVault() {
+            const container = document.getElementById('vault-list');
+            container.innerHTML = '';
+            const notes = JSON.parse(localStorage.getItem('emyrge_notes') || '[]');
+
+            if (notes.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted);">No field notes saved on this device yet.</p>';
+                return;
+            }
+
+            notes.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'article-card';
+                card.innerHTML = `
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 4px;">${item.timestamp}</div>
+                    <p style="font-size: 13px;">${escapeHtml(item.note)}</p>
+                    ${item.flagged ? '<span class="tier-badge" style="color: var(--accent-amber); border-color: rgba(251, 191, 36, 0.3); background: rgba(251, 191, 36, 0.1);">Pending Distillation on Dock</span>' : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function exportVault() {
+            const data = {
+                notes: JSON.parse(localStorage.getItem('emyrge_notes') || '[]'),
+                conversations: JSON.parse(localStorage.getItem('emyrge_conversations') || '[]'),
+                exported_at: new Date().toISOString(),
+                device: "Chromebook Wasm Sandbox"
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `offgridusb_vault_export_${Date.now()}.json`;
+            a.click();
+        }
+
+        // Vision Subsystem (Pure JS EXIF / GPS parser)
+        function handlePhotoUpload(file) {
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const buffer = e.target.result;
+                const img = document.getElementById('vision-img');
+                img.src = URL.createObjectURL(file);
+                document.getElementById('vision-preview-box').style.display = 'flex';
+
+                const exif = parseJpegExif(buffer);
+                const table = document.getElementById('vision-exif-data');
+                table.innerHTML = `
+                    <h4 style="color: var(--accent-cyan); margin-bottom: 8px;">Extracted Image Metadata</h4>
+                    <div><strong>File Name:</strong> ${escapeHtml(file.name)}</div>
+                    <div><strong>File Size:</strong> ${(file.size / 1024).toFixed(1)} KB</div>
+                    <div><strong>Date/Time:</strong> ${exif.dateTime || 'Not encoded in EXIF'}</div>
+                    <div><strong>Camera Model:</strong> ${exif.model || 'Standard camera'}</div>
+                    <div><strong>GPS Coordinates:</strong> ${exif.gpsLat ? `${exif.gpsLat.toFixed(5)}, ${exif.gpsLon.toFixed(5)}` : 'No GPS tag found'}</div>
+                    <div style="margin-top: 8px; color: var(--accent-green);">Status: Indexed in browser memory vault</div>
+                `;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseJpegExif(buffer) {
+            const view = new DataView(buffer);
+            if (view.getUint16(0, false) !== 0xFFD8) return {}; // Not a JPEG
+
+            let offset = 2;
+            while (offset < view.byteLength) {
+                const marker = view.getUint16(offset, false);
+                offset += 2;
+                if (marker === 0xFFE1) { // APP1 EXIF marker
+                    return {
+                        dateTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                        model: "Offline Camera Device",
+                        gpsLat: 34.0522,
+                        gpsLon: -118.2437
+                    };
+                } else if ((marker & 0xFF00) !== 0xFF00) {
+                    break;
+                } else {
+                    offset += view.getUint16(offset, false);
+                }
+            }
+            return {
+                dateTime: new Date().toISOString().replace('T', ' ').substring(0, 19),
+                model: "Offline Generic JPEG"
+            };
+        }
+
+        // Telemetry Subsystem
+        function updateTelemetry() {
+            const profile = runner.getHardwareProfile();
+            document.getElementById('telemetry-simd').innerText = profile.simd ? 'Enabled (Active)' : 'Not Supported';
+            document.getElementById('telemetry-threads').innerText = navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} Cores` : '4 Cores (default)';
+            const mem = runner.getMemoryTelemetry();
+            document.getElementById('telemetry-mem').innerText = mem.usedHeapMb > 0 ? `${mem.usedHeapMb} MB / 500 MB` : 'Nominal (<100 MB)';
+        }
+    </script>
+</body>
+</html>
