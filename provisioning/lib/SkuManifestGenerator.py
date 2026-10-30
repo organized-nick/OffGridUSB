@@ -82,9 +82,10 @@ def generate_sku_manifest(
 def main():
     parser = argparse.ArgumentParser(description="OffGridUSB SKU Manifest Generator")
     parser.add_argument("--sku", required=True, help="Product SKU (e.g. Product1, Product2, Product3)")
+    default_manifest = Path(__file__).resolve().parents[2] / "manifests" / "products.json"
     parser.add_argument(
         "--manifest",
-        default=r"C:\Users\ndoki\Desktop\offgridusb\OffGridUSB\manifests\products.json",
+        default=str(default_manifest),
         help="Path to products.json",
     )
     parser.add_argument("--drive", default="D:", help="Target drive letter (e.g. D:)")

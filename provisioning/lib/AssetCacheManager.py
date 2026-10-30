@@ -10,13 +10,15 @@ import json
 import argparse
 from pathlib import Path
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 DEFAULT_SEARCH_PATHS = [
-    Path(r"C:\Users\ndoki\Desktop\offgridusb\cache"),
-    Path(r"C:\Users\ndoki\Desktop\offgridusb\OffGridUSB\data"),
-    Path(r"C:\Users\ndoki\Desktop\offgridusb\OFFGRIDUSB_CONSUMER_READY\data"),
-    Path(r"C:\Users\ndoki\Desktop\offgridusb\offgridUSB.com\data"),
-    Path(r"C:\Users\ndoki\Desktop\offgridusb\models_staging"),
-    Path(r"C:\Users\ndoki\Desktop\offgridusb\zim_Builds"),
+    _REPO_ROOT / "cache",
+    _REPO_ROOT / "data",
+    _REPO_ROOT / "OFFGRIDUSB_CONSUMER_READY" / "data",
+    _REPO_ROOT / "offgridUSB.com" / "data",
+    _REPO_ROOT / "models_staging",
+    _REPO_ROOT / "zim_Builds",
 ]
 
 ZIM_MAGIC = b"\x5A\x49\x4D\x04"
@@ -220,7 +222,7 @@ def main():
     parser.add_argument(
         "--manifest",
         type=str,
-        default=r"C:\Users\ndoki\Desktop\offgridusb\OffGridUSB\manifests\products.json",
+        default=str(_REPO_ROOT / "manifests" / "products.json"),
         help="Path to products.json",
     )
     parser.add_argument("--cache-dir", type=str, action="append", help="Extra cache directory")

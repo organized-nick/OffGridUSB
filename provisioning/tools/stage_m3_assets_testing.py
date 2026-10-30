@@ -68,11 +68,12 @@ FSCTL_LOCK_VOLUME = 0x00090018
 FSCTL_DISMOUNT_VOLUME = 0x00090020
 IOCTL_DISK_UPDATE_PROPERTIES = 0x00070140
 
-SOURCE_REPO = Path(r"C:\Users\ndoki\Desktop\offgridusb\offgridUSB.com")
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+SOURCE_REPO = _REPO_ROOT
 TARGET_DRIVE = "D"
 TARGET_ROOT = Path(r"D:\ ") if False else Path("D:/")
-OUTPUT_JSON = Path(r"C:\Users\ndoki\.gemini\antigravity\worktrees\Organized Insomnia\diagnose_gcp_deployment_issues\scripts\m3_staging_verdict.json")
-OUTPUT_MD = Path(r"C:\Users\ndoki\.gemini\antigravity\worktrees\Organized Insomnia\diagnose_gcp_deployment_issues\scripts\m3_staging_verdict.md")
+OUTPUT_JSON = _REPO_ROOT / "provisioning" / "output" / "m3_staging_verdict.json"
+OUTPUT_MD = _REPO_ROOT / "provisioning" / "output" / "m3_staging_verdict.md"
 
 
 def log(msg: str) -> None:

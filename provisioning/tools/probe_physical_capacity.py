@@ -774,13 +774,14 @@ def main():
     }
 
     # Step 9: Save Verdict JSON and Markdown Artifacts
+    _repo_root = Path(__file__).resolve().parents[2]
     output_locations = [
         # OffGridUSB repo scripts
-        Path(r"C:\Users\ndoki\Desktop\offgridusb\offgridUSB.com\scripts"),
+        _repo_root / "scripts",
         # Worktree scripts
-        Path(r"C:\Users\ndoki\.gemini\antigravity\worktrees\Organized Insomnia\diagnose_gcp_deployment_issues\scripts"),
+        _repo_root / "diagnose_gcp_deployment_issues" / "scripts",
         # Worker folder
-        Path(r"C:\Users\ndoki\.gemini\antigravity\worktrees\Organized Insomnia\diagnose_gcp_deployment_issues\.agents\teamwork\worker_m1_1"),
+        _repo_root / "diagnose_gcp_deployment_issues" / ".agents" / "teamwork" / "worker_m1_1",
     ]
 
     json_content = json.dumps(verdict, indent=2)

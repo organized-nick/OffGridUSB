@@ -335,8 +335,8 @@ class AuditorSubprocessRunner:
             Path("scripts/audit_offgrid_usb.py"),
             Path(__file__).resolve().parent.parent.parent / "scripts/audit_offgrid_usb.py",
             Path(__file__).resolve().parent.parent.parent / "audit_offgrid_usb.py",
-            Path("C:/Users/ndoki/Desktop/offgridusb/offgridUSB.com/audit_offgrid_usb.py"),
-            Path("C:/Users/ndoki/Desktop/offgridusb/offgridUSB.com/scripts/audit_offgrid_usb.py"),
+            Path(__file__).resolve().parents[2] / "provisioning/lib/audit_offgrid_usb.py",
+            Path(__file__).resolve().parents[2] / "provisioning/tools/audit_offgrid_usb.py",
             Path("D:/audit_offgrid_usb.py"),
             Path("D:/scripts/audit_offgrid_usb.py"),
         ]

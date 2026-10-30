@@ -560,7 +560,8 @@ def main():
     report = run_challenge_suite()
 
     # Write output reports
-    challenger_dir = Path(r"C:\Users\ndoki\.gemini\antigravity\worktrees\Organized Insomnia\diagnose_gcp_deployment_issues\.agents\teamwork\challenger_m1_1")
+    _repo_root = Path(__file__).resolve().parents[2]
+    challenger_dir = _repo_root / "provisioning" / "output" / "challenger_m1_1"
     challenger_dir.mkdir(parents=True, exist_ok=True)
 
     json_path = challenger_dir / "challenge_report.json"
