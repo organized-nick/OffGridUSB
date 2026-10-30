@@ -16,6 +16,10 @@ INFO_MODE=false
 NON_INTERACTIVE=false
 CACHE_DIR="${HOME}/Desktop/offgridusb/cache"
 PROFILE="Auto"
+# Write throttling (KB/s). Sustained full-speed sequential writes can hard-lock
+# cheap USB flash controllers (device falls off the bus mid-copy).
+# Default 2048 KB/s; set 0 to disable throttling entirely.
+BWLIMIT="2048"
 
 usage() {
     cat <<EOF
@@ -32,6 +36,10 @@ Options:
   --non-interactive       Disable interactive prompts
   --cache-dir <dir>       Host cache directory for .zim and .gguf files
   --profile <lean|full>   Payload profile (default: Auto)
+  --bwlimit <KBPS>        Limit copy bandwidth in KB/s (default: 2048).
+                          Sustained full-speed writes can hard-lock cheap
+                          USB flash controllers; throttling keeps them alive.
+                          Use 0 to disable throttling.
   -h, --help              Show this help message
 EOF
 }
@@ -55,6 +63,8 @@ while [[ $# -gt 0 ]]; do
             CACHE_DIR="$2"; shift 2 ;;
         --profile)
             PROFILE="$2"; shift 2 ;;
+        --bwlimit)
+            BWLIMIT="$2"; shift 2 ;;
         -h|--help)
             usage; exit 0 ;;
         *)
@@ -186,12 +196,28 @@ for f in START_OFFGRIDUSB_WINDOWS.bat START_OFFGRIDUSB_LINUX.sh START_OFFGRIDUSB
 done
 
 # Copy runtime binaries, web, src, manifests
-cp -r "${SOURCE_ROOT}/bin/"* "${TARGET_DRIVE}/bin/" 2>/dev/null || true
-cp -r "${SOURCE_ROOT}/web/"* "${TARGET_DRIVE}/web/" 2>/dev/null || true
-cp -r "${SOURCE_ROOT}/manifests/"* "${TARGET_DRIVE}/manifests/" 2>/dev/null || true
+# Throttle writes by default (BWLIMIT, KB/s): sustained full-speed sequential
+# writes can hard-lock cheap USB flash controllers. BWLIMIT=0 disables.
+BWLIMIT_OPTS=()
+if [[ "${BWLIMIT}" != "0" ]]; then
+    if [[ "${BWLIMIT}" =~ ^[0-9]+$ ]]; then
+        BWLIMIT_OPTS=(--bwlimit="${BWLIMIT}")
+    else
+        echo "[ERROR] --bwlimit must be a non-negative integer (KB/s) or 0, got: '${BWLIMIT}'" >&2
+        exit 1
+    fi
+fi
+
+for dir in bin web manifests; do
+    if command -v rsync >/dev/null 2>&1 && [[ ${#BWLIMIT_OPTS[@]} -gt 0 ]]; then
+        rsync -rltDvh "${BWLIMIT_OPTS[@]}" "${SOURCE_ROOT}/${dir}/" "${TARGET_DRIVE}/${dir}/" 2>/dev/null || true
+    else
+        cp -r "${SOURCE_ROOT}/${dir}/"* "${TARGET_DRIVE}/${dir}/" 2>/dev/null || true
+    fi
+done
 
 # Copy src excluding fetch_assets.py
-rsync -av --exclude="fetch_assets.py" --exclude="__pycache__" "${SOURCE_ROOT}/src/" "${TARGET_DRIVE}/src/" 2>/dev/null || cp -r "${SOURCE_ROOT}/src/"* "${TARGET_DRIVE}/src/"
+rsync -av "${BWLIMIT_OPTS[@]}" --exclude="fetch_assets.py" --exclude="__pycache__" "${SOURCE_ROOT}/src/" "${TARGET_DRIVE}/src/" 2>/dev/null || cp -r "${SOURCE_ROOT}/src/"* "${TARGET_DRIVE}/src/"
 
 # Generate dynamic SKU manifest
 if command -v python3 >/dev/null 2>&1; then

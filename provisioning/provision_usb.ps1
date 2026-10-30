@@ -38,6 +38,11 @@
 
 .PARAMETER Profile
     Payload profile: lean, full, or Auto.
+
+.PARAMETER BwLimitKBps
+    Copy bandwidth limit in KB/s (default: 2048). Sustained full-speed writes
+    can hard-lock cheap USB flash controllers (device falls off the bus
+    mid-copy); throttling keeps them alive. Use 0 to disable throttling.
 #>
 
 [CmdletBinding()]
@@ -74,7 +79,11 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("Auto", "lean", "full")]
-    [string]$Profile = "Auto"
+    [string]$Profile = "Auto",
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(0, [int]::MaxValue)]
+    [int]$BwLimitKBps = 2048
 )
 
 # ------------------------------------------------------------------------------
@@ -102,6 +111,49 @@ $LibDir = Join-Path $ScriptDir "lib"
 # Normalize FilesystemAction aliases
 if ($FilesystemAction -eq "Wipe") { $FilesystemAction = "CleanWipe" }
 if ($FilesystemAction -eq "Format") { $FilesystemAction = "FormatExFAT" }
+
+# Throttled file copy: sustained full-speed sequential writes can hard-lock
+# cheap USB flash controllers (two drives bricked mid-copy at full USB speed).
+# BwLimitKBps=0 disables throttling.
+function Copy-ItemThrottled {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $false)][int]$LimitKBps = 2048
+    )
+
+    if ($LimitKBps -le 0) {
+        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+        return
+    }
+
+    $bufferSize = 65536 # 64 KB chunks
+    $bytesPerSecond = $LimitKBps * 1024
+    $chunksPerSecond = [Math]::Max(1, [Math]::Ceiling($bytesPerSecond / $bufferSize))
+    $delayMs = [Math]::Max(1, [Math]::Ceiling(1000.0 / $chunksPerSecond))
+
+    $srcStream = [System.IO.File]::OpenRead($SourcePath)
+    try {
+        $dstStream = [System.IO.File]::Open($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+        try {
+            $buffer = New-Object byte[] $bufferSize
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            while (($read = $srcStream.Read($buffer, 0, $bufferSize)) -gt 0) {
+                $dstStream.Write($buffer, 0, $read)
+                # pace against elapsed time to honor the KB/s budget
+                $expectedMs = ($dstStream.Position / $bytesPerSecond) * 1000.0
+                if ($sw.Elapsed.TotalMilliseconds -lt $expectedMs) {
+                    Start-Sleep -Milliseconds ([int][Math]::Min(100, $expectedMs - $sw.Elapsed.TotalMilliseconds))
+                }
+            }
+            $dstStream.Flush($true) # flush through to the device
+        } finally {
+            $dstStream.Dispose()
+        }
+    } finally {
+        $srcStream.Dispose()
+    }
+}
 
 # SKU Normalization Map
 function Normalize-SkuName {
@@ -434,7 +486,7 @@ foreach ($item in $plan.Items) {
     }
 
     if (Test-Path -LiteralPath $item.SourcePath) {
-        Copy-Item -LiteralPath $item.SourcePath -Destination $dst -Force
+        Copy-ItemThrottled -SourcePath $item.SourcePath -DestinationPath $dst -LimitKBps $BwLimitKBps
     }
 }
 
