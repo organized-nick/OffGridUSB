@@ -586,8 +586,19 @@ $targetRoot = "${cleanDrive}:\"
 
 if ($fsPlan.ResolvedAction -eq "FormatExFAT") {
     Write-Host "  Formatting ${cleanDrive}: as exFAT @ 128 KB clusters..." -ForegroundColor Yellow
-    Format-Volume -DriveLetter $cleanDrive -FileSystem exFAT -AllocationUnitSize 131072 -NewFileSystemLabel "OFFGRIDUSB" -Confirm:$false -Force | Out-Null
-    Write-Host "  [OK] Volume formatted cleanly." -ForegroundColor Green
+    if ($fsPlan.IsElevated) {
+        Format-Volume -DriveLetter $cleanDrive -FileSystem exFAT -AllocationUnitSize 131072 -NewFileSystemLabel "OFFGRIDUSB" -Confirm:$false -Force | Out-Null
+    } else {
+        & format.com "${cleanDrive}:" /FS:exFAT /A:128K /V:OFFGRIDUSB /Q /Y | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to format ${cleanDrive}: as exFAT via format.com (exit code $LASTEXITCODE)."
+        }
+    }
+    $refreshedVol = Get-Volume -DriveLetter $cleanDrive -ErrorAction SilentlyContinue
+    if ($refreshedVol) {
+        $fsPlan.CurrentFileSystem = $refreshedVol.FileSystem
+    }
+    Write-Host "  [OK] Volume formatted cleanly as exFAT @ 128 KB." -ForegroundColor Green
 } elseif ($fsPlan.ResolvedAction -eq "CleanWipe") {
     Write-Host "  Performing recursive clean wipe of ${cleanDrive}:\ (preserving exFAT geometry)..." -ForegroundColor Yellow
     Get-ChildItem -Path $targetRoot -Force -ErrorAction SilentlyContinue | Where-Object {

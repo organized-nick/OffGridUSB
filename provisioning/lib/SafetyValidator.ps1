@@ -285,11 +285,8 @@ function Get-FilesystemPlan {
 
     switch ($FilesystemAction) {
         "FormatExFAT" {
-            if (-not $isElevated) {
-                throw "Administrator elevation is required to format volume '${clean}:' as exFAT. Please run from an elevated PowerShell prompt or choose FilesystemAction 'CleanWipe' / 'Auto'."
-            }
             $plan.ResolvedAction = "FormatExFAT"
-            $plan.Description = "Elevated fast format to exFAT with 128 KB allocation units (Label: OFFGRIDUSB)"
+            $plan.Description = "Fast format to exFAT with 128 KB allocation units (Label: OFFGRIDUSB)"
         }
         "CleanWipe" {
             $plan.ResolvedAction = "CleanWipe"
@@ -300,18 +297,15 @@ function Get-FilesystemPlan {
             $plan.Description = "Non-destructive sync over existing files without wiping"
         }
         "Auto" {
-            if ($isElevated) {
+            if ($vol.FileSystem -ne "exFAT") {
+                $plan.ResolvedAction = "FormatExFAT"
+                $plan.Description = "Volume is $($vol.FileSystem); auto-formatting to exFAT with 128 KB clusters (Label: OFFGRIDUSB)"
+            } elseif ($isElevated) {
                 $plan.ResolvedAction = "FormatExFAT"
                 $plan.Description = "Elevated mode detected: formatting volume as exFAT with 128 KB clusters"
             } else {
-                if ($vol.FileSystem -eq "exFAT") {
-                    $plan.ResolvedAction = "CleanWipe"
-                    $plan.Description = "Non-elevated mode: volume is already exFAT; performing recursive clean wipe"
-                } else {
-                    Write-Warning "Volume '${clean}:' is formatted as $($vol.FileSystem). Format conversion to exFAT requires elevation."
-                    $plan.ResolvedAction = "CleanWipe"
-                    $plan.Description = "Non-elevated mode: wiping files on existing $($vol.FileSystem) volume"
-                }
+                $plan.ResolvedAction = "CleanWipe"
+                $plan.Description = "Volume is already exFAT; performing recursive clean wipe"
             }
         }
     }

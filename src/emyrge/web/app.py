@@ -652,9 +652,13 @@ class EmyrgeRuntime:
 
         # Ensure at least one verified clickable citation tag is attached
         parsed_cits = self.harness.parse_citations(draft_answer)
-        if not parsed_cits and citations:
-            draft_answer = f"{draft_answer.rstrip()} {citations[0].raw_tag}"
-            parsed_cits = [citations[0]]
+        has_source_tag = "[source:" in draft_answer.lower()
+        if (not parsed_cits or not has_source_tag) and citations:
+            source_cit = next((c for c in citations if c.raw_tag.lower().startswith("[source:")), citations[0])
+            tag_to_add = source_cit.raw_tag if source_cit.raw_tag.lower().startswith("[source:") else f"[Source: {source_cit.title}]"
+            draft_answer = f"{draft_answer.rstrip()} {tag_to_add}"
+            if not parsed_cits:
+                parsed_cits = [source_cit]
         final_cits = parsed_cits if parsed_cits else citations
 
         # 6. Two-Pass Numerical Safety Verification (SourceAudit)
