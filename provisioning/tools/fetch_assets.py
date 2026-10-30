@@ -33,7 +33,8 @@ USER_AGENT = "OffGridUSB-Provisioner/0.1 (+https://offgridusb.com)"
 
 
 def _default_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent.parent
+    # provisioning/tools/fetch_assets.py -> project root is two levels up.
+    return Path(__file__).resolve().parents[2]
 
 
 def load_manifests(project_root: Optional[Path] = None) -> Dict[str, Any]:
@@ -237,10 +238,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--zim-only", action="store_true", help="Download only Internet-in-a-Box (.zim) archives")
     parser.add_argument("--models-only", action="store_true", help="Download only GGUF (.gguf) AI models")
     parser.add_argument("--id", dest="asset_ids", action="append", default=[], help="Download specific asset ID(s) by manifest id")
+    parser.add_argument("--dest-root", type=str, default=None, help="Root directory for data/models & data/zim (default: project root)")
     args = parser.parse_args(argv)
 
-    root = _default_root()
-    manifests = load_manifests(root)
+    repo_root = _default_root()
+    root = Path(args.dest_root).resolve() if args.dest_root else repo_root
+    manifests = load_manifests(repo_root)
 
     if args.list:
         _print_catalog(manifests)
@@ -248,6 +251,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.verify:
         report = verify_assets(root)
+        # Verification of a custom dest-root only covers data files; manifests stay repo-side.
+        if args.dest_root:
+            report["manifest_root"] = str(repo_root)
         print(json.dumps(report, indent=2))
         return 0
 

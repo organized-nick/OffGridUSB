@@ -14,7 +14,10 @@ TARGET_DRIVE=""
 DRY_RUN=false
 INFO_MODE=false
 NON_INTERACTIVE=false
-CACHE_DIR="${HOME}/Desktop/offgridusb/cache"
+NO_DOWNLOAD=false
+# Host asset cache for .zim and .gguf payloads. Kept off the Desktop by default:
+# ~/.config/offgridusb/cache (override with OFFGRIDUSB_CACHE_DIR or --cache-dir).
+CACHE_DIR="${OFFGRIDUSB_CACHE_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/offgridusb/cache}"
 PROFILE="Auto"
 # Write throttling (KB/s). Sustained full-speed sequential writes can hard-lock
 # cheap USB flash controllers (device falls off the bus mid-copy).
@@ -35,6 +38,8 @@ Options:
   --info                  Display product catalog, payload specs, and cache readiness
   --non-interactive       Disable interactive prompts
   --cache-dir <dir>       Host cache directory for .zim and .gguf files
+                          (default: ~/.config/offgridusb/cache, or $OFFGRIDUSB_CACHE_DIR)
+  --no-download          Skip auto-download of missing cache assets
   --profile <lean|full>   Payload profile (default: Auto)
   --bwlimit <KBPS>        Limit copy bandwidth in KB/s (default: 2048).
                           Sustained full-speed writes can hard-lock cheap
@@ -63,6 +68,8 @@ while [[ $# -gt 0 ]]; do
             CACHE_DIR="$2"; shift 2 ;;
         --profile)
             PROFILE="$2"; shift 2 ;;
+        --no-download)
+            NO_DOWNLOAD=true; shift ;;
         --bwlimit)
             BWLIMIT="$2"; shift 2 ;;
         -h|--help)
@@ -182,6 +189,91 @@ if [[ "${DRY_RUN}" == true ]]; then
     exit 0
 fi
 
+# -----------------------------------------------------------------------------
+# Payload Asset Acquisition: ensure required .zim / .gguf files exist in the
+# host cache (downloading missing ones), then stage them onto the target drive.
+# -----------------------------------------------------------------------------
+sku_to_tier() {
+    case "$1" in
+        Product1) echo 0 ;;
+        Product2) echo 1 ;;
+        Product3) echo 2 ;;
+        Tier3)    echo 3 ;;
+        Tier4)    echo 4 ;;
+        *)        echo 0 ;;
+    esac
+}
+
+ensure_payload_assets() {
+    local sku="$1"
+    local tier
+    tier=$(sku_to_tier "${sku}")
+    mkdir -p "${CACHE_DIR}/zim" "${CACHE_DIR}/models"
+
+    # NOTE: AssetCacheManager exits non-zero when assets are MISSING; that is
+    # expected here -- we only fail hard if it crashes outright.
+    local inv
+    inv="$(python3 "${SCRIPT_DIR}/lib/AssetCacheManager.py" \
+        --sku "${sku}" \
+        --manifest "${SOURCE_ROOT}/manifests/products.json" \
+        --cache-dir "${CACHE_DIR}" --json 2>/dev/null)" || true
+    if [[ -z "${inv}" ]]; then
+        echo "[ERROR] Could not audit asset cache for ${sku}." >&2
+        exit 1
+    fi
+
+    if python3 -c "import json,sys; sys.exit(0 if json.load(sys.stdin)['all_available'] else 1)" <<<"${inv}"; then
+        echo "[OK] All required payload assets present in cache (${CACHE_DIR})."
+        return 0
+    fi
+
+    echo "Missing payload assets for ${sku} (cache: ${CACHE_DIR})"
+    python3 -c "
+import json, sys
+inv = json.load(sys.stdin)
+for a in inv['assets']:
+    if a['status'] == 'MISSING':
+        print(f\"  [MISSING] {a['type']:<12} {a['filename']}\")
+" <<<"${inv}"
+
+    if [[ "${NO_DOWNLOAD}" == true ]]; then
+        echo "[ERROR] Missing assets and --no-download was set. Re-run without it, or" >&2
+        echo "        run: provisioning/tools/download_internet_in_a_box.sh --tier ${tier}" >&2
+        exit 1
+    fi
+
+    echo ">>> Fetching missing assets (tier <= ${tier})..."
+    if ! python3 "${SCRIPT_DIR}/tools/fetch_assets.py" --tier "${tier}" --dest-root "${CACHE_DIR}"; then
+        echo "[ERROR] Asset download failed (offline or source unreachable?). Cache is incomplete." >&2
+        echo "        Partial files are preserved in ${CACHE_DIR} and will resume on next run." >&2
+        exit 1
+    fi
+}
+
+stage_payload_assets() {
+    local src dest item base
+    for pair in "zim:data/zim" "models:data/models"; do
+        src="${pair%%:*}"; dest="${pair##*:}"
+        mkdir -p "${TARGET_DRIVE}/${dest}"
+        for item in "${CACHE_DIR}/${src}"/*; do
+            [[ -e "${item}" ]] || continue
+            base="$(basename "${item}")"
+            if [[ -f "${TARGET_DRIVE}/${dest}/${base}" ]]; then
+                echo "  [SKIP] Already staged: ${dest}/${base}"
+                continue
+            fi
+            echo "  [COPY] ${base} -> ${dest}/"
+            if command -v rsync >/dev/null 2>&1 && [[ ${#BWLIMIT_OPTS[@]} -gt 0 ]]; then
+                rsync -ltDvh --inplace ${BWLIMIT_OPTS[*]} "${item}" "${TARGET_DRIVE}/${dest}/"
+            else
+                cp "${item}" "${TARGET_DRIVE}/${dest}/${base}"
+            fi
+        done
+    done
+}
+
+ensure_payload_assets "${RESOLVED_SKU}"
+
 # Live Staging Execution
 echo ">>> Staging files to ${TARGET_DRIVE}..."
 source "${LIB_DIR}/UsbStripper.sh"
@@ -229,6 +321,8 @@ enforce_lf_line_endings "${TARGET_DRIVE}"
 
 # Assert customer hygiene
 assert_customer_usb_hygiene "${TARGET_DRIVE}"
+
+stage_payload_assets
 
 echo "[SUCCESS] Provisioning of ${RESOLVED_SKU} onto ${TARGET_DRIVE} completed cleanly!"
 exit 0

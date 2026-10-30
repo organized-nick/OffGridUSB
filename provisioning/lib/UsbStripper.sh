@@ -106,8 +106,10 @@ enforce_lf_line_endings() {
     echo "Enforcing strict LF line endings on shell scripts in '${target_root}'..."
     while IFS= read -r -d '' file; do
         if [[ -f "${file}" ]]; then
-            # Remove carriage return characters
-            sed -i.bak 's/\r$//' "${file}" 2>/dev/null || tr -d '\r' < "${file}" > "${file}.tmp" && mv "${file}.tmp" "${file}"
+            # Remove carriage return characters (robust under set -e)
+            if ! sed -i.bak 's/\r$//' "${file}" 2>/dev/null; then
+                tr -d '\r' < "${file}" > "${file}.tmp" && mv "${file}.tmp" "${file}"
+            fi
             rm -f "${file}.bak" 2>/dev/null || true
         fi
     done < <(find "${target_root}" -type f \( -name "*.sh" -o -name "*.command" \) -print0 2>/dev/null)

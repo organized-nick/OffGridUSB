@@ -94,7 +94,7 @@ if [[ -z "${PYTHON_BIN}" ]]; then
 fi
 
 if [[ "${VERIFY_ONLY}" -eq 1 ]]; then
-    PYTHONPATH="${ROOT_DIR}/src" "${PYTHON_BIN}" -m emyrge.assets.fetch_assets --verify
+    "${PYTHON_BIN}" "${ROOT_DIR}/provisioning/tools/fetch_assets.py" --verify
     exit 0
 fi
 
@@ -260,7 +260,7 @@ if [[ "${ENGINES_ONLY}" -eq 0 ]]; then
         FETCH_ARGS+=("--models-only")
     fi
 
-    PYTHONPATH="${ROOT_DIR}/src" "${PYTHON_BIN}" -m emyrge.assets.fetch_assets "${FETCH_ARGS[@]}"
+    "${PYTHON_BIN}" "${ROOT_DIR}/provisioning/tools/fetch_assets.py" "${FETCH_ARGS[@]}"
 fi
 
 rm -rf tmp_dl
@@ -269,6 +269,6 @@ chmod +x run_linux.sh run_macos.command START_EMYRGE_LINUX.sh START_EMYRGE_MAC.c
 echo "================================================================================"
 echo "[3/3] Verification Summary"
 echo "================================================================================"
-PYTHONPATH="${ROOT_DIR}/src" "${PYTHON_BIN}" -m emyrge.assets.fetch_assets --verify
+"${PYTHON_BIN}" "${ROOT_DIR}/provisioning/tools/fetch_assets.py" --verify
 echo ""
-echo "[OK] Ready! Next step: Run ./scripts/setup_usb_unix.sh --list to format/provision your USB."
+echo "[OK] Ready! Next step: run provisioning/provision_usb.sh --product <sku> --drive <mount> to provision your USB."
