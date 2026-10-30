@@ -38,7 +38,8 @@ function New-ProductSkuManifest {
     )
 
     if (-not $ProductsJsonPath) {
-        $candidate = "C:\Users\ndoki\Desktop\offgridusb\OffGridUSB\manifests\products.json"
+        $repoRoot = Split-Path -Parent $PSScriptRoot
+        $candidate = Join-Path $repoRoot "manifests\products.json"
         if (Test-Path $candidate) {
             $ProductsJsonPath = $candidate
         } else {

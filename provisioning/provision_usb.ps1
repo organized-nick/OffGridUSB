@@ -72,10 +72,13 @@ param(
     [string]$FilesystemAction = "Auto",
 
     [Parameter(Mandatory = $false)]
-    [string]$CacheDir = "C:\Users\ndoki\Desktop\offgridusb\cache",
+    [string]$CacheDir = "",  # Resolved below: $env:OFFGRIDUSB_CACHE_DIR or %LOCALAPPDATA%\offgridusb\cache
 
     [Parameter(Mandatory = $false)]
     [string]$SourceRoot = "",
+
+    [Parameter(Mandatory = $false)]
+    [switch]$NoDownload,
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("Auto", "lean", "full")]
@@ -96,6 +99,91 @@ if (-not $ScriptDir) {
 
 if (-not $SourceRoot) {
     $SourceRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
+}
+
+# Resolve host asset cache directory (kept off the Desktop):
+# $env:OFFGRIDUSB_CACHE_DIR -> %LOCALAPPDATA%\offgridusb\cache
+if (-not $CacheDir) {
+    if ($env:OFFGRIDUSB_CACHE_DIR) {
+        $CacheDir = $env:OFFGRIDUSB_CACHE_DIR
+    } else {
+        $CacheDir = Join-Path $env:LOCALAPPDATA "offgridusb\cache"
+    }
+}
+
+# ------------------------------------------------------------------------------
+# Legacy cache migration: if the new cache location has no payload assets yet,
+# adopt (move) .zim / .gguf files from the old hardcoded Desktop cache (and
+# repo-local staging dirs) so Nick doesn't have to re-download everything.
+# ------------------------------------------------------------------------------
+function Import-LegacyCacheAssets {
+    param(
+        [Parameter(Mandatory = $true)][string]$NewCacheDir,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $legacySources = @(
+        (Join-Path $env:USERPROFILE "Desktop\offgridusb\cache"),
+        "C:\Users\ndoki\Desktop\offgridusb\cache",
+        (Join-Path $RepoRoot "cache"),
+        (Join-Path $RepoRoot "data"),
+        (Join-Path $RepoRoot "models_staging"),
+        (Join-Path $RepoRoot "zim_Builds")
+    )
+
+    $moved = 0
+    foreach ($srcRoot in $legacySources) {
+        if (-not (Test-Path $srcRoot)) { continue }
+        if ((Resolve-Path $srcRoot).Path -eq (Resolve-Path $NewCacheDir).Path) { continue }
+
+        # Only import if the destination counterpart doesn't already exist
+        foreach ($sub in @("zim", "models")) {
+            $srcDir = Join-Path $srcRoot $sub
+            $dstDir = Join-Path $NewCacheDir $sub
+            if (-not (Test-Path $srcDir)) { continue }
+
+            foreach ($pattern in @("*.zim", "*.gguf")) {
+                foreach ($file in @(Get-ChildItem -Path $srcDir -Filter $pattern -File -ErrorAction SilentlyContinue)) {
+                    $dest = Join-Path $dstDir $file.Name
+                    if (Test-Path $dest) {
+                        Write-Host "  [SKIP] Already in new cache: $sub\$($file.Name)" -ForegroundColor DarkGray
+                        continue
+                    }
+                    Write-Host "  [MIGRATE] $($file.Name) ($([math]::Round($file.Length / 1MB, 1)) MB) <- $srcDir" -ForegroundColor Cyan
+                    Move-Item -LiteralPath $file.FullName -Destination $dest -Force
+                    $moved++
+                }
+            }
+        }
+
+        # Also adopt loose files sitting directly in the legacy cache root
+        $dstZimDir = Join-Path $NewCacheDir "zim"
+        $dstModelDir = Join-Path $NewCacheDir "models"
+        foreach ($pattern in @("*.zim", "*.gguf")) {
+            foreach ($file in @(Get-ChildItem -Path $srcRoot -Filter $pattern -File -ErrorAction SilentlyContinue)) {
+                $dstDir = if ($file.Extension -eq ".zim") { $dstZimDir } else { $dstModelDir }
+                $dest = Join-Path $dstDir $file.Name
+                if (Test-Path $dest) {
+                    Write-Host "  [SKIP] Already in new cache: $([System.IO.Path]::GetFileName($dstDir))\$($file.Name)" -ForegroundColor DarkGray
+                    continue
+                }
+                Write-Host "  [MIGRATE] $($file.Name) ($([math]::Round($file.Length / 1MB, 1)) MB) <- $srcRoot" -ForegroundColor Cyan
+                Move-Item -LiteralPath $file.FullName -Destination $dest -Force
+                $moved++
+            }
+        }
+    }
+    return $moved
+}
+
+$null = New-Item -ItemType Directory -Path (Join-Path $CacheDir "zim") -Force
+$null = New-Item -ItemType Directory -Path (Join-Path $CacheDir "models") -Force
+$migratedCount = Import-LegacyCacheAssets -NewCacheDir $CacheDir -RepoRoot $SourceRoot
+if ($migratedCount -gt 0) {
+    Write-Host ""
+    Write-Host ">>> Adopted $migratedCount payload asset(s) from legacy cache locations into:" -ForegroundColor Cyan
+    Write-Host "    $CacheDir" -ForegroundColor White
+    Write-Host "  [OK] No re-download needed for migrated assets." -ForegroundColor Green
 }
 
 # Normalize Win32 Process Working Directory to avoid system32 resolution
@@ -383,6 +471,46 @@ $fsPlan = Get-FilesystemPlan -DriveLetter $Drive -FilesystemAction $FilesystemAc
 Write-Host "  Elevation Status : $(if ($fsPlan.IsElevated) { 'Elevated (Administrator)' } else { 'Non-Elevated (Standard User)' })" -ForegroundColor White
 Write-Host "  Target Filesystem: $($fsPlan.CurrentFileSystem) (Label: '$($fsPlan.FileSystemLabel)')" -ForegroundColor White
 Write-Host "  Resolved Action  : $($fsPlan.ResolvedAction) - $($fsPlan.Description)" -ForegroundColor Green
+
+# ------------------------------------------------------------------------------
+# 7.5 Payload Asset Acquisition: ensure required .zim / .gguf files exist in the
+#     host cache (downloading missing ones via fetch_assets.py), since the
+#     staging plan throws on missing assets.
+# ------------------------------------------------------------------------------
+$tierMap = @{ Product1 = 0; Product2 = 1; Product3 = 2; Tier3 = 3; Tier4 = 4 }
+$assetTier = if ($tierMap.ContainsKey($ResolvedSku)) { $tierMap[$ResolvedSku] } else { 0 }
+
+$null = New-Item -ItemType Directory -Path (Join-Path $CacheDir "zim") -Force
+$null = New-Item -ItemType Directory -Path (Join-Path $CacheDir "models") -Force
+
+$preInv = Get-ProductAssetInventory -ProductSku $ResolvedSku -ProductsJsonPath (Join-Path $SourceRoot "manifests\products.json") -CustomCacheDirs @($CacheDir) -Profile $Profile
+
+if (-not $preInv.AllRequiredAvailable) {
+    $missingNames = @($preInv.Assets | Where-Object { $_.Status -eq "MISSING" } | ForEach-Object { $_.FileName })
+    Write-Host ""
+    Write-Host "Missing payload assets for $ResolvedSku (cache: $CacheDir)" -ForegroundColor Yellow
+    foreach ($mn in $missingNames) { Write-Host "  [MISSING] $mn" -ForegroundColor Yellow }
+
+    if ($NoDownload) {
+        throw "Missing $($missingNames.Count) asset(s) and -NoDownload was set. Re-run without it, or run provisioning\tools\download_internet_in_a_box.ps1 -Tier $assetTier"
+    }
+
+    Write-Host ""
+    Write-Host ">>> Fetching missing assets (tier <= $assetTier)..." -ForegroundColor Cyan
+    $fetchScript = Join-Path $SourceRoot "provisioning\tools\fetch_assets.py"
+    if (-not (Test-Path $fetchScript)) { throw "fetch_assets.py not found at: $fetchScript" }
+
+    & python $fetchScript --tier $assetTier --dest-root $CacheDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Asset download failed (offline or source unreachable?). Partial files are preserved in $CacheDir and will resume on next run."
+    }
+
+    $postInv = Get-ProductAssetInventory -ProductSku $ResolvedSku -ProductsJsonPath (Join-Path $SourceRoot "manifests\products.json") -CustomCacheDirs @($CacheDir) -Profile $Profile
+    if (-not $postInv.AllRequiredAvailable) {
+        throw "Cache still incomplete after download attempt; aborting before live staging."
+    }
+    Write-Host "  [OK] All required payload assets present in cache." -ForegroundColor Green
+}
 
 # ------------------------------------------------------------------------------
 # 8. Whitelist Staging Plan Generation & Magic Byte Audit

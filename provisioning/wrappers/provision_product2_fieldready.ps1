@@ -25,7 +25,7 @@ param(
     [string]$FilesystemAction = "Auto",
 
     [Parameter(Mandatory = $false)]
-    [string]$CacheDir = "C:\Users\ndoki\Desktop\offgridusb\cache",
+    [string]$CacheDir = "",  # Resolved by provision_usb.ps1: %LOCALAPPDATA%\offgridusb\cache
 
     [Parameter(Mandatory = $false)]
     [string]$Profile = "Auto"

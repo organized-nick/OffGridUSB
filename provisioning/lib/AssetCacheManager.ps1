@@ -12,12 +12,10 @@
 param()
 
 $script:DefaultCacheLocations = @(
-    "C:\Users\ndoki\Desktop\offgridusb\cache",
-    "C:\Users\ndoki\Desktop\offgridusb\OffGridUSB\data",
-    "C:\Users\ndoki\Desktop\offgridusb\OFFGRIDUSB_CONSUMER_READY\data",
-    "C:\Users\ndoki\Desktop\offgridusb\offgridUSB.com\data",
-    "C:\Users\ndoki\Desktop\offgridusb\models_staging",
-    "C:\Users\ndoki\Desktop\offgridusb\zim_Builds"
+    (Join-Path $env:LOCALAPPDATA "offgridusb\cache"),
+    (Join-Path $env:USERPROFILE "offgridusb\cache"),
+    (Join-Path (Get-Location).Path "cache"),
+    (Join-Path (Get-Location).Path "data")
 )
 
 function Test-AssetMagicHeader {
@@ -162,7 +160,8 @@ function Get-ProductAssetInventory {
     )
 
     if (-not $ProductsJsonPath) {
-        $manifestCandidate = "C:\Users\ndoki\Desktop\offgridusb\OffGridUSB\manifests\products.json"
+        $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+        $manifestCandidate = Join-Path $repoRoot "manifests\products.json"
         if (Test-Path $manifestCandidate) {
             $ProductsJsonPath = $manifestCandidate
         }
