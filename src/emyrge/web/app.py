@@ -20,6 +20,7 @@ import platform
 import socket
 import sys
 import threading
+import time
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 import urllib.parse
@@ -46,6 +47,11 @@ from emyrge.memory.memory_vault import MemoryVault
 from emyrge.mesh.packet_chunker import PacketChunker
 from emyrge.server import DEFAULT_PRODUCT_DESCRIPTOR, load_product_sku
 from emyrge.swarm.cluster_sim import ClusterCoordinator
+from emyrge.swarm.runtime import (
+    CoordinatorDiscovery,
+    CoordinatorRuntime,
+    SwarmNode,
+)
 from emyrge.vision.visual_vault import VisualVault
 
 
@@ -242,6 +248,12 @@ class EmyrgeRuntime:
 
         # Kick off non-blocking background server discovery
         threading.Thread(target=self._background_warmup, daemon=True).start()
+
+        # Live swarm state (from src/emyrge/swarm/runtime.py) — singletons per process
+        self.swarm_node: Optional[SwarmNode] = None
+        self.swarm_discovery: Optional[CoordinatorDiscovery] = None
+        self.swarm_coordinator: Optional[CoordinatorRuntime] = None
+        self.swarm_last_plan: Optional[Dict[str, Any]] = None
 
         # Initialize Grounding Harness
         self.harness = GroundingHarness(
@@ -747,6 +759,92 @@ class EmyrgeRuntime:
             "kiwix_running": kiwix_st["kiwix_running"],
         }
 
+    # ------------------------------------------------------------------
+    # Live swarm runtime management (src/emyrge/swarm/runtime.py)
+    # ------------------------------------------------------------------
+
+    def swarm_status(self) -> Dict[str, Any]:
+        with self._lock:
+            node = self.swarm_node.info() if self.swarm_node is not None else None
+            discovered = self.swarm_discovery.snapshot() if self.swarm_discovery is not None else []
+            last_plan = self.swarm_last_plan
+        return {
+            "ok": True,
+            "node_running": node is not None,
+            "node": node,
+            "discovered": discovered,
+            "last_plan": last_plan,
+        }
+
+    def swarm_start_node(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        with self._lock:
+            if self.swarm_node is not None:
+                return {"ok": True, "already_running": True, "node": self.swarm_node.info()}
+            node_id = str(params.get("id") or f"offgrid-{os.getpid()}")
+            node = SwarmNode(
+                node_id=node_id,
+                port=int(params.get("port", 50052)),
+                rpc_port=int(params.get("rpc_port", 50053)),
+                ram_mb=int(params.get("ram_mb", 4096)),
+                vram_mb=int(params.get("vram_mb", 0)),
+                arch=str(params.get("arch", "x86_64")),
+            )
+            try:
+                node.start()
+            except OSError as exc:
+                return {"ok": False, "error": f"failed to bind swarm node ports: {exc}"}
+            self.swarm_node = node
+            # Ensure this device also listens for UDP announces so it can see peers
+            if self.swarm_discovery is None:
+                self.swarm_discovery = CoordinatorDiscovery()
+                self.swarm_discovery.start()
+            return {"ok": True, "already_running": False, "node": node.info()}
+
+    def swarm_stop_node(self) -> Dict[str, Any]:
+        with self._lock:
+            node = self.swarm_node
+            self.swarm_node = None
+        if node is None:
+            return {"ok": True, "already_stopped": True}
+        try:
+            node.stop()
+        except Exception:
+            pass
+        return {"ok": True, "already_stopped": False}
+
+    def swarm_scan(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Discover live LAN nodes and form a verified cluster (live plan)."""
+        window = max(0.0, float(params.get("window", 2.0)))
+        seeds_raw = params.get("seeds") if isinstance(params.get("seeds"), list) else []
+        seeds: List[Dict[str, Any]] = []
+        for s in seeds_raw:
+            if not isinstance(s, dict) or not s.get("ip"):
+                continue
+            try:
+                seeds.append({"ip": str(s["ip"]), "port": int(s.get("port", 50052))})
+            except (TypeError, ValueError):
+                continue
+        with self._lock:
+            if self.swarm_discovery is None:
+                self.swarm_discovery = CoordinatorDiscovery()
+                self.swarm_discovery.start()
+            if self.swarm_coordinator is None:
+                self.swarm_coordinator = CoordinatorRuntime()
+            coordinator = self.swarm_coordinator
+        time.sleep(window)
+        discovered = self.swarm_discovery.snapshot()
+        try:
+            plan = coordinator.form_cluster(
+                seeds=seeds,
+                discovered=discovered,
+                simulate_drop=bool(params.get("simulate_drop", False)),
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"cluster formation failed: {exc}"}
+        with self._lock:
+            self.swarm_last_plan = plan
+        return {"ok": True, **plan}
+
     def handle_mesh_command(self, command: str) -> Dict[str, Any]:
         cmd = (command or "").strip()
         if not cmd:
@@ -945,6 +1043,10 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json(200, {"ok": True, **plan})
                 return
 
+            if path == "/api/swarm/status":
+                self._send_json(200, self.runtime.swarm_status())
+                return
+
             # Static File & Uploaded Asset Serving
             self._serve_static(path)
 
@@ -1068,6 +1170,18 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                 sim_drop = _to_bool(body.get("simulate_drop"), False)
                 plan = ClusterCoordinator.plan_cluster(nodes=nodes, simulate_drop=sim_drop)
                 self._send_json(200, {"ok": True, **plan})
+                return
+
+            if path == "/api/swarm/node/start":
+                self._send_json(200, self.runtime.swarm_start_node(body))
+                return
+
+            if path == "/api/swarm/node/stop":
+                self._send_json(200, self.runtime.swarm_stop_node())
+                return
+
+            if path in ("/api/swarm/scan", "/api/swarm/coordinate"):
+                self._send_json(200, self.runtime.swarm_scan(body))
                 return
 
             self._send_json(404, {"ok": False, "error": f"Unknown POST endpoint: {path}"})

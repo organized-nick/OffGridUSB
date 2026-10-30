@@ -604,6 +604,32 @@
         <div class="stack-col">
           <div class="card" id="swarmPlanOutput"></div>
 
+          <div class="card" id="swarmLiveCard">
+            <div class="section-eyebrow">LIVE LAN SWARM RUNTIME (UDP DISCOVERY + TCP HANDSHAKE)</div>
+            <h3 class="card-title">Live Swarm Node Control</h3>
+            <p class="muted-note">
+              Broadcast this device as a swarm node over the LAN, discover peers, and verify a live distributed cluster via TCP handshake before spawning llama.cpp RPC workers.
+            </p>
+            <div class="swarm-live-grid">
+              <label class="field-label">Node ID
+                <input type="text" id="swarmNodeIdInput" class="tactical-input input-sm" placeholder="offgrid-node-1" />
+              </label>
+              <label class="field-label">RAM (MB)
+                <input type="number" id="swarmNodeRamInput" class="tactical-input input-sm" value="4096" min="256" step="256" />
+              </label>
+              <label class="field-label">Arch
+                <input type="text" id="swarmNodeArchInput" class="tactical-input input-sm" value="x86_64" />
+              </label>
+            </div>
+            <div class="swarm-live-actions">
+              <button type="button" id="swarmStartNodeBtn" class="btn-primary">Start Node</button>
+              <button type="button" id="swarmStopNodeBtn" class="btn-secondary">Stop Node</button>
+              <button type="button" id="swarmScanBtn" class="btn-primary">Scan LAN &amp; Form Cluster ▸</button>
+            </div>
+            <div id="swarmLiveStatus" class="swarm-live-status muted-note">Swarm runtime idle — no node running.</div>
+            <div id="swarmLivePlan" class="swarm-live-plan"></div>
+          </div>
+
           <div class="card chromebook-card">
             <div class="card-header-row">
               <div>

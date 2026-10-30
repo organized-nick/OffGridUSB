@@ -69,6 +69,7 @@ class TestHandshake(unittest.TestCase):
 
     def test_handshake_non_json_service_raises(self):
         garbage = socket.socket()
+        garbage.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         garbage.bind(("127.0.0.1", 50062))
         garbage.listen(1)
         try:

@@ -112,6 +112,16 @@ class SwarmNode:
 
     # -- announce thread -----------------------------------------------------
 
+    def _announce_targets(self) -> List[Tuple[str, int]]:
+        targets = [self.discovery_target]
+        # Broadcast packets are not looped back to local listeners on every OS,
+        # so same-host nodes (and the web UI on this device) also get a direct
+        # copy on loopback. Harmless duplication for real LAN peers.
+        loopback = ("127.0.0.1", self.discovery_target[1])
+        if loopback not in targets:
+            targets.append(loopback)
+        return targets
+
     def _announce_loop(self, stop_evt: threading.Event) -> None:
         payload = json.dumps({"type": "announce", **self.info()}).encode("utf-8")
         while not stop_evt.is_set():
@@ -119,9 +129,11 @@ class SwarmNode:
                 if self._udp_sock is None:
                     self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                     self._udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-                self._udp_sock.sendto(payload, self.discovery_target)
+                for target in self._announce_targets():
+                    self._udp_sock.sendto(payload, target)
             except OSError:
                 pass  # discovery target unreachable — node keeps serving TCP regardless
+            stop_evt.wait(self.announce_interval)
             stop_evt.wait(self.announce_interval)
 
     # -- tcp responder -------------------------------------------------------
