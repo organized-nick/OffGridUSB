@@ -95,16 +95,16 @@
     {
       "id": "wikipedia-simple-nopic",
       "name": "Simple English Wikipedia (No Pictures)",
-      "filename": "wikipedia_en_simple_all_nopic_2026-06.zim",
+      "filename": "wikipedia_en-simple_all_nopic_2026-09.zim",
       "tier": 0,
       "category": "general_encyclopedia",
-      "size_bytes": 1610612736,
-      "size_mb": 1536.0,
+      "size_bytes": 1094936257,
+      "size_mb": 1044.2,
       "sha256": null,
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": ["Product1_full"],
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_simple_all_nopic_2026-06.zim",
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en-simple_all_nopic_2026-09.zim",
       "description": "Full Simple English Wikipedia explaining scientific, historical, and technical concepts in accessible language."
     },
     {
