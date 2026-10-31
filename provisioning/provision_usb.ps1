@@ -211,7 +211,27 @@ function Copy-ItemThrottled {
     )
 
     if ($LimitKBps -le 0) {
-        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+        $srcInfo = Get-Item -LiteralPath $SourcePath
+        if ($srcInfo.Length -le 4MB) {
+            Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+            return
+        }
+        $wtBufferSize = 4 * 1024 * 1024
+        $wtBuf = New-Object byte[] $wtBufferSize
+        $srcStream = [System.IO.File]::OpenRead($SourcePath)
+        try {
+            $dstStream = New-Object System.IO.FileStream($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, $wtBufferSize, [System.IO.FileOptions]::WriteThrough)
+            try {
+                while (($read = $srcStream.Read($wtBuf, 0, $wtBufferSize)) -gt 0) {
+                    $dstStream.Write($wtBuf, 0, $read)
+                }
+                $dstStream.Flush($true)
+            } finally {
+                $dstStream.Dispose()
+            }
+        } finally {
+            $srcStream.Dispose()
+        }
         return
     }
 

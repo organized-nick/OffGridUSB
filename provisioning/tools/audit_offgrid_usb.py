@@ -928,7 +928,6 @@ class OffGridUSBAuditor:
         # Required Windows batch launchers presence audit
         windows_launchers = [
             "START_OFFGRIDUSB_WINDOWS.bat",
-            "START_EMYRGE_WINDOWS.bat",
             "run_windows.bat",
         ]
         for w_launcher in windows_launchers:
@@ -961,12 +960,8 @@ class OffGridUSBAuditor:
         script_targets = [
             "START_OFFGRIDUSB_LINUX.sh",
             "START_OFFGRIDUSB_MAC.command",
-            "START_EMYRGE_LINUX.sh",
-            "START_EMYRGE_MAC.command",
             "run_linux.sh",
             "run_macos.command",
-            "scripts/download_internet_in_a_box.sh",
-            "scripts/setup_usb_unix.sh",
         ]
 
         discovered_paths = set()
