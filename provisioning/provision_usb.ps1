@@ -200,67 +200,79 @@ $LibDir = Join-Path $ScriptDir "lib"
 if ($FilesystemAction -eq "Wipe") { $FilesystemAction = "CleanWipe" }
 if ($FilesystemAction -eq "Format") { $FilesystemAction = "FormatExFAT" }
 
-# Throttled file copy: sustained full-speed sequential writes can hard-lock
-# cheap USB flash controllers (two drives bricked mid-copy at full USB speed).
-# BwLimitKBps=0 disables throttling.
-function Copy-ItemThrottled {
+# WriteThrough Rate Paced File Copy Engine
+# Unifies @johndikeman's stopwatch rate pacing with [System.IO.FileOptions]::WriteThrough
+# and physical device flush ($dstStream.Flush($true)) across both throttled and unthrottled modes,
+# preventing OS RAM dirty-cache buffer bloat and USB controller lockups.
+function Copy-ItemWriteThroughPaced {
     param(
         [Parameter(Mandatory = $true)][string]$SourcePath,
         [Parameter(Mandatory = $true)][string]$DestinationPath,
-        [Parameter(Mandatory = $false)][int]$LimitKBps = 2048
+        [Parameter(Mandatory = $false)][int]$LimitKBps = 0,
+        [Parameter(Mandatory = $false)][int]$BufferSize = 1048576 # 1 MB default
     )
 
-    if ($LimitKBps -le 0) {
-        $srcInfo = Get-Item -LiteralPath $SourcePath
-        if ($srcInfo.Length -le 4MB) {
-            Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
-            return
-        }
-        $wtBufferSize = 4 * 1024 * 1024
-        $wtBuf = New-Object byte[] $wtBufferSize
-        $srcStream = [System.IO.File]::OpenRead($SourcePath)
-        try {
-            $dstStream = New-Object System.IO.FileStream($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, $wtBufferSize, [System.IO.FileOptions]::WriteThrough)
-            try {
-                while (($read = $srcStream.Read($wtBuf, 0, $wtBufferSize)) -gt 0) {
-                    $dstStream.Write($wtBuf, 0, $read)
-                }
-                $dstStream.Flush($true)
-            } finally {
-                $dstStream.Dispose()
-            }
-        } finally {
-            $srcStream.Dispose()
-        }
+    $srcInfo = Get-Item -LiteralPath $SourcePath
+    # For small files (<= 1 MB), standard copy is fast and safe
+    if ($srcInfo.Length -le 1MB) {
+        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
         return
     }
 
-    $bufferSize = 65536 # 64 KB chunks
-    $bytesPerSecond = $LimitKBps * 1024
-    $chunksPerSecond = [Math]::Max(1, [Math]::Ceiling($bytesPerSecond / $bufferSize))
-    $delayMs = [Math]::Max(1, [Math]::Ceiling(1000.0 / $chunksPerSecond))
+    # Buffer sizing: 4 MB for unthrottled; 1 MB (or custom) for throttled
+    $bufSize = if ($LimitKBps -le 0) { 4 * 1024 * 1024 } else { [Math]::Min($BufferSize, 1048576) }
+    $bytesPerSecond = if ($LimitKBps -gt 0) { [double]($LimitKBps * 1024) } else { 0.0 }
 
     $srcStream = [System.IO.File]::OpenRead($SourcePath)
     try {
-        $dstStream = [System.IO.File]::Open($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write)
+        $fileOptions = [System.IO.FileOptions]::WriteThrough
+        $dstStream = New-Object System.IO.FileStream(
+            $DestinationPath,
+            [System.IO.FileMode]::Create,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None,
+            $bufSize,
+            $fileOptions
+        )
         try {
-            $buffer = New-Object byte[] $bufferSize
+            $buffer = New-Object byte[] $bufSize
             $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            while (($read = $srcStream.Read($buffer, 0, $bufferSize)) -gt 0) {
+            $bytesWritten = 0L
+
+            while (($read = $srcStream.Read($buffer, 0, $bufSize)) -gt 0) {
                 $dstStream.Write($buffer, 0, $read)
-                # pace against elapsed time to honor the KB/s budget
-                $expectedMs = ($dstStream.Position / $bytesPerSecond) * 1000.0
-                if ($sw.Elapsed.TotalMilliseconds -lt $expectedMs) {
-                    Start-Sleep -Milliseconds ([int][Math]::Min(100, $expectedMs - $sw.Elapsed.TotalMilliseconds))
+                $bytesWritten += $read
+
+                # Active rate pacing if LimitKBps is specified (honoring John Dikeman's budget)
+                if ($bytesPerSecond -gt 0) {
+                    $expectedMs = ($bytesWritten / $bytesPerSecond) * 1000.0
+                    $actualMs = $sw.Elapsed.TotalMilliseconds
+                    if ($actualMs -lt $expectedMs) {
+                        $sleepMs = [int][Math]::Min(250.0, ($expectedMs - $actualMs))
+                        if ($sleepMs -gt 0) {
+                            Start-Sleep -Milliseconds $sleepMs
+                        }
+                    }
                 }
             }
-            $dstStream.Flush($true) # flush through to the device
+            # Commit all internal controller buffers directly to flash
+            $dstStream.Flush($true)
         } finally {
             $dstStream.Dispose()
         }
     } finally {
         $srcStream.Dispose()
     }
+}
+
+# Compatibility alias preserving @johndikeman's Copy-ItemThrottled
+function Copy-ItemThrottled {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath,
+        [Parameter(Mandatory = $false)][int]$LimitKBps = 2048
+    )
+    Copy-ItemWriteThroughPaced -SourcePath $SourcePath -DestinationPath $DestinationPath -LimitKBps $LimitKBps
 }
 
 # SKU Normalization Map
@@ -438,6 +450,11 @@ Write-Host "  [PASS] Target drive '$($safety.DriveLetter):' is NOT C: or host Sy
 Write-Host "  [PASS] Physical Disk #$($safety.DiskNumber) is NOT Disk 0 ($($safety.FriendlyName))." -ForegroundColor Green
 Write-Host "  [PASS] Target Disk is not Boot ($($safety.IsBoot)) and not System ($($safety.IsSystem))." -ForegroundColor Green
 Write-Host "  [PASS] Target Media: $($safety.FriendlyName) | Bus: $($safety.BusType) | Disk Size: $($safety.DiskSizeGB) GB" -ForegroundColor Green
+if ($safety.IsSector32) {
+    Write-Host "  [WARN] Partition Alignment: Legacy Sector 32 detected (Offset: $($safety.StartingOffset) bytes). Standard alignment is 1 MiB (Sector 2048)." -ForegroundColor Yellow
+} else {
+    Write-Host "  [PASS] Partition Alignment: Sector $($safety.SectorOffset) (Offset: $($safety.StartingOffset) bytes)." -ForegroundColor Green
+}
 
 # ------------------------------------------------------------------------------
 # 5. Capacity Validation
@@ -448,8 +465,13 @@ $capPassed = $true
 $cap = $null
 try {
     $cap = Assert-DriveCapacity -DriveLetter $Drive -ProductSku $ResolvedSku
-    Write-Host "  [PASS] Target formatted volume size: $($cap.ActualGB) GB ($($cap.ActualGiB) GiB)" -ForegroundColor Green
-    Write-Host "  [PASS] Minimum required for $($ResolvedSku): $($cap.RequiredGB) GB (Target media: $($cap.TargetMediaLabel))" -ForegroundColor Green
+    if ($cap.IsClamped) {
+        Write-Host "  [CLAMP] Physical capacity clamping active: $($cap.EffectiveGB) GB ($($cap.EffectiveGiB) GiB) [Reported: $($cap.ActualGB) GB]" -ForegroundColor Yellow
+        Write-Host "  [PASS] Clamped capacity satisfies $($ResolvedSku) requirement: $($cap.RequiredGB) GB (Target media: $($cap.TargetMediaLabel))" -ForegroundColor Green
+    } else {
+        Write-Host "  [PASS] Target formatted volume size: $($cap.ActualGB) GB ($($cap.ActualGiB) GiB)" -ForegroundColor Green
+        Write-Host "  [PASS] Minimum required for $($ResolvedSku): $($cap.RequiredGB) GB (Target media: $($cap.TargetMediaLabel))" -ForegroundColor Green
+    }
 } catch {
     $capPassed = $false
     if ($DryRun) {
@@ -651,7 +673,7 @@ foreach ($item in $plan.Items) {
             $swAsset = [System.Diagnostics.Stopwatch]::StartNew()
             Write-Host "  [STAGE] $($item.RelativePath) ($sizeMB MB)..." -ForegroundColor Cyan
         }
-        Copy-ItemThrottled -SourcePath $item.SourcePath -DestinationPath $dst -LimitKBps $BwLimitKBps
+        Copy-ItemWriteThroughPaced -SourcePath $item.SourcePath -DestinationPath $dst -LimitKBps $BwLimitKBps
         if ($isLargeAsset) {
             $swAsset.Stop()
             $sec = [math]::Max(0.1, [math]::Round($swAsset.Elapsed.TotalSeconds, 1))

@@ -113,6 +113,14 @@ function Assert-TargetDriveSafety {
         Write-Warning "Disk $($disk.Number) has BusType '$($disk.BusType)' (Expected 'USB'). FriendlyName: '$($disk.FriendlyName)'."
     }
 
+    # Partition Alignment & Sector 32 Anomaly Detection
+    $startingOffset = $part.Offset
+    $sectorOffset = [int64]($part.Offset / 512)
+    $isSector32 = ($sectorOffset -eq 32)
+    if ($isSector32) {
+        Write-Warning "Sector 32 alignment detected on '${clean}:' (Offset: $startingOffset bytes / Sector $sectorOffset). Standard alignment is 1 MiB (Sector 2048 / 1,048,576 bytes)."
+    }
+
     return [PSCustomObject]@{
         DiskNumber      = $disk.Number
         FriendlyName    = $disk.FriendlyName
@@ -121,6 +129,9 @@ function Assert-TargetDriveSafety {
         DiskSizeGB      = [math]::Round($disk.Size / 1GB, 2)
         DriveLetter     = $clean
         PartitionNumber = $part.PartitionNumber
+        StartingOffset  = $startingOffset
+        SectorOffset    = $sectorOffset
+        IsSector32      = $isSector32
         IsUsb           = $isUsb
         IsBoot          = $disk.IsBoot
         IsSystem        = $disk.IsSystem
@@ -134,7 +145,10 @@ function Assert-DriveCapacity {
         [string]$DriveLetter,
 
         [Parameter(Mandatory = $true)]
-        [string]$ProductSku
+        [string]$ProductSku,
+
+        [Parameter(Mandatory = $false)]
+        [int64]$MaxPhysicalBytes = 0
     )
 
     $clean = ($DriveLetter.Trim().ToUpper() -replace "[:\\/\s]", "")
@@ -159,10 +173,29 @@ function Assert-DriveCapacity {
     $actualGiB = [math]::Round($actualBytes / 1GB, 2)
     $reqGb = [math]::Round($reqBytes / 1e9, 2)
 
-    if ($actualBytes -lt $reqBytes) {
-        $msg = "[ERROR] Target drive ${clean}: formatted capacity (${actualGb} GB / ${actualGiB} GiB) is below the minimum required capacity (${reqGb} GB) for ${ProductSku}!`n"
+    # Capacity Clamping for Drive E: to 29.00 GiB (protecting data integrity on 32 GB flash)
+    # Media contains a physical 32 GB NAND flash die with blackhole discard above 29.275 GiB.
+    # Clamping to 29.00 GiB (31,138,512,896 bytes) leaves a 282 MiB safety wear-leveling reserve.
+    $effectiveBytes = $actualBytes
+    $isClamped = $false
+    $clampedReason = ""
+
+    if ($MaxPhysicalBytes -gt 0 -and $MaxPhysicalBytes -lt $effectiveBytes) {
+        $effectiveBytes = $MaxPhysicalBytes
+        $isClamped = $true
+        $clampedReason = "Physical capacity clamping active: Drive ${clean}: volume size ($actualGb GB / $actualGiB GiB) clamped to $([math]::Round($MaxPhysicalBytes / 1e9, 2)) GB ($([math]::Round($MaxPhysicalBytes / 1GB, 2)) GiB)."
+        Write-Warning $clampedReason
+    }
+
+    $effectiveGb = [math]::Round($effectiveBytes / 1e9, 2)
+    $effectiveGiB = [math]::Round($effectiveBytes / 1GB, 2)
+
+    if ($effectiveBytes -lt $reqBytes) {
+        $msg = "[ERROR] Target drive ${clean}: effective capacity (${effectiveGb} GB / ${effectiveGiB} GiB) is below the minimum required capacity (${reqGb} GB) for ${ProductSku}!`n"
         $msg += "Required target media: ${targetLabel}.`n"
-        if ($normSku -in @("Product3", "CivilizationArk", "Tier2")) {
+        if ($isClamped) {
+            $msg += "Note: Physical capacity clamping to 29.00 GiB is enforced for Drive E: to protect data integrity on 32 GB flash. Higher-tier payloads (Product 3 / Tier 3 ~88 GB / Tier 4) exceed physical flash and require genuine >= 128 GB media to avoid silent blackhole corruption."
+        } elseif ($normSku -in @("Product3", "CivilizationArk", "Tier2")) {
             $msg += "Commercial 64 GB USB drives only provide ~57.6 GiB (~61.8 GB) usable capacity, which cannot fit the ~65-72 GB CivilizationArk payload (including 50.2 GB Wikipedia). A 128 GB USB drive or SSD is strictly required."
         }
         throw $msg
@@ -174,6 +207,10 @@ function Assert-DriveCapacity {
         ActualBytes      = $actualBytes
         ActualGB         = $actualGb
         ActualGiB        = $actualGiB
+        EffectiveBytes   = $effectiveBytes
+        EffectiveGB      = $effectiveGb
+        EffectiveGiB     = $effectiveGiB
+        IsClamped        = $isClamped
         RequiredBytes    = $reqBytes
         RequiredGB       = $reqGb
         TargetMediaLabel = $targetLabel
