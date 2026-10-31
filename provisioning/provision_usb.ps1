@@ -86,7 +86,7 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateRange(0, [int]::MaxValue)]
-    [int]$BwLimitKBps = 2048
+    [int]$BwLimitKBps = 0
 )
 
 # ------------------------------------------------------------------------------
@@ -107,7 +107,7 @@ if (-not $CacheDir) {
     if ($env:OFFGRIDUSB_CACHE_DIR) {
         $CacheDir = $env:OFFGRIDUSB_CACHE_DIR
     } else {
-        $CacheDir = Join-Path $env:LOCALAPPDATA "offgridusb\cache"
+        $CacheDir = "C:\Users\ndoki\Documents\OffGridUSB_Provisions"
     }
 }
 
@@ -124,7 +124,7 @@ function Import-LegacyCacheAssets {
 
     $legacySources = @(
         (Join-Path $env:USERPROFILE "Desktop\offgridusb\cache"),
-        "C:\Users\ndoki\Desktop\offgridusb\cache",
+        "C:\Users\ndoki\Documents\OffGridUSB_Provisions",
         (Join-Path $RepoRoot "cache"),
         (Join-Path $RepoRoot "data"),
         (Join-Path $RepoRoot "models_staging"),
@@ -211,7 +211,27 @@ function Copy-ItemThrottled {
     )
 
     if ($LimitKBps -le 0) {
-        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+        $srcInfo = Get-Item -LiteralPath $SourcePath
+        if ($srcInfo.Length -le 4MB) {
+            Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+            return
+        }
+        $wtBufferSize = 4 * 1024 * 1024
+        $wtBuf = New-Object byte[] $wtBufferSize
+        $srcStream = [System.IO.File]::OpenRead($SourcePath)
+        try {
+            $dstStream = New-Object System.IO.FileStream($DestinationPath, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, $wtBufferSize, [System.IO.FileOptions]::WriteThrough)
+            try {
+                while (($read = $srcStream.Read($wtBuf, 0, $wtBufferSize)) -gt 0) {
+                    $dstStream.Write($wtBuf, 0, $read)
+                }
+                $dstStream.Flush($true)
+            } finally {
+                $dstStream.Dispose()
+            }
+        } finally {
+            $srcStream.Dispose()
+        }
         return
     }
 
@@ -625,7 +645,19 @@ foreach ($item in $plan.Items) {
     }
 
     if (Test-Path -LiteralPath $item.SourcePath) {
+        $isLargeAsset = ($item.RelativePath -like "*.zim" -or $item.RelativePath -like "*.gguf")
+        if ($isLargeAsset) {
+            $sizeMB = [math]::Round($item.SizeBytes / 1MB, 1)
+            $swAsset = [System.Diagnostics.Stopwatch]::StartNew()
+            Write-Host "  [STAGE] $($item.RelativePath) ($sizeMB MB)..." -ForegroundColor Cyan
+        }
         Copy-ItemThrottled -SourcePath $item.SourcePath -DestinationPath $dst -LimitKBps $BwLimitKBps
+        if ($isLargeAsset) {
+            $swAsset.Stop()
+            $sec = [math]::Max(0.1, [math]::Round($swAsset.Elapsed.TotalSeconds, 1))
+            $mbps = [math]::Round(($item.SizeBytes / 1MB) / $sec, 1)
+            Write-Host "  [OK] $($item.RelativePath) copied in ${sec}s ($mbps MB/s)" -ForegroundColor Green
+        }
     }
 }
 

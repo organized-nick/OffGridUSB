@@ -44,7 +44,7 @@
             "wikipedia_en_medicine_mini_2026-10.zim",
             "mdwiki_en_all_2024-06.zim",
             "wikipedia_en_top_mini_2026-09.zim",
-            "wikipedia_en_simple_all_nopic_2026-06.zim"
+            "wikipedia_en_top_nopic_2026-09.zim"
           ]
         }
       },
@@ -108,12 +108,13 @@
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
+            "zimgit-food-preparation_en_2025-04.zim",
             "zimgit-medicine_en_2024-08.zim",
             "wikipedia_en_medicine_mini_2026-10.zim",
             "wikipedia_en_top_mini_2026-09.zim",
             "wikibooks_en_all_maxi_2026-04.zim",
-            "wikipedia_en_medicine_maxi_2026-06.zim",
-            "zimgit-post-disaster_en_2025-05.zim"
+            "wikipedia_en_medicine_maxi_2026-10.zim",
+            "zimgit-post-disaster_en_2024-05.zim"
           ]
         }
       },
@@ -148,6 +149,23 @@
       "min_drive_capacity_bytes": 120000000000,
       "max_payload_bytes": 115000000000,
       "payload_profiles": {
+        "lean": {
+          "description": "Zero-download instant deployment using local verified bundle (4.69 GB)",
+          "total_bytes": 4692223737,
+          "total_gb": 4.69,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim"
+          ]
+        },
         "full": {
           "description": "Full Civilization Ark payload including 50.2 GB Wikipedia No-Pic (~68.5 GB)",
           "total_bytes": 68500000000,
@@ -161,12 +179,13 @@
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
+            "zimgit-food-preparation_en_2025-04.zim",
             "zimgit-medicine_en_2024-08.zim",
             "wikipedia_en_medicine_mini_2026-10.zim",
             "wikipedia_en_top_mini_2026-09.zim",
             "wikibooks_en_all_maxi_2026-04.zim",
-            "wikipedia_en_medicine_maxi_2026-06.zim",
-            "zimgit-post-disaster_en_2025-05.zim",
+            "wikipedia_en_medicine_maxi_2026-10.zim",
+            "zimgit-post-disaster_en_2024-05.zim",
             "wikipedia_en_all_nopic_2026-06.zim"
           ]
         }
@@ -202,6 +221,23 @@
       "min_drive_capacity_bytes": 240000000000,
       "max_payload_bytes": 230000000000,
       "payload_profiles": {
+        "lean": {
+          "description": "Zero-download instant deployment using local verified bundle (4.69 GB)",
+          "total_bytes": 4692223737,
+          "total_gb": 4.69,
+          "models": [
+            "smollm2-135m-instruct-q4_k_m.gguf",
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "qwen2.5-1.5b-instruct-q4_k_m.gguf",
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+          ],
+          "zim_archives": [
+            "zimgit-water_en_2024-08.zim",
+            "zimgit-medicine_en_2024-08.zim",
+            "wikipedia_en_medicine_mini_2026-10.zim",
+            "wikipedia_en_top_mini_2026-09.zim"
+          ]
+        },
         "full": {
           "description": "Tiers 0-2 plus Qwen2.5-32B Swarm model and Exo clustering UI (~88.8 GB)",
           "total_bytes": 88800000000,
@@ -216,12 +252,13 @@
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
+            "zimgit-food-preparation_en_2025-04.zim",
             "zimgit-medicine_en_2024-08.zim",
             "wikipedia_en_medicine_mini_2026-10.zim",
             "wikipedia_en_top_mini_2026-09.zim",
             "wikibooks_en_all_maxi_2026-04.zim",
-            "wikipedia_en_medicine_maxi_2026-06.zim",
-            "zimgit-post-disaster_en_2025-05.zim",
+            "wikipedia_en_medicine_maxi_2026-10.zim",
+            "zimgit-post-disaster_en_2024-05.zim",
             "wikipedia_en_all_nopic_2026-06.zim"
           ]
         }
@@ -276,10 +313,10 @@
             "wikipedia_en_medicine_mini_2026-10.zim",
             "wikipedia_en_top_mini_2026-09.zim",
             "wikibooks_en_all_maxi_2026-04.zim",
-            "wikipedia_en_medicine_maxi_2026-06.zim",
-            "zimgit-post-disaster_en_2025-05.zim",
+            "wikipedia_en_medicine_maxi_2026-10.zim",
+            "zimgit-post-disaster_en_2024-05.zim",
             "wikipedia_en_all_nopic_2026-06.zim",
-            "wikipedia_en_all_maxi_2026-06.zim"
+            "wikipedia_en_all_maxi_2026-08.zim"
           ]
         }
       },

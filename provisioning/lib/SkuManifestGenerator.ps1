@@ -51,7 +51,7 @@ function New-ProductSkuManifest {
         throw "products.json not found at: $ProductsJsonPath"
     }
 
-    $catalog = Get-Content -Raw -Path $ProductsJsonPath | ConvertFrom-Json
+    $catalog = Get-Content -Raw -Encoding UTF8 -Path $ProductsJsonPath | ConvertFrom-Json
     $matched = $null
     foreach ($p in $catalog.products) {
         if ($p.sku -eq $ProductSku -or $p.product_id -eq $ProductSku -or $p.name -like "*$ProductSku*") {
@@ -128,7 +128,8 @@ function New-ProductSkuManifest {
         if ($outDir -and -not (Test-Path $outDir)) {
             New-Item -ItemType Directory -Path $outDir -Force | Out-Null
         }
-        [System.IO.File]::WriteAllText($OutputPath, $jsonStr, [System.Text.Encoding]::UTF8)
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($OutputPath, $jsonStr, $utf8NoBom)
     }
 
     return [PSCustomObject]@{

@@ -38,9 +38,12 @@ function Build-LibraryXml {
 
     foreach ($book in $root.book) {
         $pathAttr = $book.GetAttribute("path")
-        $fileName = [System.IO.Path]::GetFileName($pathAttr).ToLowerInvariant()
-        if (-not $presentNames.ContainsKey($fileName)) {
+        $fileName = [System.IO.Path]::GetFileName($pathAttr)
+        $fileNameLower = $fileName.ToLowerInvariant()
+        if (-not $presentNames.ContainsKey($fileNameLower)) {
             $nodesToRemove += $book
+        } else {
+            $book.SetAttribute("path", "zim/$fileName")
         }
     }
 

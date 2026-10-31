@@ -288,9 +288,26 @@ class OffGridUSBAuditor:
                 )
             )
 
+        # Check if product_sku.json specifies active_zim_archives / active_models
+        sku_json_path = self.drive / "manifests" / "product_sku.json"
+        sku_zims = None
+        sku_models = None
+        if sku_json_path.exists():
+            try:
+                sku_data = json.loads(sku_json_path.read_text(encoding="utf-8"))
+                if sku_data.get("active_zim_archives"):
+                    sku_zims = set(sku_data["active_zim_archives"])
+                if sku_data.get("active_models"):
+                    sku_models = set(sku_data["active_models"])
+            except Exception:
+                pass
+
         # Validate ZIM files for requested tier
         zim_dir = self.drive / "data" / "zim"
-        target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
+        if sku_zims is not None:
+            target_zims = [z for z in self.zim_manifest if z.get("filename") in sku_zims]
+        else:
+            target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
         self.log(f"Auditing {len(target_zims)} ZIM archives for Tier <= {self.tier}...", "INFO")
 
         for z in target_zims:
@@ -359,7 +376,10 @@ class OffGridUSBAuditor:
 
         # Validate GGUF models for requested tier
         models_dir = self.drive / "data" / "models"
-        target_models = [m for m in self.models_manifest if m.get("tier", 0) <= self.tier]
+        if sku_models is not None:
+            target_models = [m for m in self.models_manifest if m.get("filename") in sku_models]
+        else:
+            target_models = [m for m in self.models_manifest if m.get("tier", 0) <= self.tier]
         self.log(f"Auditing {len(target_models)} GGUF models for Tier <= {self.tier}...", "INFO")
 
         for m in target_models:
@@ -367,7 +387,7 @@ class OffGridUSBAuditor:
             m_path = models_dir / fname
             expected_size = m.get("size_bytes", 0)
             m_tier = m.get("tier", 0)
-            expected_sha = m.get("sha256", "").strip().lower()
+            expected_sha = (m.get("sha256") or "").strip().lower()
 
             if not m_path.exists():
                 self.results.append(
@@ -908,7 +928,6 @@ class OffGridUSBAuditor:
         # Required Windows batch launchers presence audit
         windows_launchers = [
             "START_OFFGRIDUSB_WINDOWS.bat",
-            "START_EMYRGE_WINDOWS.bat",
             "run_windows.bat",
         ]
         for w_launcher in windows_launchers:
@@ -941,12 +960,8 @@ class OffGridUSBAuditor:
         script_targets = [
             "START_OFFGRIDUSB_LINUX.sh",
             "START_OFFGRIDUSB_MAC.command",
-            "START_EMYRGE_LINUX.sh",
-            "START_EMYRGE_MAC.command",
             "run_linux.sh",
             "run_macos.command",
-            "scripts/download_internet_in_a_box.sh",
-            "scripts/setup_usb_unix.sh",
         ]
 
         discovered_paths = set()
