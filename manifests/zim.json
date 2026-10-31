@@ -125,7 +125,7 @@
     {
       "id": "wikipedia-medicine-maxi",
       "name": "WikiMed Full Illustrated Medical Encyclopedia",
-      "filename": "wikipedia_en_medicine_maxi_2026-06.zim",
+      "filename": "wikipedia_en_medicine_maxi_2026-10.zim",
       "tier": 1,
       "category": "clinical_medicine",
       "size_bytes": 1932735283,
@@ -134,13 +134,13 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": ["Product2_full", "Product3", "Tier3", "Tier4"],
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-06.zim",
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-10.zim",
       "description": "Full illustrated medical encyclopedia with clinical diagrams, pathology photos, and pharmacology tables."
     },
     {
       "id": "zimgit-post-disaster",
       "name": "ZimGit Post-Disaster Infrastructure & Reconstruction",
-      "filename": "zimgit-post-disaster_en_2025-05.zim",
+      "filename": "zimgit-post-disaster_en_2024-05.zim",
       "tier": 1,
       "category": "survival_engineering",
       "size_bytes": 47185920,
@@ -149,7 +149,7 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": ["Product2_full", "Product3", "Tier3", "Tier4"],
-      "url": "https://download.kiwix.org/zim/other/zimgit-post-disaster_en_2025-05.zim",
+      "url": "https://download.kiwix.org/zim/other/zimgit-post-disaster_en_2024-05.zim",
       "description": "Off-grid shelter construction, electrical grid restoration, emergency communications, and logistics."
     },
     {
@@ -170,7 +170,7 @@
     {
       "id": "wikipedia-en-all-maxi",
       "name": "Full Illustrated English Wikipedia Maxi",
-      "filename": "wikipedia_en_all_maxi_2026-06.zim",
+      "filename": "wikipedia_en_all_maxi_2026-08.zim",
       "tier": 4,
       "category": "illustrated_wikipedia",
       "size_bytes": 118111600000,
@@ -179,7 +179,7 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": ["Tier4"],
-      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_maxi_2026-06.zim",
+      "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_maxi_2026-08.zim",
       "description": "The flagship 110 GB English Wikipedia complete with millions of historical photographs, charts, and illustrations."
     }
   ]

@@ -12,6 +12,7 @@
 param()
 
 $script:DefaultCacheLocations = @(
+    "C:\Users\ndoki\Documents\OffGridUSB_Provisions",
     (Join-Path $env:LOCALAPPDATA "offgridusb\cache"),
     (Join-Path $env:USERPROFILE "offgridusb\cache"),
     (Join-Path (Get-Location).Path "cache"),

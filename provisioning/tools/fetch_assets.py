@@ -279,8 +279,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 0
 
-    models_dir = root / "data" / "models"
-    zim_dir = root / "data" / "zim"
+    if (root / "models").is_dir() or (root / "zim").is_dir() or not (root / "src").is_dir():
+        models_dir = root / "models"
+        zim_dir = root / "zim"
+    else:
+        models_dir = root / "data" / "models"
+        zim_dir = root / "data" / "zim"
     models_dir.mkdir(parents=True, exist_ok=True)
     zim_dir.mkdir(parents=True, exist_ok=True)
 
