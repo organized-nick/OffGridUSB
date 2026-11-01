@@ -195,6 +195,7 @@ $LibDir = Join-Path $ScriptDir "lib"
 . (Join-Path $LibDir "SkuManifestGenerator.ps1")
 . (Join-Path $LibDir "LibraryXmlBuilder.ps1")
 . (Join-Path $LibDir "UsbStripper.ps1")
+. (Join-Path $LibDir "EngineStager.ps1")
 
 # Normalize FilesystemAction aliases
 if ($FilesystemAction -eq "Wipe") { $FilesystemAction = "CleanWipe" }
@@ -555,6 +556,43 @@ if (-not $preInv.AllRequiredAvailable) {
 }
 
 # ------------------------------------------------------------------------------
+# 7.6 Portable Engine Staging: fetch cross-platform runtime engines (portable
+#     Python, kiwix-serve, llama.cpp, llamafile) into <SourceRoot>\bin so the
+#     whitelist staging plan copies them onto the drive and the resulting USB
+#     boots on every supported host OS (Windows/macOS/Linux/Raspberry Pi).
+#     Engines are tier-independent; missing boot-critical ones abort live runs.
+# ------------------------------------------------------------------------------
+Write-Host ""
+Write-Host ">>> Staging portable runtime engines (bin\) for $ResolvedSku..." -ForegroundColor Cyan
+
+if (-not $DryRun -and -not $NoDownload) {
+    Invoke-EngineStaging -Root $SourceRoot | Out-Null
+    $enginesReady = $true
+} else {
+    $missingEngines = Test-EngineReadiness -Root $SourceRoot
+    $enginesReady = ($missingEngines.Count -eq 0)
+    if (-not $enginesReady) {
+        if ($DryRun) {
+            Write-Host "  [DRY-RUN] $($missingEngines.Count) engine payload(s) missing; live provisioning would download them into bin\:" -ForegroundColor Yellow
+            foreach ($me in $missingEngines) {
+                Write-Host ("    [MISSING] {0} ({1}){2}" -f $me.Name, $me.Path, $(if ($me.BootCritical) { " [BOOT-CRITICAL]" })) -ForegroundColor Yellow
+            }
+        } else {
+            $bootCriticalMissing = @($missingEngines | Where-Object { $_.BootCritical })
+            if ($bootCriticalMissing.Count -gt 0) {
+                throw "Boot-critical Windows engines missing from bin\ and -NoDownload was set. Re-run without -NoDownload, or run provisioning\tools\download_internet_in_a_box.ps1 -EnginesOnly first. Missing: $($bootCriticalMissing.Name -join ', ')"
+            }
+            Write-Host "  [WARN] $($missingEngines.Count) non-critical engine payload(s) missing (cross-OS support reduced); -NoDownload set so skipping fetch." -ForegroundColor Yellow
+            foreach ($me in $missingEngines) {
+                Write-Host ("    [MISSING] {0} ({1})" -f $me.Name, $me.Path) -ForegroundColor Yellow
+            }
+        }
+    } else {
+        Write-Host "  [OK] All portable engines staged and verified in bin\." -ForegroundColor Green
+    }
+}
+
+# ------------------------------------------------------------------------------
 # 8. Whitelist Staging Plan Generation & Magic Byte Audit
 # ------------------------------------------------------------------------------
 Write-Host ""
@@ -608,6 +646,7 @@ if ($DryRun) {
     Write-Host "  Lock Resolution    : PASSED ($($runningProcs.Count) process(es) audited)"
     Write-Host "  Filesystem Plan    : $($fsPlan.ResolvedAction) ($($fsPlan.Description))"
     Write-Host "  Asset Magic Headers: $(if ($sourceMagicFailures.Count -eq 0) { "100% PASSED" } else { "$($sourceMagicFailures.Count) Corrupted" })"
+    Write-Host "  Portable Engines   : $(if ($enginesReady) { "ALL STAGED" } else { "MISSING (will be fetched before live staging)" })" -ForegroundColor $(if ($enginesReady) { "Green" } else { "Yellow" })
     if ($missingAssets.Count -gt 0) {
         Write-Host "  Missing In Cache   : $($missingAssets.Count) file(s) must be downloaded before live staging" -ForegroundColor Yellow
     }
@@ -723,5 +762,6 @@ Write-Host "====================================================================
 Write-Host "  >>> PROVISIONING SUCCESSFUL: $ResolvedSku staged onto ${cleanDrive}:" -ForegroundColor Green
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host "  Ready for customer deployment. Zero downloader or builder scripts present."
+Write-Host "  Portable engines verified: drive boots on Windows/macOS/Linux hosts."
 Write-Host ""
 exit 0

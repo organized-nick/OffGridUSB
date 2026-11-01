@@ -82,6 +82,11 @@ PROVISION_OFFGRID_USB.bat
 powershell -ExecutionPolicy Bypass -File provisioning/provision_usb.ps1 -Info
 ```
 
+```bash
+# POSIX (Linux / macOS) — full feature parity with the PowerShell engine
+./provisioning/provision_usb.sh --info
+```
+
 ### Dry-Run Simulation (0 writes to disk)
 ```powershell
 # Simulate Product 1 (PocketSurvival) on D:
@@ -92,6 +97,11 @@ powershell -ExecutionPolicy Bypass -File provisioning/provision_usb.ps1 -Product
 
 # Simulate Product 3 (CivilizationArk) on D:
 powershell -ExecutionPolicy Bypass -File provisioning/provision_usb.ps1 -Product Product3 -Drive D -DryRun
+```
+
+```bash
+# POSIX equivalent — --drive is the USB MOUNT POINT, not a device node
+./provisioning/provision_usb.sh --product Product2 --dry-run --drive /media/$USER/OFFGRIDUSB
 ```
 
 ### 1-Click Provisioning Execution
@@ -105,3 +115,12 @@ powershell -ExecutionPolicy Bypass -File provisioning/provision_usb.ps1 -Product
 # Linux / macOS Bash
 ./provisioning/provision_product2_fieldready.sh --drive /media/user/OFFGRIDUSB
 ```
+
+### Engine Staging Parity (all platforms)
+Both the PowerShell (`provision_usb.ps1`) and POSIX (`provision_usb.sh`) provisioning
+engines automatically stage the portable cross-platform engines (`bin/`: Windows x64
+Python 3.12 embeddable + kiwix-serve + llama-server, Windows ARM64, Linux x86_64 &
+ARM64, macOS ARM64 & Intel bundles, polyglot llamafile) into the source tree before
+whitelist staging, so **one provisioning run on either host OS yields a universally
+bootable drive**. Missing boot-critical engines abort live runs; `--dry-run` reports
+them without downloading.

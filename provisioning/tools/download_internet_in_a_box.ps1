@@ -35,178 +35,12 @@ $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 [System.IO.Directory]::SetCurrentDirectory($Root)
 
-function Test-FileMagicHeader {
-    param(
-        [string]$FilePath,
-        [ValidateSet("ZIM", "GGUF", "TAR_GZ", "ZIP", "EXE", "ANY")]
-        [string]$Expected = "ANY"
-    )
-    if (-not (Test-Path $FilePath)) { return $false }
-    $item = Get-Item $FilePath
-    if ($item.Length -lt 16) { return $false }
+# Shared engine download/verify library (also used by provisioning\provision_usb.ps1)
+. (Join-Path (Split-Path -Parent $PSScriptRoot) "lib\EngineStager.ps1")
 
-    $fs = [System.IO.File]::OpenRead($item.FullName)
-    try {
-        $buf = New-Object byte[] 4
-        $read = $fs.Read($buf, 0, 4)
-        if ($read -lt 4) { return $false }
-        # Disallow zero-filled corrupted sectors from uncommitted writes
-        if ($buf[0] -eq 0 -and $buf[1] -eq 0 -and $buf[2] -eq 0 -and $buf[3] -eq 0) {
-            return $false
-        }
-        if ($Expected -eq "GGUF") {
-            return ($buf[0] -eq 0x47 -and $buf[1] -eq 0x47 -and $buf[2] -eq 0x55 -and $buf[3] -eq 0x46)
-        }
-        if ($Expected -eq "ZIM") {
-            # Little-endian ZIM\x04: 0x5A 0x49 0x4D 0x04
-            return ($buf[0] -eq 0x5A -and $buf[1] -eq 0x49 -and $buf[2] -eq 0x4D -and $buf[3] -eq 0x04)
-        }
-        if ($Expected -eq "TAR_GZ") {
-            # GZIP magic: 0x1F 0x8B
-            return ($buf[0] -eq 0x1F -and $buf[1] -eq 0x8B)
-        }
-        if ($Expected -eq "ZIP") {
-            # PKzip magic: 0x50 0x4B
-            return ($buf[0] -eq 0x50 -and $buf[1] -eq 0x4B)
-        }
-        if ($Expected -eq "EXE") {
-            # DOS PE / MZ magic: 0x4D 0x5A
-            return ($buf[0] -eq 0x4D -and $buf[1] -eq 0x5A)
-        }
-        return $true
-    } finally {
-        $fs.Close()
-    }
-}
-
-function Invoke-ResumableDownload {
-    param(
-        [Parameter(Mandatory=$true)][string]$Url,
-        [Parameter(Mandatory=$true)][string]$Dest,
-        [ValidateSet("ZIM", "GGUF", "TAR_GZ", "ZIP", "EXE", "ANY")]
-        [string]$MagicCheck = "ANY",
-        [long]$MinBytes = 65536
-    )
-
-    $parentDir = Split-Path -Parent $Dest
-    if ($parentDir -and -not (Test-Path $parentDir)) {
-        New-Item -ItemType Directory -Force -Path $parentDir | Out-Null
-    }
-
-    if (Test-Path $Dest) {
-        $existingLen = (Get-Item $Dest).Length
-        if ($existingLen -ge $MinBytes -and (Test-FileMagicHeader -FilePath $Dest -Expected $MagicCheck)) {
-            $mb = [math]::Round($existingLen / 1MB, 1)
-            Write-Host "  [SKIP] Verified & staged: $Dest ($mb MB)" -ForegroundColor DarkGreen
-            return
-        }
-    }
-
-    $partFile = "$Dest.part"
-    Write-Host "  [DL]   Fetching: $Url" -ForegroundColor Cyan
-    Write-Host "         Target  : $Dest" -ForegroundColor Gray
-
-    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
-        $curlArgs = @(
-            "-L", "-f",
-            "--retry", "5",
-            "--retry-connrefused",
-            "--retry-delay", "2",
-            "--connect-timeout", "30",
-            "-A", "OffGridUSB-Provisioner/0.1"
-        )
-        if (Test-Path $partFile) {
-            $curlArgs += @("-C", "-")
-        }
-        $curlArgs += @("-o", $partFile, $Url)
-        & curl.exe @curlArgs
-        if ($LASTEXITCODE -ne 0) {
-            # Only remove partFile if server rejected byte-range resume (curl exit code 33 = HTTP 416 Range Not Satisfiable)
-            if ($LASTEXITCODE -eq 33) {
-                Write-Warning "Server rejected byte-range resume (curl exit code 33 / HTTP 416). Retrying clean download..."
-                Remove-Item $partFile -Force -ErrorAction SilentlyContinue
-                & curl.exe -L -f --retry 5 --retry-connrefused --retry-delay 2 --connect-timeout 30 -A "OffGridUSB-Provisioner/0.1" -o $partFile $Url
-            }
-            if ($LASTEXITCODE -ne 0) {
-                throw "Download failed for $Url (curl exit code $LASTEXITCODE). Partial file preserved at $partFile for resumption."
-            }
-        }
-    } else {
-        Invoke-WebRequest -Uri $Url -OutFile $partFile -UseBasicParsing -UserAgent "OffGridUSB-Provisioner/0.1"
-    }
-
-    Move-Item -Path $partFile -Destination $Dest -Force
-    $finalLen = (Get-Item $Dest).Length
-    if ($finalLen -lt $MinBytes -or -not (Test-FileMagicHeader -FilePath $Dest -Expected $MagicCheck)) {
-        throw "Integrity check failed for $Dest ($finalLen bytes, expected header: $MagicCheck)"
-    }
-    $finalMb = [math]::Round($finalLen / 1MB, 1)
-    Write-Host "  [OK]   Ready: $Dest ($finalMb MB)" -ForegroundColor Green
-}
-
-function Show-VerifyReport {
-    Write-Host ""
-    Write-Host "================================================================================" -ForegroundColor Cyan
-    Write-Host "  OffGridUSB (offgridusb.com) -- Offline Asset & Engine Verification Report" -ForegroundColor Cyan
-    Write-Host "================================================================================" -ForegroundColor Cyan
-
-    $engineChecks = @(
-        @{ Name = "Windows x64 Portable Python 3.12"; Path = "bin\windows_x86_64\python\python.exe" },
-        @{ Name = "Windows x64 Kiwix ZIM Server";     Path = "bin\windows_x86_64\kiwix\kiwix-serve.exe" },
-        @{ Name = "Windows x64 llama-server";         Path = "bin\windows_x86_64\llama\llama-server.exe" },
-        @{ Name = "Windows ARM64 llama-server";       Path = "bin\windows_arm64\llama\llama-server.exe" },
-        @{ Name = "Linux x64 Kiwix Bundle";           Path = "bin\linux_x86_64\kiwix-tools_linux-x86_64.tar.gz" },
-        @{ Name = "Linux x64 llama-server Bundle";    Path = "bin\linux_x86_64\llama-ubuntu-x64.tar.gz" },
-        @{ Name = "Linux ARM64 (Pi) Kiwix Bundle";    Path = "bin\linux_arm64\kiwix-tools_linux-aarch64.tar.gz" },
-        @{ Name = "Linux ARM64 (Pi) llama Bundle";    Path = "bin\linux_arm64\llama-ubuntu-arm64.tar.gz" },
-        @{ Name = "macOS Apple Silicon Kiwix Bundle"; Path = "bin\macos_arm64\kiwix-tools_macos.tar.gz" },
-        @{ Name = "macOS Apple Silicon llama Bundle"; Path = "bin\macos_arm64\llama-macos-arm64.tar.gz" },
-        @{ Name = "Polyglot Cosmopolitan llamafile";  Path = "bin\polyglot\llamafile.exe" }
-    )
-
-    Write-Host "`n  [Portable Cross-Platform Engines]" -ForegroundColor Yellow
-    foreach ($ec in $engineChecks) {
-        $exists = Test-Path $ec.Path
-        $valid = $false
-        if ($exists) {
-            $expectedMagic = if ($ec.Path -like "*.tar.gz") { "TAR_GZ" } elseif ($ec.Path -like "*.exe") { "EXE" } else { "ANY" }
-            $valid = Test-FileMagicHeader -FilePath $ec.Path -Expected $expectedMagic
-        }
-        $status = if (-not $exists) { "[MISSING]" } elseif ($valid) { "[READY]" } else { "[BAD HEADER]" }
-        $color  = if ($valid) { "Green" } elseif (-not $exists) { "DarkYellow" } else { "Red" }
-        Write-Host ("    {0,-12} {1,-36} ({2})" -f $status, $ec.Name, $ec.Path) -ForegroundColor $color
-    }
-
-    Write-Host "`n  [Staged Internet-in-a-Box OpenZIM Archives (data\zim)]" -ForegroundColor Yellow
-    $zims = if (Test-Path "data\zim") { Get-ChildItem "data\zim\*.zim" -ErrorAction SilentlyContinue } else { @() }
-    if (-not $zims -or $zims.Count -eq 0) {
-        Write-Host "    [NONE] No .zim files found in data\zim yet." -ForegroundColor DarkYellow
-    } else {
-        foreach ($z in $zims) {
-            $valid = Test-FileMagicHeader -FilePath $z.FullName -Expected "ZIM"
-            $tag = if ($valid) { "[VALID ZIM]" } else { "[BAD HEADER]" }
-            $col = if ($valid) { "Green" } else { "Red" }
-            Write-Host ("    {0,-13} {1,-44} ({2,8:N1} MB)" -f $tag, $z.Name, ($z.Length / 1MB)) -ForegroundColor $col
-        }
-    }
-
-    Write-Host "`n  [Staged Offline GGUF AI Models (data\models)]" -ForegroundColor Yellow
-    $models = if (Test-Path "data\models") { Get-ChildItem "data\models\*.gguf" -ErrorAction SilentlyContinue } else { @() }
-    if (-not $models -or $models.Count -eq 0) {
-        Write-Host "    [NONE] No .gguf models found in data\models yet." -ForegroundColor DarkYellow
-    } else {
-        foreach ($m in $models) {
-            $valid = Test-FileMagicHeader -FilePath $m.FullName -Expected "GGUF"
-            $tag = if ($valid) { "[VALID GGUF]" } else { "[BAD HEADER]" }
-            $col = if ($valid) { "Green" } else { "Red" }
-            Write-Host ("    {0,-13} {1,-44} ({2,8:N1} MB)" -f $tag, $m.Name, ($m.Length / 1MB)) -ForegroundColor $col
-        }
-    }
-    Write-Host ""
-}
 
 if ($Verify) {
-    Show-VerifyReport
+    Show-EngineVerifyReport -Root $Root
     exit 0
 }
 
@@ -249,7 +83,7 @@ if (-not $NonInteractive -and -not $PSBoundParameters.ContainsKey("Tier") -and -
     elseif ($c -eq "2") { $Tier = 2; $IncludeUltraMicro = $true }
     elseif ($c -eq "3") { $Tier = 3; $IncludeUltraMicro = $true }
     elseif ($c -eq "4") { $Tier = 4; $IncludeUltraMicro = $true }
-    elseif ($c -eq "V") { Show-VerifyReport; exit 0 }
+    elseif ($c -eq "V") { Show-EngineVerifyReport -Root $Root; exit 0 }
     elseif ($c -eq "Q") { exit 0 }
     else {
         Write-Host "  [WARN] Unrecognized input '$c' -- defaulting to Tier 0." -ForegroundColor Yellow
@@ -424,7 +258,7 @@ if (-not $EnginesOnly -and -not $ZimOnly) {
 
 Remove-Item -Recurse -Force "tmp_dl" -ErrorAction SilentlyContinue
 
-Show-VerifyReport
+Show-EngineVerifyReport -Root $Root
 Write-Host "================================================================================" -ForegroundColor Green
 Write-Host "  [READY] All selected Internet-in-a-Box & AI assets are staged!" -ForegroundColor Green
 Write-Host "  Next step: Run FORMAT_AND_SETUP_USB.bat or MAKE_USB_DRIVES.bat to build your USB!" -ForegroundColor White

@@ -39,7 +39,12 @@ def generate_sku_manifest(
 
     profile_data = profiles.get(profile_key, profiles.get("full", {}))
 
-    clean_drive = target_drive.replace(":", "").replace("\\", "").replace("/", "").upper()
+    # POSIX mount points (e.g. /media/user/OFFGRIDUSB) are preserved as-is;
+    # Windows drive letters keep the legacy "X:" normalization.
+    if target_drive.startswith("/"):
+        clean_drive = target_drive.rstrip("/")
+    else:
+        clean_drive = target_drive.replace(":", "").replace("\\", "").replace("/", "").upper()
     now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     manifest = {
@@ -66,6 +71,7 @@ def generate_sku_manifest(
             "provisioner_version": "1.0.0",
             "filesystem": filesystem,
             "cluster_size_bytes": cluster_size_bytes,
+            "target_drive": clean_drive if target_drive.startswith("/") else f"{clean_drive}:",
             "target_drive_letter": f"{clean_drive}:",
         },
     }

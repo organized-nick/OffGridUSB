@@ -12,6 +12,7 @@ PRODUCT=""
 TIER=-1
 TARGET_DRIVE=""
 DRY_RUN=false
+ENGINES_READY=0
 INFO_MODE=false
 NON_INTERACTIVE=false
 NO_DOWNLOAD=false
@@ -174,6 +175,46 @@ source "${LIB_DIR}/SafetyValidator.sh"
 assert_target_drive_safety "${TARGET_DRIVE}"
 assert_drive_capacity "${TARGET_DRIVE}" "${RESOLVED_SKU}"
 
+# -----------------------------------------------------------------------------
+# Portable Engine Readiness Audit (parity with EngineStager.ps1). Engines live
+# in bin/ and are tier-independent; boot-critical ones are required for the
+# drive to boot on Windows hosts.
+# -----------------------------------------------------------------------------
+BOOT_CRITICAL_ENGINES=(
+    "bin/windows_x86_64/python/python.exe"
+    "bin/windows_x86_64/kiwix/kiwix-serve.exe"
+    "bin/windows_x86_64/llama/llama-server.exe"
+)
+ALL_ENGINES=(
+    "${BOOT_CRITICAL_ENGINES[@]}"
+    "bin/windows_arm64/llama/llama-server.exe"
+    "bin/linux_x86_64/kiwix-tools_linux-x86_64.tar.gz"
+    "bin/linux_x86_64/llama-ubuntu-x64.tar.gz"
+    "bin/linux_arm64/kiwix-tools_linux-aarch64.tar.gz"
+    "bin/linux_arm64/llama-ubuntu-arm64.tar.gz"
+    "bin/macos_arm64/kiwix-tools_macos.tar.gz"
+    "bin/macos_arm64/llama-macos-arm64.tar.gz"
+    "bin/macos_x86_64/kiwix-tools_macos-x86_64.tar.gz"
+    "bin/macos_x86_64/llama-macos-x64.tar.gz"
+    "bin/polyglot/llamafile.exe"
+)
+
+missing_engines=()
+audit_engines() {
+    missing_engines=()
+    for e in "${ALL_ENGINES[@]}"; do
+        [[ -s "${SOURCE_ROOT}/${e}" ]] || missing_engines+=("${e}")
+    done
+}
+is_boot_critical_engine() {
+    local e
+    for e in "${BOOT_CRITICAL_ENGINES[@]}"; do
+        [[ "${1}" == "${e}" ]] && return 0
+    done
+    return 1
+}
+audit_engines
+
 if [[ "${DRY_RUN}" == true ]]; then
     echo ""
     echo "================================================================================"
@@ -184,6 +225,16 @@ if [[ "${DRY_RUN}" == true ]]; then
     echo "  Pre-Flight Safety  : PASSED (OS Root Device Protected)"
     echo "  Capacity Validation: PASSED"
     echo "  Customer Stripping : Whitelist staging excludes all builder tools"
+    if [[ ${#missing_engines[@]} -eq 0 ]]; then
+        echo "  Portable Engines   : ALL STAGED"
+    else
+        echo "  Portable Engines   : ${#missing_engines[@]} missing (will be fetched before live staging)"
+        for e in "${missing_engines[@]}"; do
+            local_tag=""
+            is_boot_critical_engine "${e}" && local_tag=" [BOOT-CRITICAL]"
+            echo "    [MISSING] ${e}${local_tag}"
+        done
+    fi
     echo "  0 actual writes performed to disk."
     echo "================================================================================"
     exit 0
@@ -274,6 +325,50 @@ stage_payload_assets() {
 
 ensure_payload_assets "${RESOLVED_SKU}"
 
+# -----------------------------------------------------------------------------
+# Portable Engine Staging: fetch cross-platform runtime engines (portable
+# Python, kiwix-serve, llama.cpp, llamafile) into bin/ so the whitelist staging
+# plan copies them onto the drive and the resulting USB boots on every
+# supported host OS (Windows/macOS/Linux/Raspberry Pi). Engines are
+# tier-independent; missing boot-critical ones abort live runs.
+# -----------------------------------------------------------------------------
+echo ""
+echo ">>> Staging portable runtime engines (bin/) for ${RESOLVED_SKU}..."
+
+if [[ ${#missing_engines[@]} -eq 0 ]]; then
+    echo "  [OK] All portable engines staged and verified in bin/."
+    ENGINES_READY=1
+elif [[ "${NO_DOWNLOAD}" == true ]]; then
+    critical_missing=()
+    for e in "${missing_engines[@]}"; do
+        if is_boot_critical_engine "${e}"; then critical_missing+=("${e}"); fi
+    done
+    if [[ ${#critical_missing[@]} -gt 0 ]]; then
+        echo "[ERROR] Boot-critical Windows engines missing from bin/ and --no-download was set." >&2
+        echo "        Re-run without --no-download, or run:" >&2
+        echo "          provisioning/tools/download_internet_in_a_box.sh --engines-only" >&2
+        printf '  Missing: %s\n' "${critical_missing[@]}" >&2
+        exit 1
+    fi
+    echo "  [WARN] ${#missing_engines[@]} non-critical engine payload(s) missing (cross-OS support reduced); --no-download set so skipping fetch." >&2
+    printf '  [MISSING] %s\n' "${missing_engines[@]}" >&2
+    ENGINES_READY=0
+else
+    echo "  Fetching missing engines for all platforms (universal boot support)..."
+    if ! "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" --engines-only; then
+        echo "[ERROR] Engine download failed. Partial files are preserved and will resume on next run." >&2
+        exit 1
+    fi
+    audit_engines
+    if [[ ${#missing_engines[@]} -gt 0 ]]; then
+        echo "[ERROR] Engine staging incomplete: ${#missing_engines[@]} payload(s) still missing after download." >&2
+        printf '  %s\n' "${missing_engines[@]}" >&2
+        exit 1
+    fi
+    echo "  [OK] All portable engines staged and verified in bin/."
+    ENGINES_READY=1
+fi
+
 # Live Staging Execution
 echo ">>> Staging files to ${TARGET_DRIVE}..."
 source "${LIB_DIR}/UsbStripper.sh"
@@ -324,5 +419,10 @@ assert_customer_usb_hygiene "${TARGET_DRIVE}"
 
 stage_payload_assets
 
+if [[ "${ENGINES_READY}" == 1 ]]; then
+    echo "  Portable engines verified: drive boots on Windows/macOS/Linux hosts."
+else
+    echo "  [WARN] Portable engines incomplete: cross-OS boot support reduced."
+fi
 echo "[SUCCESS] Provisioning of ${RESOLVED_SKU} onto ${TARGET_DRIVE} completed cleanly!"
 exit 0
