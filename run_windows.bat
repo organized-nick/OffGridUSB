@@ -140,7 +140,7 @@ if exist "%SCRIPT_DIR%bin\windows_x86_64\python\python.exe" (
 )
 
 if "%PYTHON_CMD%"=="" (
-    echo [ERROR] Compatible Python 3 runtime not found (exit code 3 source: discovery).
+    echo [ERROR] Compatible Python 3 runtime not found ^(exit code 3 source: discovery^).
     echo Searched:
     echo   %SCRIPT_DIR%bin\windows_x86_64\python\python.exe
     echo   %SCRIPT_DIR%bin\python\python.exe
@@ -164,11 +164,11 @@ if "%DEBUG%"=="1" echo [DEBUG] Step 4b: Verifying interpreter is executable and 
 %PYTHON_CMD% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
 set "PYCHECK=%errorlevel%"
 if "%DEBUG%"=="1" (
-    echo [DEBUG] Version check exit code = !PYCHECK!  (0 = OK, 1 = too old, 9009 = could not execute)
+    echo [DEBUG] Version check exit code = !PYCHECK!  ^(0 = OK, 1 = too old, 9009 = could not execute^)
     %PYTHON_CMD% -c "import sys; sys.stderr.write('[DEBUG] Python ' + sys.version + ' from ' + sys.executable + chr(10))"
 )
 if %PYCHECK% neq 0 (
-    echo [ERROR] Python runtime check failed (exit code 3 source: version/launch check).
+    echo [ERROR] Python runtime check failed ^(exit code 3 source: version/launch check^).
     if !PYCHECK! equ 9009 echo [ERROR] The selected interpreter could not be executed. It may be missing DLLs, blocked by antivirus/policy, or a Microsoft Store placeholder.
     if !PYCHECK! neq 9009 echo [ERROR] Python version must be ^>= 3.10, or the interpreter failed to run.
     if "%DEBUG%"=="1" (
