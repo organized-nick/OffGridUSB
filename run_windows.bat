@@ -36,6 +36,8 @@ set "HOST=127.0.0.1"
 set "HEADLESS=0"
 set "CHROMEBOOK=0"
 set "TIER_OVERRIDE="
+set "DEBUG=0"
+if defined OFFGRIDUSB_DEBUG set "DEBUG=1"
 
 :parse_args
 if "%~1"=="" goto args_done
@@ -69,6 +71,11 @@ if /i "%~1"=="--tier" (
     shift
     goto parse_args
 )
+if /i "%~1"=="--debug" (
+    set "DEBUG=1"
+    shift
+    goto parse_args
+)
 shift
 goto parse_args
 
@@ -84,6 +91,7 @@ echo   --host HOST       Set bind address (default: 127.0.0.1, 0.0.0.0 for LAN)
 echo   --headless        Do not automatically open default web browser
 echo   --chromebook      Open pure-browser Wasm fallback shell directly
 echo   --tier TIER       Force hardware tier override (-1 to 4)
+echo   --debug           Enable verbose diagnostics (or set OFFGRIDUSB_DEBUG=1)
 echo   --help, -h        Display this help message
 echo ============================================================================
 exit /b 0
@@ -99,6 +107,19 @@ if "%CHROMEBOOK%"=="1" (
 
 :: 4. Python Discovery Hierarchy (Bundled -> VirtualEnv -> System)
 set "PYTHON_CMD="
+
+if "%DEBUG%"=="1" (
+    echo [DEBUG] SCRIPT_DIR = "%SCRIPT_DIR%"
+    echo [DEBUG] CWD        = %CD%
+    echo [DEBUG] Step 4: Python discovery (bundled -^> venv -^> system)...
+    if exist "%SCRIPT_DIR%bin\windows_x86_64\python\python.exe" echo [DEBUG]   FOUND: bin\windows_x86_64\python\python.exe
+    if exist "%SCRIPT_DIR%bin\python\python.exe" echo [DEBUG]   FOUND: bin\python\python.exe
+    if exist "%SCRIPT_DIR%.venv\Scripts\python.exe" echo [DEBUG]   FOUND: .venv\Scripts\python.exe
+    where py >nul 2>&1
+    if !errorlevel! equ 0 (echo [DEBUG]   FOUND on PATH: py) else (echo [DEBUG]   not on PATH: py)
+    where python >nul 2>&1
+    if !errorlevel! equ 0 (echo [DEBUG]   FOUND on PATH: python) else (echo [DEBUG]   not on PATH: python)
+)
 
 if exist "%SCRIPT_DIR%bin\windows_x86_64\python\python.exe" (
     set "PYTHON_CMD=%SCRIPT_DIR%bin\windows_x86_64\python\python.exe"
@@ -119,17 +140,42 @@ if exist "%SCRIPT_DIR%bin\windows_x86_64\python\python.exe" (
 )
 
 if "%PYTHON_CMD%"=="" (
-    echo [ERROR] Compatible Python 3 runtime not found.
+    echo [ERROR] Compatible Python 3 runtime not found (exit code 3 source: discovery).
+    echo Searched:
+    echo   %SCRIPT_DIR%bin\windows_x86_64\python\python.exe
+    echo   %SCRIPT_DIR%bin\python\python.exe
+    echo   %SCRIPT_DIR%.venv\Scripts\python.exe
+    echo   PATH: py / python launchers
+    if "%DEBUG%"=="1" (
+        echo [DEBUG] PATH = %PATH%
+        echo [DEBUG] Contents of bin\:
+        dir /b "%SCRIPT_DIR%bin" 2>nul
+    )
     echo Please install Python 3.10+ or place a portable distribution in bin\python.
     echo Opening fallback browser shell...
     start "" "%SCRIPT_DIR%web\static\wasm\chromebook.html"
     exit /b 3
 )
 
-:: Verify Python version >= 3.10
+if "%DEBUG%"=="1" echo [DEBUG] Selected PYTHON_CMD = "!PYTHON_CMD!"
+
+:: Verify Python version >= 3.10 (also proves the interpreter can actually execute)
+if "%DEBUG%"=="1" echo [DEBUG] Step 4b: Verifying interpreter is executable and version ^>= 3.10...
 %PYTHON_CMD% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Python version must be >= 3.10. Current installation is incompatible.
+set "PYCHECK=%errorlevel%"
+if "%DEBUG%"=="1" (
+    echo [DEBUG] Version check exit code = !PYCHECK!  (0 = OK, 1 = too old, 9009 = could not execute)
+    %PYTHON_CMD% -c "import sys; sys.stderr.write('[DEBUG] Python ' + sys.version + ' from ' + sys.executable + chr(10))"
+)
+if %PYCHECK% neq 0 (
+    echo [ERROR] Python runtime check failed (exit code 3 source: version/launch check).
+    if !PYCHECK! equ 9009 echo [ERROR] The selected interpreter could not be executed. It may be missing DLLs, blocked by antivirus/policy, or a Microsoft Store placeholder.
+    if !PYCHECK! neq 9009 echo [ERROR] Python version must be ^>= 3.10, or the interpreter failed to run.
+    if "%DEBUG%"=="1" (
+        echo [DEBUG] Re-running version check with full output:
+        %PYTHON_CMD% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)"
+        echo [DEBUG] Raw interpreter exit code = !errorlevel!
+    )
     exit /b 3
 )
 
@@ -149,6 +195,7 @@ if exist "%SCRIPT_DIR%src\emyrge\web\app.py" (
     set "EXTRA_ARGS="
     if "%HEADLESS%"=="1" set "EXTRA_ARGS=--headless"
     if defined TIER_OVERRIDE set "EXTRA_ARGS=!EXTRA_ARGS! --tier %TIER_OVERRIDE%"
+    if "%DEBUG%"=="1" echo [DEBUG] Step 6: Launching: !PYTHON_CMD! -B -m emyrge.web.app --host %HOST% --port %PORT% !EXTRA_ARGS!
     %PYTHON_CMD% -B -m emyrge.web.app --host %HOST% --port %PORT% !EXTRA_ARGS!
 ) else (
     echo [INFO] Core Skeleton initialized. Launching browser interface...

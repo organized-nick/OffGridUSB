@@ -100,6 +100,12 @@ if !EXIT_CODE! equ 0 (
     echo   OffGridUSB session ended cleanly.
 ) else (
     echo   [WARN] OffGridUSB exited with code !EXIT_CODE!.
+    if !EXIT_CODE! equ 3 (
+        echo   Exit code 3 = Python runtime discovery or version check failed in run_windows.bat.
+        echo   Re-run with verbosity to see the exact failing step:
+        echo     "!RUNNER!" --host 127.0.0.1 --port %PORT% --debug
+        echo   (or set environment variable OFFGRIDUSB_DEBUG=1 before launching^)
+    )
 )
 echo ================================================================================
 echo   Press any key to close this window...
