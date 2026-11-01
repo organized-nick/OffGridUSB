@@ -355,8 +355,14 @@ elif [[ "${NO_DOWNLOAD}" == true ]]; then
     ENGINES_READY=0
 else
     echo "  Fetching missing engines for all platforms (universal boot support)..."
-    if ! "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" --engines-only; then
-        echo "[ERROR] Engine download failed. Partial files are preserved and will resume on next run." >&2
+    dl_rc=0
+    if [[ -x "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" ]]; then
+        "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" --engines-only || dl_rc=$?
+    else
+        bash "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" --engines-only || dl_rc=$?
+    fi
+    if [[ ${dl_rc} -ne 0 ]]; then
+        echo "[ERROR] Engine download failed (exit code ${dl_rc}). Partial files are preserved and will resume on next run." >&2
         exit 1
     fi
     audit_engines
