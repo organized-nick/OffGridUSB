@@ -109,9 +109,9 @@ if "%CHROMEBOOK%"=="1" (
 set "PYTHON_CMD="
 
 if "%DEBUG%"=="1" (
-    echo [DEBUG] SCRIPT_DIR = "%SCRIPT_DIR%"
-    echo [DEBUG] CWD        = %CD%
-    echo [DEBUG] Step 4: Python discovery (bundled -^> venv -^> system)...
+    echo [DEBUG] SCRIPT_DIR = "!SCRIPT_DIR!"
+    echo [DEBUG] CWD        = !CD!
+    echo [DEBUG] Step 4: Python discovery ^(bundled -^> venv -^> system^)...
     if exist "%SCRIPT_DIR%bin\windows_x86_64\python\python.exe" echo [DEBUG]   FOUND: bin\windows_x86_64\python\python.exe
     if exist "%SCRIPT_DIR%bin\python\python.exe" echo [DEBUG]   FOUND: bin\python\python.exe
     if exist "%SCRIPT_DIR%.venv\Scripts\python.exe" echo [DEBUG]   FOUND: .venv\Scripts\python.exe
@@ -147,7 +147,7 @@ if "%PYTHON_CMD%"=="" (
     echo   %SCRIPT_DIR%.venv\Scripts\python.exe
     echo   PATH: py / python launchers
     if "%DEBUG%"=="1" (
-        echo [DEBUG] PATH = %PATH%
+        echo [DEBUG] PATH = !PATH!
         echo [DEBUG] Contents of bin\:
         dir /b "%SCRIPT_DIR%bin" 2>nul
     )
