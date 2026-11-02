@@ -53,6 +53,7 @@ from emyrge.swarm.inference import (
     find_rpc_server_binary,
 )
 from emyrge.swarm.runtime import (
+    local_ips, is_self_announce,
     CoordinatorDiscovery,
     CoordinatorRuntime,
     SwarmNode,
@@ -267,6 +268,8 @@ class EmyrgeRuntime:
         self.swarm_dropped: List[Dict[str, Any]] = []
         self.swarm_options: Dict[str, bool] = {"auto_reform": True}
         self.swarm_local_hw: Dict[str, Any] = detect_local_hardware()
+        # local ip set for self-announce recognition (loopback + per-interface)
+        self.swarm_local_ips: frozenset = local_ips()
         # distributed-inference launcher (coordinator + peer roles in one)
         self.swarm_inference = SwarmInference(
             project_root=self.config.project_root,
@@ -838,6 +841,12 @@ class EmyrgeRuntime:
         with self._lock:
             node = self.swarm_node.info() if self.swarm_node is not None else None
             discovered = self.swarm_discovery.snapshot() if self.swarm_discovery is not None else []
+            # self-announces (loopback copies + stale same-host instances) are
+            # this machine, not peers — the UI shows one entry per device
+            discovered = [
+                d for d in discovered
+                if not is_self_announce(d, self.swarm_local_ips, self.config.port)
+            ]
             last_plan = self.swarm_last_plan
             watchdog_running = bool(self.swarm_watchdog and self.swarm_watchdog.is_running())
             health = dict(self.swarm_watchdog.health) if self.swarm_watchdog is not None else None
@@ -917,6 +926,10 @@ class EmyrgeRuntime:
         for d in discovered:
             nid = str(d.get("id") or "")
             if not nid or nid in nodes:
+                continue
+            # same self-announce filter as swarm_status — stale same-host
+            # instances (different pid id) must not show as separate nodes
+            if is_self_announce(d, self.swarm_local_ips, self.config.port):
                 continue
             nodes[nid] = {
                 "id": nid, "name": nid, "ip": d.get("ip") or "0.0.0.0",
@@ -1094,6 +1107,24 @@ class EmyrgeRuntime:
             coordinator = self.swarm_coordinator
         time.sleep(window)
         discovered = self.swarm_discovery.snapshot()
+        # self-announces are this machine (incl. stale zombie instances from an
+        # earlier launch under a different pid id) — never cluster candidates.
+        # Also dedupe discovered entries by ip:port (one endpoint = one machine).
+        seen_eps = {(str(s["ip"]), int(s["port"])) for s in seeds}
+        filtered: List[Dict[str, Any]] = []
+        for d in discovered:
+            if is_self_announce(d, self.swarm_local_ips, self.config.port):
+                self._swarm_event(
+                    "self_announce_ignored",
+                    f"ignored announce from this machine ({d.get('ip')}) — it is the coordinator host",
+                )
+                continue
+            ep = (str(d.get("ip") or ""), int(d.get("port") or 50052))
+            if ep in seen_eps:
+                continue
+            seen_eps.add(ep)
+            filtered.append(d)
+        discovered = filtered
         try:
             plan = coordinator.form_cluster(
                 seeds=seeds,

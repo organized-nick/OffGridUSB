@@ -144,6 +144,69 @@ def _local_subnet_broadcasts() -> List[str]:
     return list(_SUBNET_CACHE)
 
 
+_LOCAL_IPS_CACHE: Optional[frozenset] = None
+_LOCAL_IPS_LOCK = threading.Lock()
+
+
+def local_ips() -> frozenset:
+    """IPv4 addresses of this host (loopback + one per connected subnet).
+
+    Stdlib only. Uses the UDP-connect trick per local subnet broadcast to find
+    the source address each interface would use, plus gethostbyname(hostname).
+    Used to recognize self-announces: a discovered node whose ip is one of ours
+    is THIS machine — either the coordinator itself or a stale zombie instance
+    from an earlier launch (pid-derived ids differ, so id-based dedupe can't
+    catch them). Cached for the process lifetime.
+    """
+    global _LOCAL_IPS_CACHE
+    with _LOCAL_IPS_LOCK:
+        if _LOCAL_IPS_CACHE is not None:
+            return _LOCAL_IPS_CACHE
+    ips = {"127.0.0.1"}
+    for bcast in _local_subnet_broadcasts():
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.settimeout(0.0)
+                s.connect((bcast, 9))
+                src = s.getsockname()[0]
+                if src and not src.startswith(("0.", "127.", "169.254.")):
+                    ips.add(src)
+        except OSError:
+            continue
+    try:
+        host_ip = socket.gethostbyname(socket.gethostname())
+        if host_ip and not host_ip.startswith(("0.", "127.", "169.254.")):
+            ips.add(host_ip)
+    except OSError:
+        pass
+    result = frozenset(ips)
+    with _LOCAL_IPS_LOCK:
+        _LOCAL_IPS_CACHE = result
+    return result
+
+
+def is_self_announce(node: Dict[str, Any], local: frozenset, web_port: Optional[int] = None) -> bool:
+    """True when a discovered announce originates from this machine.
+
+    Loopback copies are always self. An entry whose observed ip is one of our
+    local addresses is self too (same-host stale instances announce under a
+    different pid-derived id, so id-based dedupe can't catch them). A matching
+    web_port additionally proves same-app origin.
+    """
+    ip = str(node.get("ip") or "")
+    if ip == "127.0.0.1" or ip == "::1":
+        return True
+    if ip in local:
+        return True
+    wp = node.get("web_port")
+    if web_port is not None and wp is not None:
+        try:
+            return int(wp) == int(web_port)
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
 class SwarmNode:
     """A single swarm node: UDP announcer + TCP handshake responder.
 
