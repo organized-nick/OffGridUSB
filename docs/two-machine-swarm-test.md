@@ -137,3 +137,13 @@ stick re-synced from repo main (d851542): scp'd src/emyrge + web/static.
 verified on stick: src/emyrge/swarm/inference.py (SwarmInference class present),
 web/static/app.js (swarmInfLaunch handlers present), watchdog.py, runtime.py.
 stick and repo are now byte-identical for the swarm code paths.
+
+## LAN discovery fix (2026-11-02 16:40)
+root cause of "windows sees nixos, nixos doesn't see windows": the
+announce loop sends the loopback copy LAST, and CoordinatorDiscovery's
+same-id merge was last-write-wins — the loopback ip overwrote the
+observed LAN ip, corrupting self-entries and any plan built from them.
+fix: loopback announce only refreshes last_seen when a real LAN ip is
+already known (runtime.py, pushed to main d851542+1). windows stick
+re-synced with the fix (verified marker on stick). no config change
+needed on either machine — just restart both apps.
