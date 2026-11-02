@@ -386,11 +386,19 @@
     }
 
     // 4. Dynamic Tab Gating per SKU:
-    // Product 1 (PocketSurvival): Show tabs 1-3 only. Hide Memory Vault (4), Photo OCR (5), Swarm Cluster (6), Dock Distillation, STEM Tutor.
-    // Product 2 (FieldReady): Show tabs 1-5 (Reader, Professor, Calculators, Memory Vault, Photo OCR, STEM Tutor). Hide Swarm Cluster (6), Dock Distillation.
+    // Product 1 (PocketSurvival): Hide Memory Vault (4), Photo OCR (5), Dock Distillation, STEM Tutor.
+    // Product 2 (FieldReady): Show tabs 1-5. Hide Dock Distillation.
+    // Swarm Cluster (6): tier-gated, not product-gated — hidden only for Tier 0-only SKUs.
     // Product 3 (CivilizationArk): Show all available tabs.
     const isProduct1 = sku === "Product1" || sku.toLowerCase().includes("pocket");
     const isProduct2 = sku === "Product2" || sku.toLowerCase().includes("field");
+
+    // Swarm gating is tier-based, not product-based: any SKU that includes a
+    // Tier 1 (or higher) model can contribute a node to the LAN swarm, so the
+    // Swarm tab is only hidden for Tier 0-only SKUs (e.g. Pi Zero 2 sticks).
+    const skuTiers = Array.isArray(p.tiers) ? p.tiers : [0, 1];
+    const maxSkuTier = skuTiers.reduce((m, t) => Math.max(m, Number(t) || 0), 0);
+    const hideSwarm = maxSkuTier < 1;
 
     // Main navigation tabs & panel elements
     const navHarness = $("#nav-harness") || $('button[data-tab="tab-harness"]');
@@ -417,8 +425,10 @@
       if (panelMemory) panelMemory.classList.add("hidden-sku-tab");
       if (navVision) navVision.classList.add("hidden-sku-tab");
       if (panelVision) panelVision.classList.add("hidden-sku-tab");
-      if (navSwarm) navSwarm.classList.add("hidden-sku-tab");
-      if (panelSwarm) panelSwarm.classList.add("hidden-sku-tab");
+      if (hideSwarm) {
+        if (navSwarm) navSwarm.classList.add("hidden-sku-tab");
+        if (panelSwarm) panelSwarm.classList.add("hidden-sku-tab");
+      }
 
       if (navDistill) navDistill.classList.add("hidden-sku-feature");
       if (distillDockBtn) distillDockBtn.classList.add("hidden-sku-feature");
@@ -428,7 +438,10 @@
 
       // Switch away if currently viewing a hidden tab
       const activeBtn = $(".tab-btn.active");
-      if (activeBtn && ["tab-memory", "tab-vision", "tab-swarm"].includes(activeBtn.dataset.tab)) {
+      const hiddenP1Tabs = hideSwarm
+        ? ["tab-memory", "tab-vision", "tab-swarm"]
+        : ["tab-memory", "tab-vision"];
+      if (activeBtn && hiddenP1Tabs.includes(activeBtn.dataset.tab)) {
         if (navHarness) navHarness.click();
       }
     } else if (isProduct2) {
@@ -441,19 +454,21 @@
       if (subtabKhan) subtabKhan.classList.remove("hidden-sku-feature");
       if (panelKhan) panelKhan.classList.remove("hidden-sku-feature");
 
-      // Hide Swarm Cluster
-      if (navSwarm) navSwarm.classList.add("hidden-sku-tab");
-      if (panelSwarm) panelSwarm.classList.add("hidden-sku-tab");
+      // Hide Swarm Cluster only for Tier 0-only SKUs
+      if (hideSwarm) {
+        if (navSwarm) navSwarm.classList.add("hidden-sku-tab");
+        if (panelSwarm) panelSwarm.classList.add("hidden-sku-tab");
+
+        // Switch away if on Swarm tab
+        const activeBtn = $(".tab-btn.active");
+        if (activeBtn && activeBtn.dataset.tab === "tab-swarm") {
+          if (navHarness) navHarness.click();
+        }
+      }
 
       // Hide Dock Distillation
       if (navDistill) navDistill.classList.add("hidden-sku-feature");
       if (distillDockBtn) distillDockBtn.classList.add("hidden-sku-feature");
-
-      // Switch away if on Swarm tab
-      const activeBtn = $(".tab-btn.active");
-      if (activeBtn && activeBtn.dataset.tab === "tab-swarm") {
-        if (navHarness) navHarness.click();
-      }
     } else {
       // Product 3: Show all available tabs
       if (navMemory) navMemory.classList.remove("hidden-sku-tab");
@@ -1673,97 +1688,81 @@
   // 8. Tab 6 — Exo / RPC Scavenged Supercomputer Swarm Builder
   // --------------------------------------------------------------------------
   async function computeSwarmPlan() {
+    const out = $("#swarmPlanOutput");
+    if (!out) return;
     const checked = $$(".swarm-node-chk:checked").map((el) => ({
       id: el.value,
-      name: el.dataset.name,
-      ram_gb: Number(el.dataset.ram),
-      ram_mb: Number(el.dataset.ram) * 1024,
-      arch: el.dataset.arch,
+      name: el.dataset.name || el.value,
+      ip: el.dataset.ip || "127.0.0.1",
+      port: Number(el.dataset.port) || 50052,
+      ram_mb: Number(el.dataset.ramMb) || 0,
+      vram_mb: Number(el.dataset.vramMb) || 0,
+      arch: el.dataset.arch || "unknown",
+      online: true,
     }));
-    const simulateDrop = $("#simulateNodeDropChk").checked;
-
-    let backendRpcCmd = "";
-    try {
-      const planRes = await apiPost("/api/swarm/plan", { nodes: checked, simulate_drop: simulateDrop });
-      if (planRes && planRes.rpc_command) {
-        backendRpcCmd = planRes.rpc_command;
-      }
-    } catch (_) {}
-
-    const activeNodes = simulateDrop && checked.length > 1 ? checked.slice(0, -1) : checked;
-    const droppedNode = simulateDrop && checked.length > 0 ? checked[checked.length - 1] : null;
-    const totalGb = activeNodes.reduce((s, n) => s + n.ram_gb, 0);
-
-    let unlockedModel = "Qwen2.5-0.5B-Instruct (Local Standalone)";
-    let totalLayers = 24;
-    if (totalGb >= 48) {
-      unlockedModel = "Llama-3.3-70B-Instruct Q4_K_M (Frontier Cluster)";
-      totalLayers = 80;
-    } else if (totalGb >= 24) {
-      unlockedModel = "Qwen2.5-32B-Instruct Q4_K_M (Distributed Swarm)";
-      totalLayers = 64;
-    } else if (totalGb >= 12) {
-      unlockedModel = "Qwen2.5-14B-Instruct Q4_K_M (Pooled LAN)";
-      totalLayers = 48;
-    } else if (totalGb >= 6) {
-      unlockedModel = "Llama-3.2-3B-Instruct Q8_0";
-      totalLayers = 28;
+    const simulateDrop = !!($("#simulateNodeDropChk") && $("#simulateNodeDropChk").checked);
+    if (!checked.length) {
+      out.innerHTML = '<div class="muted-note">No nodes selected — start a node or discover LAN peers, then check the nodes to pool.</div>';
+      return;
     }
+    out.innerHTML = '<div class="muted-note">Computing layer split across ' + checked.length + ' node(s)…</div>';
+    let plan = null;
+    try {
+      const res = await apiPost("/api/swarm/plan", { nodes: checked, simulate_drop: simulateDrop });
+      if (res && res.ok) plan = res;
+    } catch (_) {}
+    if (!plan) {
+      out.innerHTML = '<div class="muted-note" style="color:#fecaca;">Cluster planning failed — backend unreachable.</div>';
+      return;
+    }
+    renderSwarmPlan(plan);
+  }
 
-    const palette = ["#10b981", "#38bdf8", "#fbbf24", "#a78bfa"];
-    let cursor = 0;
-    const barSegs = activeNodes
-      .map((n, idx) => {
-        const share = totalGb > 0 ? n.ram_gb / totalGb : 1;
-        const count = idx === activeNodes.length - 1 ? totalLayers - cursor : Math.max(1, Math.round(share * totalLayers));
-        const start = cursor;
-        const end = Math.min(totalLayers - 1, cursor + count - 1);
-        cursor += count;
-        return `<div class="layer-seg" style="width:${(share * 100).toFixed(1)}%;background:${palette[idx % palette.length]};" title="${escapeHtml(n.name)}: Layers ${start}–${end}">
-          ${escapeHtml(n.name.split(" ")[0])} L${start}–${end} (${n.ram_gb}G)
-        </div>`;
-      })
-      .join("");
+  function renderSwarmPlan(plan) {
+    const out = $("#swarmPlanOutput");
+    if (!out) return;
+    const split = Array.isArray(plan.layer_split) ? plan.layer_split : [];
+    const palette = ["#10b981", "#38bdf8", "#fbbf24", "#a78bfa", "#f472b6"];
+    const gb = (mb) => Math.round((mb / 1024) * 10) / 10;
+    const barSegs = split.map((s, i) =>
+      '<div class="layer-seg" style="width:' + (s.tensor_share_pct || 0) + '%;background:' + palette[i % palette.length] +
+      ';" title="' + escapeHtml(s.name + ": " + s.layer_range + " (" + s.tensor_share_pct + "%)") + '">' +
+      escapeHtml(String(s.name).split(" ")[0]) + " " + escapeHtml(s.layer_range) + " (" + gb(s.ram_mb + (s.vram_mb || 0)) + "G)" +
+      "</div>"
+    ).join("");
 
-    const dropBanner = droppedNode
-      ? `<div class="audit-banner warning" style="margin-top:12px;margin-bottom:0;">
-          <div class="audit-icon">⚡</div>
-          <div class="audit-body">
-            <div class="audit-title">NODE DROP DETECTED: "${escapeHtml(droppedNode.name)}" DISCONNECTED</div>
-            <div class="audit-desc">FaultMonitor re-balanced remaining ${totalGb} GB pool (or seamlessly failed over to local USB <code>Qwen2.5-0.5B</code> in 140ms) with <strong>ZERO CRASHES</strong>.</div>
-          </div>
-        </div>`
-      : `<div class="audit-banner verified" style="margin-top:12px;margin-bottom:0;">
-          <div class="audit-icon">✓</div>
-          <div class="audit-body">
-            <div class="audit-title">EXO P2P + LLAMA.CPP RPC ACTIVATION RELAY HEALTHY</div>
-            <div class="audit-desc">Transmitting compact activation tensors per token — tolerates slow 100Mbps cables &amp; degraded field Wi-Fi.</div>
-          </div>
-        </div>`;
+    const fb = plan.fallback_status || {};
+    const dropped = fb.dropped_node;
+    const dropBanner = fb.simulate_drop
+      ? '<div class="audit-banner warning" style="margin-top:12px;margin-bottom:0;">' +
+        '<div class="audit-icon">⚡</div><div class="audit-body">' +
+        '<div class="audit-title">SIMULATED DROP: ' + escapeHtml((dropped && dropped.name) || "node") + ' OFFLINE</div>' +
+        '<div class="audit-desc">' + escapeHtml(fb.action || "") + '</div></div></div>'
+      : '<div class="audit-banner verified" style="margin-top:12px;margin-bottom:0;">' +
+        '<div class="audit-icon">✓</div><div class="audit-body">' +
+        '<div class="audit-title">PLAN HEALTHY · ' + escapeHtml(fb.state || "") + '</div>' +
+        '<div class="audit-desc">' + escapeHtml(fb.action || "") + '</div></div></div>';
 
-    $("#swarmPlanOutput").innerHTML = `
-      <div class="section-eyebrow">LIVE DISTRIBUTED CLUSTER TOPOLOGY</div>
-      <div class="calc-big-metrics" style="margin-top:6px;">
-        <div class="metric-item">
-          <span class="metric-val">${totalGb} GB</span>
-          <span class="metric-lbl">Pooled Cluster RAM</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-val">${activeNodes.length} Nodes</span>
-          <span class="metric-lbl">Heterogeneous Peers</span>
-        </div>
-      </div>
-      <div style="margin-top:8px;">
-        <span class="badge badge-emerald">UNLOCKED: ${escapeHtml(unlockedModel)}</span>
-      </div>
-      <div class="layer-split-bar">${barSegs || `<div class="layer-seg" style="width:100%;background:#10b981;">Local USB Fallback Active</div>`}</div>
-      ${
-        backendRpcCmd
-          ? `<div class="vision-ocr-box" style="margin-top:10px;font-size:11.5px;color:var(--cyan);"><strong>Generated Coordinator Launch Command:</strong><br/>${escapeHtml(backendRpcCmd)}</div>`
-          : ""
-      }
-      ${dropBanner}
-    `;
+    const ring = (plan.exo_config && Array.isArray(plan.exo_config.ring_topology)) ? plan.exo_config.ring_topology : [];
+    const ringRows = ring.map((r) =>
+      '<div class="peer-row"><span class="mono">rank ' + r.rank + " · " + escapeHtml(r.node_id) +
+      " · " + escapeHtml(r.layer_range || ("L" + r.start_layer + "-L" + r.end_layer)) +
+      ' → next: ' + escapeHtml(r.peer_addr) + '</span></div>'
+    ).join("");
+
+    out.innerHTML =
+      '<div class="section-eyebrow">LIVE DISTRIBUTED CLUSTER TOPOLOGY</div>' +
+      '<div class="calc-big-metrics" style="margin-top:6px;">' +
+      '<div class="metric-item"><span class="metric-val">' + gb(plan.effective_pool_mb || plan.pooled_ram_mb || 0) + ' GB</span><span class="metric-lbl">Effective Cluster Memory</span></div>' +
+      '<div class="metric-item"><span class="metric-val">' + split.length + ' Nodes</span><span class="metric-lbl">Layer-Split Peers</span></div>' +
+      '</div>' +
+      '<div style="margin-top:8px;"><span class="badge badge-emerald">UNLOCKED: ' + escapeHtml(plan.unlocked_model || "") + '</span></div>' +
+      '<div class="layer-split-bar">' + (barSegs || '<div class="layer-seg" style="width:100%;background:#10b981;">Local USB Fallback Active</div>') + '</div>' +
+      (ringRows ? '<div style="margin-top:8px;"><div class="section-eyebrow">EXO P2P RING TOPOLOGY</div>' + ringRows + '</div>' : "") +
+      (plan.rpc_command
+        ? '<div class="vision-ocr-box" style="margin-top:10px;font-size:11.5px;color:var(--cyan);"><strong>llama.cpp RPC launch command:</strong><br/>' + escapeHtml(plan.rpc_command) + '</div>'
+        : "") +
+      dropBanner;
   }
 
   // 8b. Live Swarm Runtime — turnkey UI (auto-detect, health watchdog,
@@ -1771,10 +1770,73 @@
   // --------------------------------------------------------------------------
   let swarmPollTimer = null;
 
+  // Live node inventory for the builder card: this device + discovered peers
+  // + watchdog-tracked peers. Replaces the old hardcoded demo device list.
+  const swarmInvChecked = new Set();
+  let swarmInvInitialized = false;
+
+  function gbLabel(mb) {
+    const v = Math.round((Number(mb) / 1024) * 10) / 10;
+    return v ? v + " GB" : "";
+  }
+
+  function renderSwarmInventory(res) {
+    const list = $("#swarmNodesList");
+    if (!list || !res) return;
+    const nodes = [];
+    const seen = {};
+    const hw = res.local_hardware || {};
+    if (res.node) {
+      const n = res.node;
+      seen[n.id] = true;
+      nodes.push({ id: n.id, name: n.id + " (this device, broadcasting)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: true });
+    } else if (hw.ram_mb) {
+      seen["this-device"] = true;
+      nodes.push({ id: "this-device", name: "This device (node not started)", ip: "127.0.0.1", port: 50052, ram_mb: hw.ram_mb, vram_mb: hw.vram_mb, arch: hw.arch, ok: true });
+    }
+    ((res.health && res.health.nodes) || []).forEach((n) => {
+      if (!n.id || seen[n.id]) return;
+      seen[n.id] = true;
+      nodes.push({ id: n.id, name: n.id + " (watchdog)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: n.ok });
+    });
+    (res.discovered || []).forEach((d) => {
+      if (!d.id || seen[d.id]) return;
+      seen[d.id] = true;
+      nodes.push({ id: d.id, name: d.id + " (discovered)", ip: d.ip, port: d.port, ram_mb: d.ram_mb, vram_mb: d.vram_mb, arch: d.arch, ok: null });
+    });
+    // drop stale selections, seed defaults (all checked) on first render
+    [...swarmInvChecked].forEach((id) => { if (!seen[id]) swarmInvChecked.delete(id); });
+    if (!swarmInvInitialized && nodes.length) {
+      nodes.forEach((n) => swarmInvChecked.add(n.id));
+      swarmInvInitialized = true;
+    }
+    if (!nodes.length) {
+      list.innerHTML = '<div class="muted-note">No swarm nodes yet. Start a node here, and start the app on other LAN machines — they appear here automatically.</div>';
+      return;
+    }
+    list.innerHTML = nodes.map((n) => {
+      const mem = [gbLabel(n.ram_mb) + " RAM", gbLabel(n.vram_mb) + " VRAM"].filter(Boolean).join(" + ");
+      const sub = [mem || "memory unknown", n.arch || "unknown arch", n.ip + ":" + n.port].join(" • ");
+      const badge = n.ok === true
+        ? '<span class="badge badge-emerald">ONLINE</span>'
+        : n.ok === false
+        ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">OFFLINE</span>'
+        : '<span class="badge badge-cyan">DISCOVERED</span>';
+      return '<label class="node-check-card">' +
+        '<input type="checkbox" class="swarm-node-chk" value="' + escapeHtml(n.id) + '"' +
+        ' data-name="' + escapeHtml(n.name) + '" data-ip="' + escapeHtml(n.ip) + '" data-port="' + Number(n.port) + '"' +
+        ' data-ram-mb="' + Number(n.ram_mb || 0) + '" data-vram-mb="' + Number(n.vram_mb || 0) + '" data-arch="' + escapeHtml(n.arch || "unknown") + '"' +
+        (swarmInvChecked.has(n.id) ? " checked" : "") + " />" +
+        '<div class="node-info"><strong>' + escapeHtml(n.name) + '</strong><span class="mono">' + escapeHtml(sub) + '</span></div>' +
+        badge + '</label>';
+    }).join("");
+  }
+
   function renderSwarmStatus(res) {
     const statusEl = $("#swarmLiveStatus");
     const planEl = $("#swarmLivePlan");
     if (!statusEl || !res) return;
+    renderSwarmInventory(res);
     const node = res.node;
     const peers = Array.isArray(res.discovered) ? res.discovered : [];
     const hw = res.local_hardware || {};
@@ -2244,9 +2306,21 @@
     $("#sampleVisionBtn").addEventListener("click", generateSampleSpecPlateAndUpload);
     $("#visionSearchInput").addEventListener("input", (e) => renderVisionGrid(e.target.value));
 
-    // Swarm Builder
+    // Swarm Builder — node checkboxes are re-rendered on every status poll,
+    // so use delegation and keep selections in swarmInvChecked.
     $("#planSwarmBtn").addEventListener("click", computeSwarmPlan);
-    $$(".swarm-node-chk, #simulateNodeDropChk").forEach((el) => el.addEventListener("change", computeSwarmPlan));
+    const swarmList = $("#swarmNodesList");
+    if (swarmList) {
+      swarmList.addEventListener("change", (e) => {
+        const chk = e.target.closest(".swarm-node-chk");
+        if (!chk) return;
+        if (chk.checked) swarmInvChecked.add(chk.value);
+        else swarmInvChecked.delete(chk.value);
+        computeSwarmPlan();
+      });
+    }
+    const simDrop = $("#simulateNodeDropChk");
+    if (simDrop) simDrop.addEventListener("change", computeSwarmPlan);
 
     // Live Swarm Runtime
     const startBtn = $("#swarmStartNodeBtn");
