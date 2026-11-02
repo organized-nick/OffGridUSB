@@ -1766,192 +1766,150 @@
     `;
   }
 
-  // --------------------------------------------------------------------------
-  // 8b. Live LAN Swarm Runtime (UDP discovery + TCP handshake)
+  // 8b. Live Swarm Runtime — turnkey UI (auto-detect, health watchdog,
+  // auto re-form on drops, event feed). No terminal commands required.
   // --------------------------------------------------------------------------
   let swarmPollTimer = null;
 
-  function swarmPlanHtml(plan) {
-    const live = plan && plan.live ? plan.live : {};
-    const peers = (live.handshakes || [])
-      .map((h) => `
-        <div class="peer-row">
-          <span>${escapeHtml(h.ip)}:${escapeHtml(String(h.port))}</span>
-          <span class="badge ${h.ok ? "badge-emerald" : "badge-cyan"}">${h.ok ? "VERIFIED" : "OFFLINE"}</span>
-        </div>`)
-      .join("");
-    const rpcCmd = plan && plan.rpc_command
-      ? `<div class="rpc-cmd"><strong>Coordinator Launch Command:</strong><br/>${escapeHtml(plan.rpc_command)}</div>`
-      : "";
-    const unlocked = plan && plan.unlocked_model
-      ? `<div style="margin-top:8px;"><span class="badge badge-emerald">UNLOCKED: ${escapeHtml(plan.unlocked_model)}</span></div>`
-      : "";
-    return `
-      <div class="calc-big-metrics" style="margin-top:6px;">
-        <div class="metric-item">
-          <span class="metric-val">${(live.verified_nodes || []).length}</span>
-          <span class="metric-lbl">Verified Peers</span>
-        </div>
-        <div class="metric-item">
-          <span class="metric-val">${plan && plan.unlocked_tier !== undefined ? "T" + plan.unlocked_tier : "—"}</span>
-          <span class="metric-lbl">Unlocked Tier</span>
-        </div>
-      </div>
-      ${unlocked}
-      ${peers || `<div class="muted-note" style="margin-top:8px;">No live peers verified yet — start a node on another machine, then scan.</div>`}
-      ${rpcCmd}`;
-  }
-
-  function renderSwarmStatus(res) {
-    const el = $("#swarmLiveStatus");
-    if (!el) return;
-    if (!res || !res.ok) {
-      el.innerHTML = `<span class="badge badge-cyan">OFFLINE</span> Swarm runtime unreachable.`;
-      return;
-    }
-    const nodeBadge = res.node_running
-      ? `<span class="badge badge-emerald">NODE RUNNING</span>`
-      : `<span class="badge badge-cyan">NODE IDLE</span>`;
-    const peerCount = (res.discovered || []).length;
-    const peers = peerCount
-      ? `<div class="peer-row">${(res.discovered || []).map((d) => `<span>${escapeHtml(d.id)} • ${escapeHtml(d.ip)}:${escapeHtml(String(d.port))}</span><span class="badge badge-cyan">+${Math.round((d.ram_mb || 0) / 1024)} GB</span>`).join("")}</div>`
-      : "";
-    el.innerHTML = `
-      ${nodeBadge}
-      <span>${res.node_running ? `${escapeHtml(res.node.id)} • ${escapeHtml(res.node.ip)}:${escapeHtml(String(res.node.port))} • ${Math.round((res.node.ram_mb || 0) / 1024)} GB` : "No node running — start one to broadcast this device."}</span>
-      <span class="badge badge-cyan">${peerCount} PEER${peerCount === 1 ? "" : "S"} SEEN</span>
-      ${peers}`;
-  }
-
-  async function loadSwarmStatus() {
-    try {
-      const res = await apiGet("/api/swarm/status");
-      renderSwarmStatus(res);
-    } catch (_) {
-      renderSwarmStatus(null);
-    }
-  }
-
-  async function startSwarmNode() {
-    const body = {
-      id: $("#swarmNodeIdInput").value.trim() || undefined,
-      ram_mb: Number($("#swarmNodeRamInput").value) || 4096,
-      arch: $("#swarmNodeArchInput").value.trim() || "x86_64",
-    };
-    try {
-      const res = await apiPost("/api/swarm/node/start", body);
-      if (res && !res.ok) {
-        console.error("swarm node start failed:", res.error);
-      }
-    } catch (_) {}
-    await loadSwarmStatus();
-  }
-
-  async function stopSwarmNode() {
-    try {
-      await apiPost("/api/swarm/node/stop", {});
-    } catch (_) {}
-    await loadSwarmStatus();
-  }
-
-  async function scanSwarm() {
-    const btn = $("#swarmScanBtn");
-    const planEl = $("#swarmLivePlan");
-    btn.disabled = true;
-    const oldLabel = btn.textContent;
-    btn.textContent = "Scanning LAN…";
-    if (planEl) planEl.innerHTML = `<div class="muted-note">Listening for UDP announces and handshaking peers…</div>`;
-    try {
-      const res = await apiPost("/api/swarm/scan", { window: 2.0, simulate_drop: false });
-      if (planEl) planEl.innerHTML = res && res.ok ? swarmPlanHtml(res) : `<div class="muted-note">Scan failed: ${escapeHtml(res && res.error ? res.error : "unknown error")}</div>`;
-    } catch (_) {
-      if (planEl) planEl.innerHTML = `<div class="muted-note">Scan failed: swarm runtime unreachable.</div>`;
-    }
-    btn.disabled = false;
-    btn.textContent = oldLabel;
-    await loadSwarmStatus();
-  }
-
-  // --------------------------------------------------------------------------
-  // 8b. Live Swarm Runtime (UDP discovery + TCP handshake via backend)
-  // --------------------------------------------------------------------------
-  async function loadSwarmStatus() {
-    const statusEl = $("#swarmLiveStatus");
-    if (!statusEl) return;
-    try {
-      const res = await apiGet("/api/swarm/status");
-      renderSwarmStatus(res);
-    } catch (_) {
-      /* backend unreachable — leave last known state */
-    }
-  }
-
   function renderSwarmStatus(res) {
     const statusEl = $("#swarmLiveStatus");
     const planEl = $("#swarmLivePlan");
-    if (!statusEl || !planEl || !res) return;
+    if (!statusEl || !res) return;
     const node = res.node;
     const peers = Array.isArray(res.discovered) ? res.discovered : [];
+    const hw = res.local_hardware || {};
     const startBtn = $("#swarmStartNodeBtn");
     const stopBtn = $("#swarmStopNodeBtn");
     if (startBtn) startBtn.disabled = !!(res.node_running || res.node);
     if (stopBtn) stopBtn.disabled = !(res.node_running || res.node);
 
-    let statusHtml;
-    if (node) {
-      statusHtml =
-        '<span class="badge badge-emerald">NODE RUNNING</span> ' +
-        '<span class="mono">' + escapeHtml(node.id) + ' · TCP ' + escapeHtml(String(node.port)) +
-        ' · RPC ' + escapeHtml(String(node.rpc_port)) + ' · ' + escapeHtml(node.ram_mb + ' MB') + '</span>' +
-        (peers.length ? ' <span class="badge badge-cyan">' + peers.length + ' peer(s) discovered</span>' : '');
-    } else {
-      statusHtml = 'Swarm runtime idle — no node running.' +
-        (peers.length ? ' <span class="badge badge-cyan">' + peers.length + ' peer(s) discovered on LAN</span>' : '');
+    // auto-fill truthful inventory once
+    const ramInput = $("#swarmNodeRamInput");
+    const vramInput = $("#swarmNodeVramInput");
+    const archInput = $("#swarmNodeArchInput");
+    if (hw.ram_mb && ramInput && !ramInput.dataset.touched) {
+      ramInput.value = hw.ram_mb;
+      if (vramInput && hw.vram_mb) vramInput.value = hw.vram_mb;
+      if (archInput && hw.arch && archInput !== "unknown") archInput.value = hw.arch;
     }
+
+    // cluster health banner
+    const state = res.cluster_state || "idle";
+    const droppedCount = res.dropped_count || 0;
+    const stateBadge =
+      state === "healthy"
+        ? '<span class="badge badge-emerald">CLUSTER HEALTHY</span>'
+        : state === "degraded"
+        ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">DEGRADED — ' + droppedCount + ' NODE(S) DOWN</span>'
+        : '<span class="badge badge-cyan">SWARM IDLE</span>';
+
+    let statusHtml = stateBadge + " ";
+    if (node) {
+      statusHtml +=
+        '<span class="mono">' + escapeHtml(node.id) + ' · TCP ' + escapeHtml(String(node.port)) +
+        ' · RPC ' + escapeHtml(String(node.rpc_port)) + ' · ' + escapeHtml(node.ram_mb + ' MB RAM') +
+        (node.vram_mb ? ' + ' + escapeHtml(node.vram_mb + ' MB VRAM') : '') + '</span>';
+    } else {
+      statusHtml += '<span class="muted-note">No node running — Start Node broadcasts this device.</span>';
+    }
+    statusHtml += ' <span class="badge badge-cyan">' + peers.length + ' PEER' + (peers.length === 1 ? "" : "S") + ' SEEN</span>';
+    if (res.watchdog_running) statusHtml += ' <span class="badge badge-emerald">WATCHDOG ON</span>';
     statusEl.innerHTML = statusHtml;
 
-    const plan = res.last_plan;
-    if (!plan) {
-      planEl.innerHTML = "";
-      return;
+    // live nodes table: watchdog health + discovered peers merged
+    const nodesEl = $("#swarmNodesLive");
+    if (nodesEl) {
+      let rows = "";
+      const seen = {};
+      const wdNodes = (res.health && res.health.nodes) || [];
+      wdNodes.forEach((n) => {
+        seen[n.id] = true;
+        rows += swarmNodeRow(n.id, n.ip, n.port, n.ram_mb, n.vram_mb, n.ok, null);
+      });
+      peers.forEach((d) => {
+        if (!seen[d.id]) rows += swarmNodeRow(d.id, d.ip, d.port, d.ram_mb, d.vram_mb, null, d.age_s);
+      });
+      if (node && !seen[node.id]) rows += swarmNodeRow(node.id + " (this device)", node.ip, node.port, node.ram_mb, node.vram_mb, true, null);
+      nodesEl.innerHTML = rows || '<div class="muted-note">No nodes yet — start a node here, and start the app on other machines.</div>';
     }
-    const handshakes = (plan.live && plan.live.handshakes) || [];
-    const peerRows = handshakes
-      .map((h) =>
-        '<div class="peer-row">' +
-        '<span>' + escapeHtml(h.ip + ':' + h.port) + '</span>' +
-        (h.ok
-          ? '<span class="badge badge-emerald">VERIFIED</span>'
-          : '<span class="badge" style="background:#7f1d1d;color:#fecaca;">FAIL: ' + escapeHtml(h.error || "") + '</span>') +
-        '</div>'
-      )
-      .join("");
-    const clusterFormed = plan.live && plan.live.cluster_formed;
-    planEl.innerHTML =
-      '<div class="section-eyebrow">LAST LIVE CLUSTER SCAN</div>' +
-      '<div style="margin:6px 0 10px;">' +
-      (clusterFormed
-        ? '<span class="badge badge-emerald">CLUSTER FORMED · ' + escapeHtml(plan.unlocked_model || "") + '</span>'
-        : '<span class="badge" style="background:#7f1d1d;color:#fecaca;">NO LIVE NODES VERIFIED</span>') +
-      '</div>' +
-      peerRows +
-      (plan.rpc_command
-        ? '<div class="rpc-cmd"><strong>Coordinator RPC command:</strong><br/>' + escapeHtml(plan.rpc_command) + '</div>'
-        : "");
+
+    // event feed
+    const eventsEl = $("#swarmEventsList");
+    if (eventsEl) {
+      const evs = (res.events || []).slice(-10).reverse();
+      eventsEl.innerHTML = evs.length
+        ? evs.map((e) => {
+            const color = { peer_dropped: "#fecaca", peer_returned: "#bbf7d0", cluster_reformed: "#93c5fd", cluster_lost: "#fecaca", cluster_formed: "#bbf7d0", node_started: "#e2e8f0", node_stopped: "#e2e8f0" }[e.kind] || "#e2e8f0";
+            const t = new Date(e.ts * 1000).toLocaleTimeString();
+            return '<div class="peer-row"><span class="mono" style="color:' + color + '">[' + escapeHtml(t) + "] " + escapeHtml(e.msg) + "</span></div>";
+          }).join("")
+        : '<div class="muted-note">No swarm events yet.</div>';
+    }
+
+    // last plan summary
+    const plan = res.last_plan;
+    if (planEl) {
+      if (!plan) {
+        planEl.innerHTML = "";
+      } else {
+        const handshakes = (plan.live && plan.live.handshakes) || [];
+        const peerRows = handshakes
+          .map((h) =>
+            '<div class="peer-row">' +
+            '<span>' + escapeHtml(h.ip + ':' + h.port) + '</span>' +
+            (h.ok
+              ? '<span class="badge badge-emerald">VERIFIED</span>'
+              : '<span class="badge" style="background:#7f1d1d;color:#fecaca;">FAIL: ' + escapeHtml(h.error || "") + '</span>') +
+            '</div>').join("");
+        const clusterFormed = plan.live && plan.live.cluster_formed;
+        planEl.innerHTML =
+          '<div class="section-eyebrow">LAST LIVE CLUSTER SCAN</div>' +
+          '<div style="margin:6px 0 10px;">' +
+          (clusterFormed
+            ? '<span class="badge badge-emerald">CLUSTER FORMED · ' + escapeHtml(plan.unlocked_model || "") + '</span>'
+            : '<span class="badge" style="background:#7f1d1d;color:#fecaca;">NO LIVE NODES VERIFIED</span>') +
+          '</div>' + peerRows +
+          (plan.rpc_command
+            ? '<div class="rpc-cmd"><strong>Coordinator RPC command:</strong><br/>' + escapeHtml(plan.rpc_command) + '</div>'
+            : "");
+      }
+    }
+  }
+
+  function swarmNodeRow(id, ip, port, ramMb, vramMb, ok, ageS) {
+    const badge = ok === true
+      ? '<span class="badge badge-emerald">ONLINE</span>'
+      : ok === false
+      ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">OFFLINE</span>'
+      : '<span class="badge badge-cyan">DISCOVERED</span>';
+    const mem = (ramMb ? Math.round(ramMb / 1024) + " GB" : "") + (vramMb ? " + " + Math.round(vramMb / 1024) + " GB VRAM" : "");
+    const age = ageS !== null && ageS !== undefined ? ' · seen ' + Math.round(ageS) + 's ago' : '';
+    return '<div class="peer-row"><span class="mono">' + escapeHtml(String(id) + " · " + ip + ":" + port + (mem ? " · " + mem : "") + age) + '</span>' + badge + '</div>';
+  }
+
+  async function loadSwarmStatus() {
+    try {
+      const res = await apiGet("/api/swarm/status");
+      renderSwarmStatus(res);
+    } catch (_) {
+      /* backend unreachable — keep last known state */
+    }
   }
 
   async function startSwarmNode() {
+    const ramInput = $("#swarmNodeRamInput");
+    const vramInput = $("#swarmNodeVramInput");
     const body = {
       id: ($("#swarmNodeIdInput") && $("#swarmNodeIdInput").value.trim()) || undefined,
-      ram_mb: Number($("#swarmNodeRamInput") && $("#swarmNodeRamInput").value) || 4096,
-      arch: ($("#swarmNodeArchInput") && $("#swarmNodeArchInput").value.trim()) || "x86_64",
+      arch: ($("#swarmNodeArchInput") && $("#swarmNodeArchInput").value.trim()) || undefined,
     };
+    // only pass explicit values if the user typed them; otherwise the
+    // backend auto-detects real hardware (turnkey default)
+    if (ramInput && ramInput.value && Number(ramInput.value) > 0) body.ram_mb = Number(ramInput.value);
+    if (vramInput && vramInput.value && Number(vramInput.value) > 0) body.vram_mb = Number(vramInput.value);
     try {
       const res = await apiPost("/api/swarm/node/start", body);
-      if (res && res.ok) {
-        renderSwarmStatus({ node: res.node, node_running: true, discovered: [] });
-        loadSwarmStatus();
-      } else {
+      if (res && !res.ok) {
         const statusEl = $("#swarmLiveStatus");
         if (statusEl) statusEl.innerHTML = '<span class="badge" style="background:#7f1d1d;color:#fecaca;">START FAILED</span> ' + escapeHtml((res && res.error) || "unknown error");
       }
@@ -1959,40 +1917,59 @@
       const statusEl = $("#swarmLiveStatus");
       if (statusEl) statusEl.textContent = "Swarm node start failed: " + e.message;
     }
+    await loadSwarmStatus();
   }
 
   async function stopSwarmNode() {
     try {
       await apiPost("/api/swarm/node/stop", {});
     } catch (_) {}
-    loadSwarmStatus();
+    await loadSwarmStatus();
+  }
+
+  function collectSeeds() {
+    const raw = ($("#swarmSeedInput") && $("#swarmSeedInput").value.trim()) || "";
+    return raw
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => {
+        const [ip, port] = s.split(":");
+        return ip ? { ip: ip, port: Number(port) || 50052 } : null;
+      })
+      .filter(Boolean);
   }
 
   async function scanSwarm() {
     const scanBtn = $("#swarmScanBtn");
     const statusEl = $("#swarmLiveStatus");
+    const planEl = $("#swarmLivePlan");
     if (scanBtn) {
       scanBtn.disabled = true;
-      scanBtn.textContent = "Scanning LAN…";
+      scanBtn.textContent = "Forming cluster…";
     }
-    if (statusEl) statusEl.textContent = "Scanning LAN for swarm peers (UDP announce window)…";
+    if (planEl) planEl.innerHTML = '<div class="muted-note">Handshaking peers and computing the layer split…</div>';
+    const body = {
+      window: 2.0,
+      seeds: collectSeeds(),
+      auto_reform: !!($("#swarmAutoReformChk") && $("#swarmAutoReformChk").checked),
+    };
     try {
-      const res = await apiPost("/api/swarm/scan", { window: 2.0 });
-      if (res && res.ok) {
-        renderSwarmStatus({ node: null, node_running: false, discovered: [], last_plan: res });
-        loadSwarmStatus();
-      } else {
-        if (statusEl) statusEl.textContent = "Swarm scan failed: " + ((res && res.error) || "unknown error");
+      const res = await apiPost("/api/swarm/scan", body);
+      if (res && !res.ok && statusEl) {
+        statusEl.innerHTML = '<span class="badge" style="background:#7f1d1d;color:#fecaca;">SCAN FAILED</span> ' + escapeHtml((res && res.error) || "unknown error");
       }
     } catch (e) {
       if (statusEl) statusEl.textContent = "Swarm scan failed: " + e.message;
     } finally {
       if (scanBtn) {
         scanBtn.disabled = false;
-        scanBtn.textContent = "Scan LAN & Form Cluster ▸";
+        scanBtn.textContent = "Form Swarm Cluster ▸";
       }
     }
+    await loadSwarmStatus();
   }
+
 
   // --------------------------------------------------------------------------
   // 9. Event Wiring & Boot Initialization
@@ -2191,6 +2168,16 @@
     if (startBtn) startBtn.addEventListener("click", startSwarmNode);
     if (stopBtn) stopBtn.addEventListener("click", stopSwarmNode);
     if (scanBtn) scanBtn.addEventListener("click", scanSwarm);
+    // mark hardware inputs as user-touched so auto-fill stops overriding
+    ["#swarmNodeRamInput", "#swarmNodeVramInput", "#swarmNodeArchInput"].forEach((sel) => {
+      const el = $(sel);
+      if (el) el.addEventListener("input", () => { el.dataset.touched = "1"; });
+    });
+    // push auto-reform toggle to backend when changed
+    const reformChk = $("#swarmAutoReformChk");
+    if (reformChk) reformChk.addEventListener("change", () => {
+      apiPost("/api/swarm/options", { auto_reform: reformChk.checked }).catch(() => {});
+    });
     if (startBtn || stopBtn || scanBtn) {
       swarmPollTimer = setInterval(loadSwarmStatus, 5000);
     }

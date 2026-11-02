@@ -51,7 +51,9 @@ from emyrge.swarm.runtime import (
     CoordinatorDiscovery,
     CoordinatorRuntime,
     SwarmNode,
+    detect_local_hardware,
 )
+from emyrge.swarm.watchdog import SwarmWatchdog, peers_from_verified
 from emyrge.vision.visual_vault import VisualVault
 
 
@@ -254,6 +256,12 @@ class EmyrgeRuntime:
         self.swarm_discovery: Optional[CoordinatorDiscovery] = None
         self.swarm_coordinator: Optional[CoordinatorRuntime] = None
         self.swarm_last_plan: Optional[Dict[str, Any]] = None
+        # turnkey swarm state: health watchdog, UI event feed, options
+        self.swarm_watchdog: Optional[SwarmWatchdog] = None
+        self.swarm_events: List[Dict[str, Any]] = []
+        self.swarm_dropped: List[Dict[str, Any]] = []
+        self.swarm_options: Dict[str, bool] = {"auto_reform": True}
+        self.swarm_local_hw: Dict[str, Any] = detect_local_hardware()
 
         # Initialize Grounding Harness
         self.harness = GroundingHarness(
@@ -767,31 +775,133 @@ class EmyrgeRuntime:
     # Live swarm runtime management (src/emyrge/swarm/runtime.py)
     # ------------------------------------------------------------------
 
+    def _swarm_event(self, kind: str, msg: str) -> None:
+        with self._lock:
+            self.swarm_events.append({"ts": time.time(), "kind": kind, "msg": msg})
+            if len(self.swarm_events) > 50:
+                self.swarm_events = self.swarm_events[-50:]
+
+    def _reform_cluster(self, alive_peers: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Watchdog callback: re-plan against the surviving peers only."""
+        with self._lock:
+            coordinator = self.swarm_coordinator or CoordinatorRuntime()
+            self.swarm_coordinator = coordinator
+            seeds = [{"ip": p["ip"], "port": int(p.get("port", 50052))} for p in alive_peers]
+        plan = coordinator.form_cluster(seeds=seeds, discovered=[])
+        with self._lock:
+            self.swarm_last_plan = plan
+        return plan
+
+    def _start_watchdog(self, plan: Dict[str, Any]) -> None:
+        """Start (or replace) the health watchdog after a successful scan."""
+        if self.swarm_watchdog is not None:
+            self.swarm_watchdog.stop()
+            self.swarm_watchdog = None
+        if not self.swarm_options.get("auto_reform", True):
+            return
+        live = (plan or {}).get("live") or {}
+        verified = live.get("verified_nodes") or []
+        # peers come from the live handshake results (ip+port are authoritative);
+        # memory fields get enriched from the plan's layer_split below.
+        peers = peers_from_verified(live.get("handshakes") or [])
+        peers = [p for p in peers if p.get("id") in verified]
+        # enrich peers with memory data from the plan's layer split
+        split_by_id = {}
+        for s in (plan or {}).get("layer_split") or []:
+            split_by_id[s.get("node_id")] = s
+        for p in peers:
+            s = split_by_id.get(p.get("id")) or {}
+            p["ram_mb"] = s.get("ram_mb") or p.get("ram_mb")
+            p["vram_mb"] = s.get("vram_mb") or p.get("vram_mb")
+        if not peers:
+            return
+        wd = SwarmWatchdog(
+            peers=peers,
+            reform=self._reform_cluster,
+            on_event=self._swarm_event,
+        )
+        self.swarm_watchdog = wd
+        wd.start()
+
     def swarm_status(self) -> Dict[str, Any]:
         with self._lock:
             node = self.swarm_node.info() if self.swarm_node is not None else None
             discovered = self.swarm_discovery.snapshot() if self.swarm_discovery is not None else []
             last_plan = self.swarm_last_plan
+            watchdog_running = bool(self.swarm_watchdog and self.swarm_watchdog.is_running())
+            health = dict(self.swarm_watchdog.health) if self.swarm_watchdog is not None else None
+            dropped = list(self.swarm_dropped)
+            events = list(self.swarm_events[-20:])
+            options = dict(self.swarm_options)
+        # compute peer ages for the UI (stale detection)
+        now = time.time()
+        for d in discovered:
+            ts = d.get("last_seen")
+            d["age_s"] = round(now - ts, 1) if isinstance(ts, (int, float)) else None
+        wd_nodes = (health or {}).get("nodes") or []
+        if watchdog_running and wd_nodes:
+            healthy = all(n.get("ok") for n in wd_nodes)
+            state = "healthy" if healthy else "degraded"
+            dropped_count = sum(1 for n in wd_nodes if not n.get("ok"))
+        else:
+            live = (last_plan or {}).get("live") or {}
+            formed = bool(live.get("cluster_formed"))
+            state = "idle" if not last_plan else ("healthy" if formed else "degraded")
+            dropped_count = 0
         return {
             "ok": True,
             "node_running": node is not None,
             "node": node,
             "discovered": discovered,
             "last_plan": last_plan,
+            "watchdog_running": watchdog_running,
+            "health": health,
+            "dropped": dropped,
+            "dropped_count": dropped_count,
+            "cluster_state": state,
+            "events": events,
+            "options": options,
+            "local_hardware": self.swarm_local_hw,
         }
+
+    def swarm_set_options(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        with self._lock:
+            if "auto_reform" in params:
+                self.swarm_options["auto_reform"] = bool(params["auto_reform"])
+            opts = dict(self.swarm_options)
+        if not opts.get("auto_reform") and self.swarm_watchdog is not None:
+            self.swarm_watchdog.stop()
+            self.swarm_watchdog = None
+        return {"ok": True, "options": opts, "watchdog_running": bool(self.swarm_watchdog and self.swarm_watchdog.is_running())}
+
+    def swarm_watchdog_stop(self) -> Dict[str, Any]:
+        with self._lock:
+            wd = self.swarm_watchdog
+            self.swarm_watchdog = None
+        if wd is not None:
+            wd.stop()
+            self._swarm_event("watchdog_stopped", "cluster health monitoring stopped by user")
+        return {"ok": True}
 
     def swarm_start_node(self, params: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
             if self.swarm_node is not None:
                 return {"ok": True, "already_running": True, "node": self.swarm_node.info()}
             node_id = str(params.get("id") or f"offgrid-{os.getpid()}")
+            # turnkey default: advertise the REAL machine unless the UI
+            # explicitly passes ram_mb/vram_mb overrides.
+            auto_detect = not params.get("ram_mb") and not params.get("vram_mb")
+            hw = detect_local_hardware() if auto_detect else {}
+            ram_mb = int(params.get("ram_mb") or hw.get("ram_mb") or 4096)
+            vram_mb = int(params.get("vram_mb") or hw.get("vram_mb") or 0)
+            arch = str(params.get("arch") or hw.get("arch") or "x86_64")
             node = SwarmNode(
                 node_id=node_id,
                 port=int(params.get("port", 50052)),
                 rpc_port=int(params.get("rpc_port", 50053)),
-                ram_mb=int(params.get("ram_mb", 4096)),
-                vram_mb=int(params.get("vram_mb", 0)),
-                arch=str(params.get("arch", "x86_64")),
+                ram_mb=ram_mb,
+                vram_mb=vram_mb,
+                arch=arch,
             )
             try:
                 node.start()
@@ -802,18 +912,22 @@ class EmyrgeRuntime:
             if self.swarm_discovery is None:
                 self.swarm_discovery = CoordinatorDiscovery()
                 self.swarm_discovery.start()
-            return {"ok": True, "already_running": False, "node": node.info()}
+            info = node.info()
+        self._swarm_event("node_started", f"{info['id']} started ({ram_mb} MB RAM, {vram_mb} MB VRAM, {arch})")
+        return {"ok": True, "already_running": False, "node": info, "auto_detected": auto_detect}
 
     def swarm_stop_node(self) -> Dict[str, Any]:
         with self._lock:
             node = self.swarm_node
             self.swarm_node = None
+            node_id = node.id if node is not None else None
         if node is None:
             return {"ok": True, "already_stopped": True}
         try:
             node.stop()
         except Exception:
             pass
+        self._swarm_event("node_stopped", f"{node_id} stopped broadcasting")
         return {"ok": True, "already_stopped": False}
 
     def swarm_scan(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -847,6 +961,17 @@ class EmyrgeRuntime:
             return {"ok": False, "error": f"cluster formation failed: {exc}"}
         with self._lock:
             self.swarm_last_plan = plan
+            dropped_after_scan = [h for h in ((plan.get("live") or {}).get("handshakes") or []) if not h.get("ok")]
+            self.swarm_dropped = dropped_after_scan
+        live = (plan or {}).get("live") or {}
+        if live.get("cluster_formed"):
+            self._swarm_event(
+                "cluster_formed",
+                f"cluster formed: {len(live.get('verified_nodes') or [])} node(s) verified — {plan.get('unlocked_model', '')}",
+            )
+            self._start_watchdog(plan)
+        elif dropped_after_scan:
+            self._swarm_event("scan_failed", f"no cluster: {[h.get('error') for h in dropped_after_scan]}")
         return {"ok": True, **plan}
 
     def handle_mesh_command(self, command: str) -> Dict[str, Any]:
@@ -1186,6 +1311,14 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
             if path in ("/api/swarm/scan", "/api/swarm/coordinate"):
                 self._send_json(200, self.runtime.swarm_scan(body))
+                return
+
+            if path == "/api/swarm/options":
+                self._send_json(200, self.runtime.swarm_set_options(body))
+                return
+
+            if path == "/api/swarm/watchdog/stop":
+                self._send_json(200, self.runtime.swarm_watchdog_stop())
                 return
 
             self._send_json(404, {"ok": False, "error": f"Unknown POST endpoint: {path}"})
