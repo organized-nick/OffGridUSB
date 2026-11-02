@@ -165,6 +165,9 @@ class SwarmNode:
     # -- lifecycle -----------------------------------------------------------
 
     def start(self) -> None:
+        # restart support: a previously stopped node has a set stop-event;
+        # clear it or the threads below exit immediately (dead-but-bound node)
+        self._stop.clear()
         stop_evt = self._stop
         threads = [
             threading.Thread(target=self._announce_loop, args=(stop_evt,), daemon=True),
@@ -229,8 +232,14 @@ class CoordinatorDiscovery:
                 continue
             node = dict(msg)
             node["ip"] = addr[0]  # announce origin is authoritative
+            node["last_seen"] = time.time()
             with self._lock:
-                self.nodes[node["id"]] = node
+                existing = self.nodes.get(node["id"])
+                if existing:
+                    existing.update({k: v for k, v in node.items() if k != "last_seen"})
+                    existing["last_seen"] = node["last_seen"]
+                else:
+                    self.nodes[node["id"]] = node
 
     def start(self) -> None:
         self._thread.start()
@@ -466,5 +475,52 @@ def main(argv: Optional[List[str]] = None) -> int:
     return 0 if plan["live"]["cluster_formed"] else 1
 
 
+
+
+def detect_local_hardware() -> Dict[str, Any]:
+    """Best-effort detection of this machine's real RAM/VRAM/arch (no deps).
+
+    Used by the web app so "Start Node" can advertise truthful inventory
+    instead of the 4096 MB placeholder. Cross-platform, stdlib only.
+    """
+    ram_mb = 0
+    vram_mb = 0
+    arch = "unknown"
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "[int](Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            ram_mb = int(float(out)) if out else 0
+        else:
+            with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if line.startswith("MemTotal:"):
+                        ram_mb = int(line.split()[1]) // 1024
+                        break
+    except Exception:
+        ram_mb = ram_mb or 0
+    try:
+        nvidia = shutil.which("nvidia-smi")
+        if nvidia:
+            out = subprocess.run(
+                [nvidia, "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            if out:
+                vram_mb = sum(int(x) for x in out.splitlines() if x.strip().isdigit())
+    except Exception:
+        vram_mb = 0
+    try:
+        import platform
+        arch = platform.machine() or "unknown"
+    except Exception:
+        pass
+    return {"ram_mb": ram_mb, "vram_mb": vram_mb, "arch": arch}
+
+
 if __name__ == "__main__":
     raise SystemExit(main())
+
