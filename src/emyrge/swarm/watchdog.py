@@ -172,5 +172,5 @@ def peers_from_verified(entries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             continue
         if n.get("ok") is False:
             continue
-        peers.append({"id": n.get("id"), "ip": n["ip"], "port": int(n.get("port", 50052)), "ram_mb": n.get("ram_mb"), "vram_mb": n.get("vram_mb")})
+        peers.append({"id": n.get("id"), "ip": n["ip"], "port": int(n.get("port", 50052)), "ram_mb": n.get("ram_mb"), "vram_mb": n.get("vram_mb"), "web_port": n.get("web_port")})
     return peers

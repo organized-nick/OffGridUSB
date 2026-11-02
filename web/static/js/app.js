@@ -1891,8 +1891,95 @@
     try {
       const res = await apiGet("/api/swarm/status");
       renderSwarmStatus(res);
+      renderSwarmInference(res);
     } catch (_) {
       /* backend unreachable — keep last known state */
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // Distributed inference (llama.cpp RPC) — launch from the UI
+  // ------------------------------------------------------------------
+
+  async function loadSwarmInferenceModels() {
+    const sel = $("#swarmInfModelSel");
+    if (!sel) return;
+    try {
+      const res = await apiGet("/api/swarm/inference/models");
+      const models = (res && res.models) || [];
+      sel.innerHTML = models.length
+        ? models.map((m) => '<option value="' + escapeHtml(m.path) + '">' + escapeHtml(m.name) + ' (' + m.size_mb + ' MB)</option>').join("")
+        : '<option value="">no models staged in data/models/</option>';
+    } catch (_) {
+      sel.innerHTML = '<option value="">model list unavailable</option>';
+    }
+  }
+
+  function renderSwarmInference(res) {
+    const statusEl = $("#swarmInfStatus");
+    const inf = res && res.inference;
+    if (!statusEl || !inf) return;
+    const launchBtn = $("#swarmInfLaunchBtn");
+    const stopBtn = $("#swarmInfStopBtn");
+    if (launchBtn) launchBtn.disabled = !!inf.running;
+    if (stopBtn) stopBtn.disabled = !inf.running;
+    if (inf.running) {
+      const peers = (inf.peers || []).map((p) => String(p.id || p.ip) + (p.ok ? " ✓" : " ✗")).join(", ");
+      statusEl.innerHTML = '<span class="badge badge-emerald">RUNNING</span> llama-server :' + inf.llama_port +
+        ' · model <span class="mono">' + escapeHtml(String(inf.model || "")) + '</span>' +
+        ' · ' + (inf.rpc_endpoints || []).length + ' rpc endpoint(s)' +
+        (inf.tensor_split ? ' · split ' + escapeHtml(String(inf.tensor_split)) : '') +
+        (peers ? '<br/><span class="muted-note">peers: ' + escapeHtml(peers) + '</span>' : '');
+    } else {
+      statusEl.innerHTML = '<span class="badge">IDLE</span> no distributed inference running — form a cluster above, then launch.';
+    }
+  }
+
+  async function swarmInferenceLaunch() {
+    const btn = $("#swarmInfLaunchBtn");
+    const statusEl = $("#swarmInfStatus");
+    const pathInput = $("#swarmInfModelPath");
+    const model = (pathInput && pathInput.value.trim()) ||
+      (($("#swarmInfModelSel") && $("#swarmInfModelSel").value) || "");
+    const body = { model: model || undefined, llama_port: Number(($("#swarmInfPort") || {}).value) || 8080 };
+    if (btn) { btn.disabled = true; btn.textContent = "Launching cluster inference…"; }
+    if (statusEl) statusEl.innerHTML = '<span class="badge badge-cyan">STARTING</span> starting rpc backends on peers and loading the model…';
+    try {
+      const res = await apiPost("/api/swarm/inference/start", body);
+      if (res && !res.ok && statusEl) {
+        const failed = (res.peers || []).filter((p) => !p.ok)
+          .map((p) => String(p.id || p.ip) + ": " + p.detail).join(", ");
+        statusEl.innerHTML = '<span class="badge" style="background:#7f1d1d;color:#fecaca;">LAUNCH FAILED</span> ' +
+          escapeHtml(res.error || "unknown error") + (failed ? '<br/><span class="muted-note">' + escapeHtml(failed) + '</span>' : '');
+      }
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "Launch failed: " + e.message;
+    } finally {
+      if (btn) btn.textContent = "Launch Cluster Inference ▸";
+    }
+    await loadSwarmStatus();
+  }
+
+  async function swarmInferenceStop() {
+    const btn = $("#swarmInfStopBtn");
+    if (btn) btn.disabled = true;
+    try { await apiPost("/api/swarm/inference/stop", {}); } catch (_) {}
+    await loadSwarmStatus();
+  }
+
+  async function swarmInferenceChat() {
+    const outEl = $("#swarmInfOutput");
+    const prompt = ($("#swarmInfPrompt") && $("#swarmInfPrompt").value.trim()) || "";
+    if (!outEl) return;
+    if (!prompt) { outEl.innerHTML = '<div class="muted-note">Type a prompt first.</div>'; return; }
+    outEl.innerHTML = '<div class="muted-note">Running on the pooled swarm…</div>';
+    try {
+      const res = await apiPost("/api/swarm/inference/chat", { prompt: prompt, n_predict: 256 });
+      outEl.innerHTML = res && res.ok
+        ? '<div class="peer-row"><strong>Swarm:</strong> ' + escapeHtml(res.content || "") + '</div>'
+        : '<div class="muted-note" style="color:#fecaca;">' + escapeHtml((res && res.error) || "completion failed") + '</div>';
+    } catch (e) {
+      outEl.innerHTML = '<div class="muted-note" style="color:#fecaca;">Request failed: ' + escapeHtml(e.message) + '</div>';
     }
   }
 
@@ -2181,6 +2268,14 @@
     if (startBtn || stopBtn || scanBtn) {
       swarmPollTimer = setInterval(loadSwarmStatus, 5000);
     }
+    // distributed inference controls
+    const infLaunch = $("#swarmInfLaunchBtn");
+    const infStop = $("#swarmInfStopBtn");
+    const infChat = $("#swarmInfChatBtn");
+    if (infLaunch) infLaunch.addEventListener("click", swarmInferenceLaunch);
+    if (infStop) infStop.addEventListener("click", swarmInferenceStop);
+    if (infChat) infChat.addEventListener("click", swarmInferenceChat);
+    loadSwarmInferenceModels();
 
     window.addEventListener("online", refreshStatus);
     window.addEventListener("offline", refreshStatus);

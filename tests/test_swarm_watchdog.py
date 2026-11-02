@@ -101,7 +101,7 @@ class TestSwarmWatchdog(unittest.TestCase):
 
     def test_peers_from_verified(self):
         peers = peers_from_verified([{"id": "x", "ip": "1.2.3.4", "port": 50052, "ram_mb": 8000, "vram_mb": 100}])
-        self.assertEqual(peers, [{"id": "x", "ip": "1.2.3.4", "port": 50052, "ram_mb": 8000, "vram_mb": 100}])
+        self.assertEqual(peers, [{"id": "x", "ip": "1.2.3.4", "port": 50052, "ram_mb": 8000, "vram_mb": 100, "web_port": None}])
 
 
 class TestDiscoveryLastSeen(unittest.TestCase):

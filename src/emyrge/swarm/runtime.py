@@ -79,6 +79,7 @@ class SwarmNode:
         ram_mb: int = 4096,
         vram_mb: int = 0,
         arch: str = "x86_64",
+        web_port: Optional[int] = None,
         discovery_target: Tuple[str, int] = ("255.255.255.255", DEFAULT_DISCOVERY_PORT),
         announce_interval: float = ANNOUNCE_INTERVAL_SEC,
     ) -> None:
@@ -88,6 +89,7 @@ class SwarmNode:
         self.ram_mb = ram_mb
         self.vram_mb = vram_mb
         self.arch = arch
+        self.web_port = web_port
         self.discovery_target = discovery_target
         self.announce_interval = announce_interval
         self._stop = threading.Event()
@@ -109,6 +111,9 @@ class SwarmNode:
             "arch": self.arch,
             "proto": SWARM_PROTO,
         }
+        if self.web_port is not None:
+            info["web_port"] = self.web_port
+        return info
 
     # -- announce thread -----------------------------------------------------
 
@@ -373,7 +378,11 @@ class CoordinatorRuntime:
             try:
                 node = handshake_node(c["ip"], c["port"], timeout=self.handshake_timeout)
                 verified.append(node)
-                handshake_results.append({"ip": c["ip"], "port": c["port"], "ok": True, "id": node.get("id")})
+                handshake_results.append({
+                    "ip": c["ip"], "port": c["port"], "ok": True, "id": node.get("id"),
+                    "ram_mb": node.get("ram_mb"), "vram_mb": node.get("vram_mb"),
+                    "web_port": node.get("web_port"),
+                })
             except SwarmHandshakeError as exc:
                 handshake_results.append({"ip": c["ip"], "port": c["port"], "ok": False, "error": str(exc)})
 
@@ -414,6 +423,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_node.add_argument("--ram-mb", type=int, default=4096)
     p_node.add_argument("--vram-mb", type=int, default=0)
     p_node.add_argument("--arch", default="x86_64")
+    p_node.add_argument("--web-port", type=int, default=None, help="web app port to advertise")
     p_node.add_argument("--discovery-target", default="255.255.255.255:50051")
 
     p_coord = sub.add_parser("coordinate", help="discover nodes and form a cluster")
@@ -434,6 +444,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             ram_mb=args.ram_mb,
             vram_mb=args.vram_mb,
             arch=args.arch,
+            web_port=args.web_port,
             discovery_target=(target[0], int(target[1]) if len(target) > 1 else DEFAULT_DISCOVERY_PORT),
         )
         node.start()
