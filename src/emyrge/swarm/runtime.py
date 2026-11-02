@@ -11,6 +11,7 @@ and macOS with zero pip dependencies.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import shutil
@@ -62,6 +63,85 @@ def _json_line_recv(sock: socket.socket, timeout: float) -> Dict[str, Any]:
         return json.loads(buf.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as exc:
         raise SwarmHandshakeError(f"malformed handshake reply: {exc}") from exc
+
+
+_SUBNET_CACHE: List[str] = []
+_SUBNET_CACHE_TS = 0.0
+_SUBNET_CACHE_TTL = 30.0
+_SUBNET_LOCK = threading.Lock()
+
+
+def _linux_subnet_broadcasts() -> List[str]:
+    out = subprocess.run(
+        ["ip", "-o", "-4", "addr", "show"],
+        capture_output=True, text=True, timeout=5,
+    ).stdout
+    results: List[str] = []
+    for line in out.splitlines():
+        fields = line.split()
+        # inet <ip>/<prefix> ...
+        for i, f in enumerate(fields):
+            if f == "inet" and i + 1 < len(fields):
+                try:
+                    iface = ipaddress.ip_interface(fields[i + 1])
+                    bcast = iface.network.broadcast_address
+                    if isinstance(bcast, ipaddress.IPv4Address) and str(bcast) != str(iface.ip):
+                        results.append(str(bcast))
+                except ValueError:
+                    continue
+    return results
+
+
+def _windows_subnet_broadcasts() -> List[str]:
+    out = subprocess.run(
+        ["netsh", "interface", "ipv4", "show", "addresses"],
+        capture_output=True, text=True, timeout=5,
+    ).stdout
+    results: List[str] = []
+    ip = prefix_len = None
+    for line in out.splitlines():
+        text = line.strip()
+        if text.startswith("IP Address:"):
+            ip = text.split(":", 1)[1].strip()
+        elif text.startswith("Subnet Prefix:") and ip:
+            raw = text.split(":", 1)[1].strip()  # e.g. 192.168.8.0/24 (masked 255.255.255.0)
+            prefix_len = raw.rsplit("/", 1)[-1].split()[0]  # drop "(masked ...)" suffix
+            try:
+                iface = ipaddress.ip_interface(f"{ip}/{prefix_len}")
+                bcast = iface.network.broadcast_address
+                if isinstance(bcast, ipaddress.IPv4Address) and str(bcast) != str(iface.ip):
+                    results.append(str(bcast))
+            except ValueError:
+                pass
+            ip = prefix_len = None
+    return results
+
+
+def _local_subnet_broadcasts() -> List[str]:
+    """Directed broadcast address of every connected IPv4 subnet (stdlib only).
+
+    Loopback, link-local (169.254.x autoconfig) and /32-point-to-point
+    networks are skipped. Returns [] when enumeration is impossible (exotic
+    OS, parse failure) so callers fall back to the global broadcast target.
+    """
+    global _SUBNET_CACHE, _SUBNET_CACHE_TS
+    with _SUBNET_LOCK:
+        if time.time() - _SUBNET_CACHE_TS < _SUBNET_CACHE_TTL:
+            return list(_SUBNET_CACHE)
+    try:
+        if os.name == "nt":
+            found = _windows_subnet_broadcasts()
+        else:
+            found = _linux_subnet_broadcasts()
+    except Exception:  # noqa: BLE001 — enumeration is best-effort only
+        found = []
+    # skip loopback and link-local (APIPA) networks — announcing there is
+    # noise at best; the loopback announce copy is already handled separately
+    found = [b for b in found if not b.startswith(("127.", "169.254."))]
+    with _SUBNET_LOCK:
+        _SUBNET_CACHE = found
+        _SUBNET_CACHE_TS = time.time()
+    return list(_SUBNET_CACHE)
 
 
 class SwarmNode:
@@ -119,6 +199,17 @@ class SwarmNode:
 
     def _announce_targets(self) -> List[Tuple[str, int]]:
         targets = [self.discovery_target]
+        # Directed subnet broadcasts: on multi-homed machines (VPN adapters
+        # like tailscale next to the LAN NIC) the OS route choice for the
+        # global 255.255.255.255 broadcast is unreliable and can egress the
+        # wrong interface — killing LAN discovery asymmetrically (peers see
+        # us, we don't see them). Sending to each local subnet's directed
+        # broadcast (e.g. 192.168.8.255) ties the egress to the NIC owning
+        # that connected route. Harmless extra traffic on other subnets.
+        for bcast in _local_subnet_broadcasts():
+            target = (bcast, self.discovery_target[1])
+            if target not in targets:
+                targets.append(target)
         # Broadcast packets are not looped back to local listeners on every OS,
         # so same-host nodes (and the web UI on this device) also get a direct
         # copy on loopback. Harmless duplication for real LAN peers.

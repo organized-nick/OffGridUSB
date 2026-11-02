@@ -11,6 +11,7 @@ import subprocess
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 
 def _free_port():
@@ -23,6 +24,7 @@ def _free_port():
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from emyrge.swarm import runtime as rt
 from emyrge.swarm.cluster_sim import DEFAULT_SWARM_NODES
 from emyrge.swarm.runtime import (
     CoordinatorDiscovery,
@@ -243,3 +245,67 @@ class TestCliEndToEnd(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeCompleted:
+    def __init__(self, stdout):
+        self.stdout = stdout
+        self.returncode = 0
+        self.stderr = ""
+
+
+class TestDirectedSubnetBroadcasts(unittest.TestCase):
+    """LAN discovery must survive multi-homed hosts (VPN next to LAN NIC)."""
+
+    def setUp(self):
+        rt._SUBNET_CACHE = []
+        rt._SUBNET_CACHE_TS = 0.0
+
+    def tearDown(self):
+        rt._SUBNET_CACHE = []
+        rt._SUBNET_CACHE_TS = 0.0
+
+    def test_windows_parse_pairs_ip_with_prefix(self):
+        fake = """Configuration for interface "Ethernet" (connected)
+   DHCP enabled:                         Yes
+   IP Address:                           192.168.8.143
+   Subnet Prefix:                        192.168.8.0/24 (masked 255.255.255.0)
+Configuration for interface "Tailscale" (connected)
+   IP Address:                           100.79.208.5
+   Subnet Prefix:                        100.79.208.5/32 (masked 255.255.255.255)
+"""
+        with patch.object(rt.subprocess, "run", return_value=_FakeCompleted(fake)):
+            found = rt._windows_subnet_broadcasts()
+        self.assertEqual(found, ["192.168.8.255"])  # /32 tailnet entry filtered
+
+    def test_linux_parse_dedupes_and_skips_point_to_point(self):
+        fake = (
+            "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever\n"
+            "2: ens3    inet 192.168.8.20/24 scope global dynamic ens3\\       valid_lft\n"
+            "3: tailscale0    inet 100.93.79.19/32 scope global tailscale0\\       valid_lft\n"
+        )
+        with patch.object(rt.subprocess, "run", return_value=_FakeCompleted(fake)):
+            found = rt._local_subnet_broadcasts()  # wrapper: skips loopback + /32
+        self.assertEqual(found, ["192.168.8.255"])
+
+    def test_announce_targets_include_local_subnet_broadcast(self):
+        with patch.object(rt, "_local_subnet_broadcasts", return_value=["192.168.8.255"]):
+            node = rt.SwarmNode(node_id="t", port=50052)
+            targets = node._announce_targets()
+        self.assertIn(("192.168.8.255", 50051), targets)
+        self.assertIn(("255.255.255.255", 50051), targets)
+        self.assertIn(("127.0.0.1", 50051), targets)
+
+    def test_cache_prevents_repeated_enumeration(self):
+        calls = {"n": 0}
+
+        def boom(_args, **_kw):
+            calls["n"] += 1
+            raise AssertionError("enumeration should be cached")
+
+        with patch.object(rt, "_linux_subnet_broadcasts", boom):
+            node = rt.SwarmNode(node_id="t", port=50052)
+            node._announce_targets()
+            node._announce_targets()
+        # both calls served from the 30s cache — enumeration ran at most once
+        self.assertLessEqual(calls["n"], 1)
