@@ -134,7 +134,6 @@ class SwarmNode:
             except OSError:
                 pass  # discovery target unreachable — node keeps serving TCP regardless
             stop_evt.wait(self.announce_interval)
-            stop_evt.wait(self.announce_interval)
 
     # -- tcp responder -------------------------------------------------------
 
