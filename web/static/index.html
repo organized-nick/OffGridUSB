@@ -553,42 +553,11 @@
           </p>
 
           <div class="swarm-nodes-list" id="swarmNodesList">
-            <label class="node-check-card">
-              <input type="checkbox" class="swarm-node-chk" value="dell_4gb" data-name="2015 Dell Latitude" data-ram="4" data-arch="x86_64 SSE4.2" checked />
-              <div class="node-info">
-                <strong>2015 Dell Latitude Laptop</strong>
-                <span class="mono">4 GB RAM • x86_64 SSE4.2 • 100Mbps LAN</span>
-              </div>
-              <span class="badge badge-cyan">+4 GB</span>
-            </label>
-
-            <label class="node-check-card">
-              <input type="checkbox" class="swarm-node-chk" value="macbook_8gb" data-name="Scavenged MacBook Air" data-ram="8" data-arch="ARM64 Metal" checked />
-              <div class="node-info">
-                <strong>Scavenged MacBook Air</strong>
-                <span class="mono">8 GB Unified • Apple Silicon Metal • Wi-Fi</span>
-              </div>
-              <span class="badge badge-cyan">+8 GB</span>
-            </label>
-
-            <label class="node-check-card">
-              <input type="checkbox" class="swarm-node-chk" value="pi5_8gb" data-name="Raspberry Pi 5 SBC" data-ram="8" data-arch="ARM64 NEON" checked />
-              <div class="node-info">
-                <strong>Raspberry Pi 5 Field SBC</strong>
-                <span class="mono">8 GB RAM • Linux aarch64 • USB-Ethernet</span>
-              </div>
-              <span class="badge badge-cyan">+8 GB</span>
-            </label>
-
-            <label class="node-check-card">
-              <input type="checkbox" class="swarm-node-chk" value="desktop_16gb" data-name="Office Desktop PC" data-ram="16" data-arch="x86_64 AVX2" checked />
-              <div class="node-info">
-                <strong>Abandoned Office Desktop</strong>
-                <span class="mono">16 GB RAM • x86_64 AVX2 • Gigabit LAN</span>
-              </div>
-              <span class="badge badge-emerald">+16 GB</span>
-            </label>
+            <div class="muted-note">Scanning this device and the LAN for real swarm nodes…</div>
           </div>
+          <p class="muted-note" style="margin:6px 0 0;">
+            This list is live inventory: this device's detected hardware plus any swarm nodes broadcasting on the LAN (or tracked by the watchdog). Check the nodes to include in the plan.
+          </p>
 
           <label class="checkbox-row fault-toggle">
             <input type="checkbox" id="simulateNodeDropChk" />

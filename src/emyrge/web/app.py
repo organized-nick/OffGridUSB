@@ -876,6 +876,56 @@ class EmyrgeRuntime:
             "inference": self.swarm_inference.status(),
         }
 
+    def swarm_live_nodes(self) -> List[Dict[str, Any]]:
+        """Real node inventory for cluster planning (no demo fixtures).
+
+        Merges, in priority order: this device (broadcasting node info, or
+        auto-detected hardware when idle), watchdog-tracked peers (with live
+        online/offline status), and UDP-discovered peers. Deduped by node id.
+        """
+        with self._lock:
+            node = self.swarm_node.info() if self.swarm_node is not None else None
+            discovered = self.swarm_discovery.snapshot() if self.swarm_discovery is not None else []
+            health = dict(self.swarm_watchdog.health) if self.swarm_watchdog is not None else None
+        nodes: Dict[str, Dict[str, Any]] = {}
+        if node is not None:
+            nodes[node["id"]] = {
+                "id": node["id"], "name": f"{node['id']} (this device)",
+                "ip": node["ip"], "port": node["port"],
+                "ram_mb": node.get("ram_mb") or 0, "vram_mb": node.get("vram_mb") or 0,
+                "arch": node.get("arch") or "unknown", "online": True,
+            }
+        else:
+            hw = self.swarm_local_hw or {}
+            if hw.get("ram_mb"):
+                nodes["this-device"] = {
+                    "id": "this-device", "name": "This device (node not started)",
+                    "ip": "127.0.0.1", "port": 50052,
+                    "ram_mb": hw.get("ram_mb") or 0, "vram_mb": hw.get("vram_mb") or 0,
+                    "arch": hw.get("arch") or "unknown", "online": True,
+                }
+        for n in (health or {}).get("nodes") or []:
+            nid = str(n.get("id") or "")
+            if not nid or nid in nodes:
+                continue
+            nodes[nid] = {
+                "id": nid, "name": nid, "ip": n.get("ip") or "0.0.0.0",
+                "port": int(n.get("port") or 50052),
+                "ram_mb": n.get("ram_mb") or 0, "vram_mb": n.get("vram_mb") or 0,
+                "arch": n.get("arch") or "unknown", "online": bool(n.get("ok")),
+            }
+        for d in discovered:
+            nid = str(d.get("id") or "")
+            if not nid or nid in nodes:
+                continue
+            nodes[nid] = {
+                "id": nid, "name": nid, "ip": d.get("ip") or "0.0.0.0",
+                "port": int(d.get("port") or 50052),
+                "ram_mb": d.get("ram_mb") or 0, "vram_mb": d.get("vram_mb") or 0,
+                "arch": d.get("arch") or "unknown", "online": True,
+            }
+        return list(nodes.values())
+
     def swarm_set_options(self, params: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
             if "auto_reform" in params:
@@ -1261,7 +1311,8 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/api/swarm/plan":
-                plan = ClusterCoordinator.plan_cluster(simulate_drop=False)
+                plan = ClusterCoordinator.plan_cluster(
+                    nodes=self.runtime.swarm_live_nodes(), simulate_drop=False)
                 self._send_json(200, {"ok": True, **plan})
                 return
 
@@ -1393,6 +1444,11 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
             if path == "/api/swarm/plan":
                 nodes = body.get("nodes") if isinstance(body.get("nodes"), list) else None
+                # An explicit node list (from the UI's live inventory checkboxes)
+                # wins; otherwise plan against the real live cluster, never the
+                # demo fixtures.
+                if not nodes:
+                    nodes = self.runtime.swarm_live_nodes()
                 sim_drop = _to_bool(body.get("simulate_drop"), False)
                 plan = ClusterCoordinator.plan_cluster(nodes=nodes, simulate_drop=sim_drop)
                 self._send_json(200, {"ok": True, **plan})
