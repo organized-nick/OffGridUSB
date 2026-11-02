@@ -180,7 +180,7 @@ class SwarmNode:
     # -- info --------------------------------------------------------------
 
     def info(self) -> Dict[str, Any]:
-        return {
+        info = {
             "id": self.node_id,
             "name": self.node_id,
             "ip": "127.0.0.1",  # replaced by observed source IP on the coordinator side
@@ -332,7 +332,10 @@ class CoordinatorDiscovery:
             with self._lock:
                 existing = self.nodes.get(node["id"])
                 if existing:
-                    existing.update({k: v for k, v in node.items() if k != "last_seen"})
+                    # loopback announces (same-host copies) arrive last; never
+                    # let them overwrite a real LAN ip captured earlier
+                    if not (node["ip"] in ("127.0.0.1", "::1") and existing["ip"] not in ("127.0.0.1", "::1")):
+                        existing.update({k: v for k, v in node.items() if k != "last_seen"})
                     existing["last_seen"] = node["last_seen"]
                 else:
                     self.nodes[node["id"]] = node
