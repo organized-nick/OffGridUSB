@@ -188,6 +188,7 @@ BOOT_CRITICAL_ENGINES=(
 ALL_ENGINES=(
     "${BOOT_CRITICAL_ENGINES[@]}"
     "bin/windows_arm64/llama/llama-server.exe"
+    "bin/windows_x86_64/llama/ggml-rpc-server.exe"
     "bin/linux_x86_64/kiwix-tools_linux-x86_64.tar.gz"
     "bin/linux_x86_64/llama-ubuntu-x64.tar.gz"
     "bin/linux_arm64/kiwix-tools_linux-aarch64.tar.gz"
