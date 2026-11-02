@@ -98,10 +98,20 @@ or hit `POST /api/swarm/scan {"window":3}` on the web UI.
 - node announces but handshake replies with loopback ip 127.0.0.1 in rpc_command → coordinator uses the ip you handshook with, so always seed real LAN ips for cross-machine runs.
 - broadcast discovery blocked (router/AP isolation) → use `--seed` mode; it's functionally equivalent minus zero-config discovery. seeds also work over tailscale (L3), as verified in the live run below.
 
-## live run results (2026-11-02, vps ↔ nixos over tailscale, seed mode)
-- 2/2 handshakes OK, cluster formed. pooled_ram_mb 39468 = 31832 (nixos) + 7636 (vps) ✓
-- effective_pool_mb 51756 → tier 4 unlocked, ring topology spans both nodes, layer_split 68/12 proportional to memory, rpc_command references both ips ✓
-- `--simulate-drop`: vps-node dropped from plan, rebalanced to 1 node (DEGRADED_AUTO_RECOVERED), no crash ✓
-- tier-difference demo with constrained profiles (8000 MB declared each): solo = tier 2, pooled = tier 3 with a 32/32 layer split ✓
-- windows machine NOT covered: tailscale ping ok, tcp/22 open, but password auth rejected for the documented user — credentials need refreshing before the windows leg runs.
-- remaining untested limit (unchanged): actual llama.cpp rpc completion across nodes.
+## live run results (2026-11-02)
+
+**vps ↔ nixos (tailscale, seed mode):** 2/2 handshakes OK, cluster formed. pooled_ram_mb 39468 = 31832 (nixos) + 7636 (vps) ✓
+effective_pool_mb 51756 → tier 4 unlocked, ring topology spans both nodes, layer_split 68/12 proportional to memory, rpc_command references both ips ✓
+`--simulate-drop`: vps-node dropped from plan, rebalanced to 1 node (DEGRADED_AUTO_RECOVERED), no crash ✓
+tier-difference demo with constrained profiles (8000 MB declared each): solo = tier 2, pooled = tier 3 with a 32/32 layer split ✓
+
+**3-machine run (windows + nixos + vps, seed mode):** 3/3 handshakes OK. pooled_ram_mb 55692 = 16224 (windows) + 31832 (nixos) + 7636 (vps), pooled_vram 16384 (12288 RTX3060 + 4096 GTX1660S), effective_pool_mb 72076 → tier 4. ring: windows L0-22, nixos L23-71, vps L72-79; split 28.2/61.2/10.6% proportional. windows SOLO baseline = tier 3 (eff 20320) → pooling across machines unlocked tier 4 ✓. simulate-drop of vps-node rebalanced the remaining 2 nodes cleanly ✓.
+
+windows leg notes:
+- ssh access: user `19032`, auth is the **ovhcloudvps key** (`~/.ssh/ovhcloud1p` on the vps) — passwords don't work.
+- stick is at `D:\` with portable python at `D:\bin\windows_x86_64\python\python.exe`; stick layout has src/ at root so PYTHONPATH=D:\src is needed.
+- firewall rules (udp/50051 + tcp/50052-50053 in) added via netsh and they persist across reboots.
+- detach gotcha: Start-Process/bat-file routes exit instantly with no error; run the node in the foreground of a backgrounded ssh session instead (`ssh -f winbox "cmd /c ..."`).
+- stick runtime.py was stale (pre announce-interval fix); synced from repo main.
+
+remaining untested limit (unchanged): actual llama.cpp rpc completion across nodes.
