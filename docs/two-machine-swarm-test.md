@@ -38,41 +38,57 @@ reach alone (e.g. 16gb + 16gb -> tier 3 pooled, tier 2 alone).
    ```
    (run powershell as admin). check linux side too: `sudo ufw allow 50051:50053/udp` + tcp if ufw is enabled.
 
-## test steps
+## test steps (turnkey — web ui, no terminal required)
 
-### 1. linux machine
+run the web app on BOTH machines. the swarm is formed from the
+coordinator's UI: every machine broadcasts itself over udp, and the
+coordinator discovers peers, handshakes, and plans the layer split — all
+from buttons. the live node inventory in the swarm tab is real: it shows
+this device plus every node broadcasting on the LAN (no demo devices).
+
+### step 1 — windows machine (peer, stick in D:\)
+1. double-click `START_OFFGRIDUSB_WINDOWS.bat` and open the web app (the
+   console window prints the local url).
+2. go to the **Swarm tab** and click **Start Node** under "Live Swarm Node
+   Control". leave RAM/VRAM/Arch blank — the app auto-detects this
+   machine's real hardware (no fake 4096 MB default).
+3. leave the app running. this machine is now broadcasting on the LAN.
+
+### step 2 — nixos/linux machine (coordinator)
+1. run `./run_linux.sh` (or `START_OFFGRIDUSB_LINUX.sh` on a stick) and
+   open the web app.
+2. go to the **Swarm tab** and click **Start Node** here as well (both
+   machines broadcast; the watchdog tracks peer health on both sides).
+3. the **live node inventory** at the top now lists both devices (this
+   device + discovered peers) with ONLINE badges. verify both appear.
+4. click **Form Swarm Cluster**. discovery → TCP handshake → layer-split
+   planning run automatically; the plan card shows pooled RAM/VRAM and
+   the unlocked tier.
+
+### step 3 — launch distributed inference (optional, coordinator side)
+1. on the same swarm tab, use the "Launch Distributed Inference" card:
+   pick a model from the dropdown, click **Launch Cluster Inference**,
+   then type a prompt and click **Run Completion**. the UI starts
+   `ggml-rpc-server` on every peer's web app (port 50055) and runs
+   `llama-server` locally with a proportional `--tensor-split`. zero
+   terminal commands.
+
+### legacy cli fallback (debug / headless)
+for headless machines (e.g. a vps) or isolating transport problems, the
+manual flow still works:
 ```bash
-cd <stick-or-repo-root>
-# start the web app (has the swarm control card) — or headless CLI:
-# note: repo checkout uses a src/ layout — PYTHONPATH=src is required there.
-# on a provisioned stick where emyrge/ sits at the root, drop the env var.
-PYTHONPATH=src python3 -m emyrge.swarm node --id linux-node --port 50052 --rpc-port 50053 \
-    --ram-mb <actual-ram-mb> --vram-mb <actual-vram-mb> --arch x86_64 &
-# get real numbers: free -m | awk 'NR==2{print $2}'
-```
-or start the web app (`./run_linux.sh`) and click "start node" on the Live
-Swarm Node Control card, filling ram/vram (the API takes ram_mb/vram_mb;
-default 4096/0 is a lie for real hardware — pass real values).
+# node side (either machine)
+PYTHONPATH=src python3 -m emyrge.swarm node --id <name> --port 50052 \
+    --rpc-port 50053 --ram-mb <ram> --vram-mb <vram> --arch x86_64 &
 
-### 2. windows machine (stick in D:)
-```bat
-cd /d D:\
-python -m emyrge.swarm node --id windows-node --port 50052 --rpc-port 50053 ^
-    --ram-mb <actual-ram-mb> --vram-mb <actual-vram-mb> --arch x86_64
-```
-get real numbers with `wmic ComputerSystem get TotalPhysicalMemory` or
-systeminfo. for a discrete GPU add its vram in mb (nvidia-smi).
-
-### 3. form the cluster (from the linux machine)
-```bash
+# coordinator side (explicit seeds skip udp discovery)
 PYTHONPATH=src python3 -m emyrge.swarm coordinate --json \
-    --seed <windows-lan-ip>:50052 --seed 127.0.0.1:50052
+    --seed <peer-lan-ip>:50052 --seed 127.0.0.1:50052
 ```
-(the --seed path skips broadcast discovery, which is the most likely
-failure point; use it to isolate transport from clustering).
-or hit `POST /api/swarm/scan {"window":3}` on the web UI.
+the `--seed` path bypasses broadcast discovery (the most likely failure
+point) — use it to separate transport problems from clustering problems.
 
-### 4. pass criteria
+## pass criteria
 - 2/2 handshakes OK
 - `cluster_formed: true`
 - `pooled_ram_mb` equals the SUM of both machines' declared ram
@@ -83,7 +99,7 @@ or hit `POST /api/swarm/scan {"window":3}` on the web UI.
 - optional: `--simulate-drop` from the coordinator kills one node from the
   plan and re-unlocks a lower tier — validates the node-drop fallback live.
 
-### 5. what is NOT tested yet (honest limits)
+## honest limits (not yet tested)
 - an actual llama.cpp rpc completion routed across both machines — the
   runtime plans and launches workers (`RpcWorkerLauncher`) but no end-to-end
   model inference across the 2 nodes has been executed. for that we need
@@ -115,3 +131,9 @@ windows leg notes:
 - stick runtime.py was stale (pre announce-interval fix); synced from repo main.
 
 remaining untested limit (unchanged): actual llama.cpp rpc completion across nodes.
+
+## windows stick sync (2026-11-02 16:05)
+stick re-synced from repo main (d851542): scp'd src/emyrge + web/static.
+verified on stick: src/emyrge/swarm/inference.py (SwarmInference class present),
+web/static/app.js (swarmInfLaunch handlers present), watchdog.py, runtime.py.
+stick and repo are now byte-identical for the swarm code paths.
