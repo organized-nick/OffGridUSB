@@ -44,7 +44,9 @@ reach alone (e.g. 16gb + 16gb -> tier 3 pooled, tier 2 alone).
 ```bash
 cd <stick-or-repo-root>
 # start the web app (has the swarm control card) — or headless CLI:
-python3 -m emyrge.swarm node --id linux-node --port 50052 --rpc-port 50053 \
+# note: repo checkout uses a src/ layout — PYTHONPATH=src is required there.
+# on a provisioned stick where emyrge/ sits at the root, drop the env var.
+PYTHONPATH=src python3 -m emyrge.swarm node --id linux-node --port 50052 --rpc-port 50053 \
     --ram-mb <actual-ram-mb> --vram-mb <actual-vram-mb> --arch x86_64 &
 # get real numbers: free -m | awk 'NR==2{print $2}'
 ```
@@ -63,7 +65,7 @@ systeminfo. for a discrete GPU add its vram in mb (nvidia-smi).
 
 ### 3. form the cluster (from the linux machine)
 ```bash
-python3 -m emyrge.swarm coordinate --json \
+PYTHONPATH=src python3 -m emyrge.swarm coordinate --json \
     --seed <windows-lan-ip>:50052 --seed 127.0.0.1:50052
 ```
 (the --seed path skips broadcast discovery, which is the most likely
@@ -94,4 +96,12 @@ or hit `POST /api/swarm/scan {"window":3}` on the web UI.
 - "connect failed: refused" on windows handshake → firewall rule missing or node not started (check `GET /api/swarm/status`).
 - discovery finds 0 nodes but seed handshake works → broadcast blocked (router/windows firewall) — fine, use seeds.
 - node announces but handshake replies with loopback ip 127.0.0.1 in rpc_command → coordinator uses the ip you handshook with, so always seed real LAN ips for cross-machine runs.
-- duplicate `stop_evt.wait()` in `_announce_loop` doubles the announce interval to 2s — cosmetic, discovered 2026-11-02, worth a one-line cleanup.
+- broadcast discovery blocked (router/AP isolation) → use `--seed` mode; it's functionally equivalent minus zero-config discovery. seeds also work over tailscale (L3), as verified in the live run below.
+
+## live run results (2026-11-02, vps ↔ nixos over tailscale, seed mode)
+- 2/2 handshakes OK, cluster formed. pooled_ram_mb 39468 = 31832 (nixos) + 7636 (vps) ✓
+- effective_pool_mb 51756 → tier 4 unlocked, ring topology spans both nodes, layer_split 68/12 proportional to memory, rpc_command references both ips ✓
+- `--simulate-drop`: vps-node dropped from plan, rebalanced to 1 node (DEGRADED_AUTO_RECOVERED), no crash ✓
+- tier-difference demo with constrained profiles (8000 MB declared each): solo = tier 2, pooled = tier 3 with a 32/32 layer split ✓
+- windows machine NOT covered: tailscale ping ok, tcp/22 open, but password auth rejected for the documented user — credentials need refreshing before the windows leg runs.
+- remaining untested limit (unchanged): actual llama.cpp rpc completion across nodes.
