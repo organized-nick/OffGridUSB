@@ -647,6 +647,39 @@
             <div id="swarmLivePlan" class="swarm-live-plan"></div>
           </div>
 
+          <div class="card" id="swarmInferenceCard">
+            <div class="section-eyebrow">POOLED MEMORY INFERENCE (LLAMA.CPP RPC)</div>
+            <h3 class="card-title">Launch Distributed Inference</h3>
+            <p class="muted-note">
+              Start a model on the verified cluster: RPC backends are started on every peer's web app automatically, then this host runs <code>llama-server</code> with a proportional tensor split. No terminal commands required.
+            </p>
+            <div class="swarm-live-grid">
+              <label class="field-label">Model (data/models/)
+                <select id="swarmInfModelSel" class="tactical-input input-sm"></select>
+              </label>
+              <label class="field-label">or path
+                <input type="text" id="swarmInfModelPath" class="tactical-input input-sm" placeholder="auto (first staged gguf)" />
+              </label>
+              <label class="field-label">Llama port
+                <input type="number" id="swarmInfPort" class="tactical-input input-sm" value="8080" min="1024" max="65535" />
+              </label>
+            </div>
+            <div class="swarm-live-actions">
+              <button type="button" id="swarmInfLaunchBtn" class="btn-primary">Launch Cluster Inference &#9656;</button>
+              <button type="button" id="swarmInfStopBtn" class="btn-secondary">Stop Inference</button>
+            </div>
+            <div id="swarmInfStatus" class="swarm-live-status muted-note">No distributed inference running.</div>
+            <div style="margin-top:10px;">
+              <label class="field-label">Prompt
+                <textarea id="swarmInfPrompt" class="tactical-input" rows="3" placeholder="Ask the pooled swarm..."></textarea>
+              </label>
+              <div class="swarm-live-actions" style="margin-top:6px;">
+                <button type="button" id="swarmInfChatBtn" class="btn-secondary">Run Completion</button>
+              </div>
+            </div>
+            <div id="swarmInfOutput" class="swarm-live-plan"></div>
+          </div>
+
           <div class="card chromebook-card">
             <div class="card-header-row">
               <div>

@@ -47,6 +47,11 @@ from emyrge.memory.memory_vault import MemoryVault
 from emyrge.mesh.packet_chunker import PacketChunker
 from emyrge.server import DEFAULT_PRODUCT_DESCRIPTOR, load_product_sku
 from emyrge.swarm.cluster_sim import ClusterCoordinator
+from emyrge.swarm.inference import (
+    SwarmInference,
+    discover_models,
+    find_rpc_server_binary,
+)
 from emyrge.swarm.runtime import (
     CoordinatorDiscovery,
     CoordinatorRuntime,
@@ -262,6 +267,12 @@ class EmyrgeRuntime:
         self.swarm_dropped: List[Dict[str, Any]] = []
         self.swarm_options: Dict[str, bool] = {"auto_reform": True}
         self.swarm_local_hw: Dict[str, Any] = detect_local_hardware()
+        # distributed-inference launcher (coordinator + peer roles in one)
+        self.swarm_inference = SwarmInference(
+            project_root=self.config.project_root,
+            on_event=self._swarm_event,
+            web_port=self.config.port,
+        )
 
         # Initialize Grounding Harness
         self.harness = GroundingHarness(
@@ -862,6 +873,7 @@ class EmyrgeRuntime:
             "events": events,
             "options": options,
             "local_hardware": self.swarm_local_hw,
+            "inference": self.swarm_inference.status(),
         }
 
     def swarm_set_options(self, params: Dict[str, Any]) -> Dict[str, Any]:
@@ -902,6 +914,7 @@ class EmyrgeRuntime:
                 ram_mb=ram_mb,
                 vram_mb=vram_mb,
                 arch=arch,
+                web_port=int(params.get("web_port") or self.config.port),
             )
             try:
                 node.start()
@@ -915,6 +928,86 @@ class EmyrgeRuntime:
             info = node.info()
         self._swarm_event("node_started", f"{info['id']} started ({ram_mb} MB RAM, {vram_mb} MB VRAM, {arch})")
         return {"ok": True, "already_running": False, "node": info, "auto_detected": auto_detect}
+
+    def swarm_rpc_start(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Peer control endpoint: start this machine's ggml-rpc-server."""
+        return self.swarm_inference.start_local_rpc(
+            port=int(params.get("rpc_port") or 50055),
+            binary=params.get("binary") or find_rpc_server_binary(self.config.project_root),
+        )
+
+    def swarm_rpc_stop(self) -> Dict[str, Any]:
+        """Peer control endpoint: stop this machine's ggml-rpc-server."""
+        return self.swarm_inference.stop_local_rpc()
+
+    def swarm_inference_models(self) -> Dict[str, Any]:
+        return {"ok": True, "models": discover_models(self.config.project_root)}
+
+    def swarm_inference_start(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Coordinator: launch distributed inference across the verified cluster."""
+        with self._lock:
+            plan = self.swarm_last_plan
+            health = dict(self.swarm_watchdog.health) if self.swarm_watchdog is not None else None
+        live = (plan or {}).get("live") or {}
+        if not live.get("cluster_formed"):
+            return {"ok": False, "error": "no verified cluster — Form Swarm Cluster first"}
+        # peers: verified handshake entries enriched with memory from the plan
+        split_by_id = {s.get("node_id"): s for s in (plan or {}).get("layer_split") or []}
+        peers = []
+        for h in live.get("handshakes") or []:
+            if not h.get("ok"):
+                continue
+            entry = {
+                "id": h.get("id"), "ip": h.get("ip"), "port": h.get("port"),
+                "web_port": h.get("web_port"),
+                "ram_mb": h.get("ram_mb"), "vram_mb": h.get("vram_mb"),
+            }
+            s = split_by_id.get(h.get("id")) or {}
+            entry["ram_mb"] = entry["ram_mb"] or s.get("ram_mb")
+            entry["vram_mb"] = entry["vram_mb"] or s.get("vram_mb")
+            if entry.get("web_port"):
+                peers.append(entry)
+        if not peers:
+            return {"ok": False, "error": "no cluster peers with a web app to control — upgrade peers to this build"}
+        model = str(params.get("model") or "")
+        if not model:
+            models = discover_models(self.config.project_root)
+            if not models:
+                return {"ok": False, "error": "no .gguf model staged in data/models/"}
+            model = models[0]["path"]
+        host_w = None
+        local = detect_local_hardware()
+        if params.get("host_weight"):
+            host_w = float(params["host_weight"])
+        elif (health or {}).get("host_weight_mb"):
+            host_w = float(health["host_weight_mb"])
+        else:
+            host_w = float(local.get("ram_mb") or 512) + float(local.get("vram_mb") or 0)
+        try:
+            extra = params.get("extra_args") if isinstance(params.get("extra_args"), list) else None
+        except Exception:
+            extra = None
+        return self.swarm_inference.start(
+            model=model,
+            peers=peers,
+            host_weight=host_w,
+            rpc_port=int(params.get("rpc_port") or 50055),
+            llama_port=int(params.get("llama_port") or 8080),
+            extra_args=extra,
+        )
+
+    def swarm_inference_stop(self) -> Dict[str, Any]:
+        return self.swarm_inference.stop()
+
+    def swarm_inference_chat(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        prompt = str(params.get("prompt") or params.get("q") or "")
+        if not prompt.strip():
+            return {"ok": False, "error": "empty prompt"}
+        return self.swarm_inference.chat(
+            prompt,
+            n_predict=int(params.get("n_predict") or 256),
+            temperature=float(params.get("temperature") or 0.8),
+        )
 
     def swarm_stop_node(self) -> Dict[str, Any]:
         with self._lock:
@@ -1176,6 +1269,10 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json(200, self.runtime.swarm_status())
                 return
 
+            if path == "/api/swarm/inference/models":
+                self._send_json(200, self.runtime.swarm_inference_models())
+                return
+
             # Static File & Uploaded Asset Serving
             self._serve_static(path)
 
@@ -1319,6 +1416,26 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
             if path == "/api/swarm/watchdog/stop":
                 self._send_json(200, self.runtime.swarm_watchdog_stop())
+                return
+
+            if path == "/api/swarm/rpc/start":
+                self._send_json(200, self.runtime.swarm_rpc_start(body))
+                return
+
+            if path == "/api/swarm/rpc/stop":
+                self._send_json(200, self.runtime.swarm_rpc_stop())
+                return
+
+            if path == "/api/swarm/inference/start":
+                self._send_json(200, self.runtime.swarm_inference_start(body))
+                return
+
+            if path == "/api/swarm/inference/stop":
+                self._send_json(200, self.runtime.swarm_inference_stop())
+                return
+
+            if path == "/api/swarm/inference/chat":
+                self._send_json(200, self.runtime.swarm_inference_chat(body))
                 return
 
             self._send_json(404, {"ok": False, "error": f"Unknown POST endpoint: {path}"})
