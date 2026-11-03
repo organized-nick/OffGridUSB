@@ -292,7 +292,7 @@
     sku: "Product2",
     product_id: "fieldready",
     name: "OffGridUSB — FieldReady",
-    tagline: "Tactical Field Survival, Clinical Medical Vault, STEM Education & 3.8B Offline AI",
+    tagline: "The towers are down. Your answers aren't. • First Aid, Water, Power, Maps & Local AI",
     tiers: [0, 1],
     target_drive_size_gb: 32,
     features: [
@@ -328,10 +328,10 @@
     const activeModels = Array.isArray(p.active_models) ? p.active_models : [];
 
     // 1. Dynamic Branding: Document Title, Header Tagline, and SKU Badge
-    document.title = name;
+    document.title = `${name} // The towers are down. Your answers aren't.`;
     const brandSub = $("#brandSub");
     if (brandSub) {
-      brandSub.textContent = tagline || "Universal Offline Knowledge & Adaptive AI Harness";
+      brandSub.textContent = tagline || "The towers are down. Your answers aren't.";
     }
     const skuBadge = $("#skuBadge");
     if (skuBadge) {
@@ -575,17 +575,42 @@
 
     if (Array.isArray(zimFiles) && zimFiles.length > 0) {
       const strip = $("#zimArchiveStrip");
-      strip.innerHTML =
-        `<span class="section-eyebrow">MOUNTED USB ZIM ARCHIVES:</span>` +
+      const prevSelect = $("#zimArchiveSelect");
+      const prevVal = prevSelect ? prevSelect.value : "/";
+      const optionsHtml =
+        `<option value="/">🏠 All Books Catalog (${zimFiles.length} Archives)</option>` +
         zimFiles
-          .map((z, i) => {
+          .map((z) => {
+            const rawName = typeof z === "object" && z !== null ? (z.name || z.filename || "archive.zim") : String(z);
+            const stem = rawName.replace(/\.zim$/i, "");
             const label =
               typeof z === "object" && z !== null
-                ? `${z.name || z.filename || "archive.zim"}${z.size_mb ? ` (${z.size_mb} MB)` : ""}`
+                ? `${rawName}${z.size_mb ? ` (${z.size_mb} MB)` : ""}`
                 : String(z);
-            return `<span class="badge ${i === 0 ? "badge-emerald" : "badge-cyan"}">${escapeHtml(label)}</span>`;
+            const href = `/content/${escapeHtml(stem)}`;
+            return `<option value="${href}">${escapeHtml(label)}</option>`;
           })
           .join("");
+      strip.innerHTML = `
+        <label for="zimArchiveSelect" class="section-eyebrow" style="margin:0;">MOUNTED ARCHIVES:</label>
+        <select id="zimArchiveSelect" class="tactical-select" style="max-width:460px;">
+          ${optionsHtml}
+        </select>
+      `;
+      const newSelect = $("#zimArchiveSelect");
+      if (newSelect) {
+        if (Array.from(newSelect.options).some((o) => o.value === prevVal)) {
+          newSelect.value = prevVal;
+        }
+        newSelect.addEventListener("change", () => {
+          const targetHref = newSelect.value || "/";
+          const iframe = $("#kiwixIframe");
+          if (iframe) {
+            iframe.src = `${state.kiwixUrl.replace(/\/$/, "")}${targetHref}`;
+            state.kiwixLoaded = true;
+          }
+        });
+      }
     }
 
     // Bind live cross-platform binary readiness tooltips & status onto top architecture bar
@@ -1038,17 +1063,39 @@
       .join("");
   }
 
-  function openCitationModal(kind, target) {
-    const cleanTarget = String(target || "").split("#")[0].split("/").pop().trim().toLowerCase();
-    const match =
-      state.lastSources.find(
-        (s) =>
-          String(s.title || "").toLowerCase().includes(cleanTarget) ||
-          String(s.section_or_topic || "").toLowerCase().includes(cleanTarget)
-      ) || state.lastSources[0];
+  function openCitationModal(kind, target, sourceIdx) {
+    const rawTarget = String(target || "");
+    const titlePart = rawTarget.split("#")[0].trim().toLowerCase();
+    const sectionPart = (rawTarget.split("#")[1] || "").trim().toLowerCase();
+    const tailPart = titlePart.split("/").pop().trim();
 
-    $("#modalSourceType").textContent =
-      kind.toLowerCase() === "lesson" ? "KHAN ACADEMY OFFLINE CURRICULUM" : "OFFLINE ZIM ENCYCLOPEDIA / VAULT";
+    let match = null;
+    if (sourceIdx !== undefined && sourceIdx !== null && sourceIdx !== "" && state.lastSources[Number(sourceIdx)]) {
+      match = state.lastSources[Number(sourceIdx)];
+    }
+    if (!match) {
+      match =
+        state.lastSources.find(
+          (s) =>
+            (titlePart && String(s.title || "").trim().toLowerCase() === titlePart) ||
+            (titlePart && String(s.title || "").toLowerCase().includes(titlePart)) ||
+            (sectionPart && String(s.section_or_topic || "").toLowerCase().includes(sectionPart)) ||
+            (tailPart && String(s.title || "").toLowerCase().includes(tailPart)) ||
+            (tailPart && String(s.section_or_topic || "").toLowerCase().includes(tailPart))
+        ) || state.lastSources[0];
+    }
+
+    const isKhan = (match && match.source_type === "khan") || String(kind || "").toLowerCase() === "lesson";
+    state.activeModalSource = match || {
+      source_type: isKhan ? "khan" : "zim",
+      title: rawTarget.split("#")[0].trim() || target,
+      section_or_topic: rawTarget.split("#")[1] || "",
+      url_or_id: "",
+    };
+
+    $("#modalSourceType").textContent = isKhan
+      ? "KHAN ACADEMY OFFLINE CURRICULUM"
+      : "OFFLINE ZIM ENCYCLOPEDIA / VAULT";
     $("#modalTitle").textContent = match ? match.title : target;
     $("#modalMeta").textContent = match
       ? `Path: ${match.url_or_id || "offline-archive"}  •  Section: ${match.section_or_topic || "Primary"}  •  Relevance: ${match.score ?? 1.0}`
@@ -1056,6 +1103,11 @@
     $("#modalBody").textContent = match
       ? match.full_text || match.snippet
       : "Verified offline passage stored on portable USB drive.";
+
+    const openBtn = $("#modalOpenReaderBtn");
+    if (openBtn) {
+      openBtn.textContent = isKhan ? "Open Lesson in STEM Tutor Tab ▸" : "Open in Internet-in-a-Box Tab ▸";
+    }
     $("#citationModal").classList.remove("hidden");
   }
 
@@ -1136,11 +1188,11 @@
     const pillsTray = $("#citationPillsList");
     if (state.lastSources.length > 0) {
       pillsTray.innerHTML = state.lastSources
-        .map((s) => {
+        .map((s, idx) => {
           const isKhan = s.source_type === "khan";
           const kind = isKhan ? "Lesson" : "Source";
           const label = s.section_or_topic ? `${s.title}#${s.section_or_topic}` : s.title;
-          return `<button type="button" class="cite-pill ${isKhan ? "lesson" : ""}" data-cite-kind="${kind}" data-cite-target="${escapeHtml(label)}">[${kind}: ${escapeHtml(label)}]</button>`;
+          return `<button type="button" class="cite-pill ${isKhan ? "lesson" : ""}" data-cite-idx="${idx}" data-cite-kind="${kind}" data-cite-target="${escapeHtml(label)}">[${kind}: ${escapeHtml(label)}]</button>`;
         })
         .join("");
     } else {
@@ -1272,15 +1324,25 @@
     try {
       const res = await apiGet(`/api/knowledge/search?q=${encodeURIComponent(q)}`);
       const zims = (res.zim_results || res.results || []).map((z) => ({
+        kind: "zim",
         badge: "ZIM ARTICLE",
         cls: "badge-emerald",
         title: z.title,
         snippet: z.snippet || z.text || "",
+        full_text: z.full_text || z.text || z.snippet || "",
+        url: z.url || "",
+        section: z.section || "Offline ZIM Archive",
+        live_kiwix: Boolean(z.live_kiwix || (z.url && (z.url.startsWith("http") || z.url.startsWith("/content/")))),
       }));
       const khans = (res.khan_results || []).map((k) => ({
+        kind: "khan",
         badge: "KHAN LESSON",
         cls: "badge-cyan",
+        lesson_id: k.lesson_id || "",
+        subject: k.subject || "STEM & Survival",
+        topic: k.topic || "",
         title: `${k.subject ? k.subject + ": " : ""}${k.title}`,
+        raw_title: k.title || "",
         snippet: k.snippet || "",
       }));
       items = [...zims, ...khans];
@@ -1291,24 +1353,107 @@
       items = FALLBACK_KHAN_LESSONS.filter(
         (l) => l.title.toLowerCase().includes(ql) || l.content.toLowerCase().includes(ql) || !ql
       ).map((l) => ({
+        kind: "khan",
         badge: "OFFLINE STEM / SURVIVAL",
         cls: "badge-cyan",
+        lesson_id: l.lesson_id,
+        subject: l.subject,
+        topic: l.topic,
         title: l.title,
+        raw_title: l.title,
         snippet: l.content.slice(0, 220) + "...",
       }));
     }
 
     grid.innerHTML = items
-      .map(
-        (it) => `
-        <div class="result-card">
-          <span class="badge ${it.cls}">${escapeHtml(it.badge)}</span>
+      .map((it, idx) => {
+        const actionLabel =
+          it.kind === "khan"
+            ? "Open Interactive STEM Lesson ▸"
+            : it.live_kiwix
+              ? "Open in Kiwix ZIM Reader ▸"
+              : "Read Full Offline Article ▸";
+        return `
+        <div class="result-card clickable-result-card" data-result-idx="${idx}" role="button" tabindex="0">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span class="badge ${it.cls}">${escapeHtml(it.badge)}</span>
+            ${it.section ? `<span class="mono muted-note" style="font-size:11px;">${escapeHtml(it.section)}</span>` : ""}
+          </div>
           <h4>${escapeHtml(it.title)}</h4>
-          <p class="muted-note" style="margin-bottom:0;">${escapeHtml(it.snippet)}</p>
+          <p class="muted-note" style="margin-bottom:10px;">${escapeHtml(it.snippet)}</p>
+          <div class="result-card-action">${actionLabel}</div>
         </div>
-      `
-      )
+      `;
+      })
       .join("");
+
+    grid.querySelectorAll(".clickable-result-card").forEach((cardEl) => {
+      const triggerOpen = async () => {
+        const idx = Number(cardEl.getAttribute("data-result-idx"));
+        const it = items[idx];
+        if (!it) return;
+
+        if (it.kind === "khan") {
+          const khanBtn = $("#subtab-khan") || $('button[data-subtab="iiab-khan"]');
+          if (khanBtn) khanBtn.click();
+          if (it.lesson_id) {
+            selectKhanLesson(it.lesson_id);
+          } else {
+            const matchLesson = state.khanLessons.find(
+              (l) =>
+                l.title.toLowerCase() === String(it.raw_title || it.title).toLowerCase() ||
+                String(it.title).toLowerCase().includes(l.title.toLowerCase())
+            );
+            if (matchLesson) selectKhanLesson(matchLesson.lesson_id);
+          }
+          return;
+        }
+
+        if (it.live_kiwix && it.url) {
+          const fullUrl = it.url.startsWith("http")
+            ? it.url
+            : `${state.kiwixUrl.replace(/\/$/, "")}${it.url.startsWith("/") ? it.url : "/" + it.url}`;
+          const kiwixBtn = $("#subtab-kiwix") || $('button[data-subtab="iiab-kiwix"]');
+          if (kiwixBtn) kiwixBtn.click();
+          const iframe = $("#kiwixIframe");
+          if (iframe) {
+            iframe.src = fullUrl;
+            state.kiwixLoaded = true;
+          }
+          return;
+        }
+
+        // Built-in seed ZIM article: fetch full article text if available and open reader modal
+        let bodyText = it.full_text || it.snippet;
+        if (it.url) {
+          try {
+            const artRes = await apiGet(`/api/knowledge/article?type=zim&id=${encodeURIComponent(it.url)}`);
+            if (artRes && artRes.article && (artRes.article.text_content || artRes.article.content)) {
+              bodyText = artRes.article.text_content || artRes.article.content;
+            }
+          } catch (_) {}
+        }
+        state.activeModalSource = {
+          source_type: "zim",
+          title: it.title,
+          section_or_topic: it.section || "Built-in Emergency Corpus",
+          url_or_id: it.url || "",
+        };
+        $("#modalSourceType").textContent = "OFFLINE ZIM ENCYCLOPEDIA ARTICLE";
+        $("#modalTitle").textContent = it.title;
+        $("#modalMeta").textContent = `Source: ${it.section || "Built-in Emergency Corpus"}  •  Path: ${it.url || "offline-zim"}`;
+        $("#modalBody").textContent = bodyText;
+        $("#citationModal").classList.remove("hidden");
+      };
+
+      cardEl.addEventListener("click", triggerOpen);
+      cardEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          triggerOpen();
+        }
+      });
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -1662,20 +1807,23 @@
     canvas.width = 480;
     canvas.height = 220;
     const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#0f172a";
+    ctx.fillStyle = "#1F211C";
     ctx.fillRect(0, 0, 480, 220);
-    ctx.strokeStyle = "#10b981";
-    ctx.lineWidth = 4;
+    ctx.fillStyle = "#3F4A2C";
+    ctx.fillRect(10, 10, 460, 44);
+    ctx.strokeStyle = "#E8622C";
+    ctx.lineWidth = 3;
     ctx.strokeRect(10, 10, 460, 200);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 20px Consolas, monospace";
-    ctx.fillText("DOXYCYCLINE HYCLATE 100 MG TAB", 28, 55);
-    ctx.fillStyle = "#38bdf8";
+    ctx.fillStyle = "#EDE6D6";
+    ctx.font = "bold 19px Consolas, monospace";
+    ctx.fillText("DOXYCYCLINE HYCLATE 100 MG TAB", 24, 39);
+    ctx.fillStyle = "#B7A77A";
     ctx.font = "16px Consolas, monospace";
-    ctx.fillText("FIELD STOCK #DX-882 • EXP 08/2029", 28, 95);
-    ctx.fillText("DOSE: 100MG PO Q12H WITH FULL WATER", 28, 130);
-    ctx.fillStyle = "#fbbf24";
-    ctx.fillText("AVOID DIRECT SUNLIGHT EXPOSURE", 28, 168);
+    ctx.fillText("FIELD STOCK #DX-882 • EXP 08/2029", 24, 92);
+    ctx.fillStyle = "#EDE6D6";
+    ctx.fillText("DOSE: 100MG PO Q12H WITH FULL WATER", 24, 128);
+    ctx.fillStyle = "#E8622C";
+    ctx.fillText("AVOID DIRECT SUNLIGHT EXPOSURE", 24, 168);
 
     uploadVisionDataUrl(
       "doxycycline_100mg_field_scan.png",
@@ -1713,7 +1861,7 @@
     const out = $("#swarmPlanOutput");
     if (!out) return;
     const split = Array.isArray(plan.layer_split) ? plan.layer_split : [];
-    const palette = ["#10b981", "#38bdf8", "#fbbf24", "#a78bfa", "#f472b6"];
+    const palette = ["#E8622C", "#B7A77A", "#8A9A5B", "#EDE6D6", "#3F4A2C"];
     const gb = (mb) => Math.round((mb / 1024) * 10) / 10;
     const barSegs = split.map((s, i) =>
       '<div class="layer-seg" style="width:' + (s.tensor_share_pct || 0) + '%;background:' + palette[i % palette.length] +
@@ -1729,7 +1877,7 @@
       '<div class="metric-item"><span class="metric-val">' + split.length + ' Nodes</span><span class="metric-lbl">Layer-Split Peers</span></div>' +
       '</div>' +
       '<div style="margin-top:8px;"><span class="badge badge-emerald">UNLOCKED: ' + escapeHtml(plan.unlocked_model || "") + '</span></div>' +
-      '<div class="layer-split-bar">' + (barSegs || '<div class="layer-seg" style="width:100%;background:#10b981;">Local USB Fallback Active</div>') + '</div>' +
+      '<div class="layer-split-bar">' + (barSegs || '<div class="layer-seg" style="width:100%;background:#E8622C;">Local USB Fallback Active</div>') + '</div>' +
       '<div class="muted-note" style="margin-top:8px;">Auto-updates as nodes join, drop, or return. Launch pooled inference from the card below — entirely from the UI.</div>';
   }
 
@@ -1786,68 +1934,6 @@
         ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">OFFLINE</span>'
         : '<span class="badge badge-cyan">DISCOVERED</span>';
       return '<div class="node-check-card"><div class="node-info"><strong>' + escapeHtml(n.name) + '</strong><span class="mono">' + escapeHtml(sub) + '</span></div>' + badge + '</div>';
-    }).join("");
-  }
-
-  // Live node inventory for the builder card: this device + discovered peers
-  // + watchdog-tracked peers. Replaces the old hardcoded demo device list.
-  const swarmInvChecked = new Set();
-  let swarmInvInitialized = false;
-
-  function gbLabel(mb) {
-    const v = Math.round((Number(mb) / 1024) * 10) / 10;
-    return v ? v + " GB" : "";
-  }
-
-  function renderSwarmInventory(res) {
-    const list = $("#swarmNodesList");
-    if (!list || !res) return;
-    const nodes = [];
-    const seen = {};
-    const hw = res.local_hardware || {};
-    if (res.node) {
-      const n = res.node;
-      seen[n.id] = true;
-      nodes.push({ id: n.id, name: n.id + " (this device, broadcasting)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: true });
-    } else if (hw.ram_mb) {
-      seen["this-device"] = true;
-      nodes.push({ id: "this-device", name: "This device (node not started)", ip: "127.0.0.1", port: 50052, ram_mb: hw.ram_mb, vram_mb: hw.vram_mb, arch: hw.arch, ok: true });
-    }
-    ((res.health && res.health.nodes) || []).forEach((n) => {
-      if (!n.id || seen[n.id]) return;
-      seen[n.id] = true;
-      nodes.push({ id: n.id, name: n.id + " (watchdog)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: n.ok });
-    });
-    (res.discovered || []).forEach((d) => {
-      if (!d.id || seen[d.id]) return;
-      seen[d.id] = true;
-      nodes.push({ id: d.id, name: d.id + " (discovered)", ip: d.ip, port: d.port, ram_mb: d.ram_mb, vram_mb: d.vram_mb, arch: d.arch, ok: null });
-    });
-    // drop stale selections, seed defaults (all checked) on first render
-    [...swarmInvChecked].forEach((id) => { if (!seen[id]) swarmInvChecked.delete(id); });
-    if (!swarmInvInitialized && nodes.length) {
-      nodes.forEach((n) => swarmInvChecked.add(n.id));
-      swarmInvInitialized = true;
-    }
-    if (!nodes.length) {
-      list.innerHTML = '<div class="muted-note">No swarm nodes yet. Start a node here, and start the app on other LAN machines — they appear here automatically.</div>';
-      return;
-    }
-    list.innerHTML = nodes.map((n) => {
-      const mem = [gbLabel(n.ram_mb) + " RAM", gbLabel(n.vram_mb) + " VRAM"].filter(Boolean).join(" + ");
-      const sub = [mem || "memory unknown", n.arch || "unknown arch", n.ip + ":" + n.port].join(" • ");
-      const badge = n.ok === true
-        ? '<span class="badge badge-emerald">ONLINE</span>'
-        : n.ok === false
-        ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">OFFLINE</span>'
-        : '<span class="badge badge-cyan">DISCOVERED</span>';
-      return '<label class="node-check-card">' +
-        '<input type="checkbox" class="swarm-node-chk" value="' + escapeHtml(n.id) + '"' +
-        ' data-name="' + escapeHtml(n.name) + '" data-ip="' + escapeHtml(n.ip) + '" data-port="' + Number(n.port) + '"' +
-        ' data-ram-mb="' + Number(n.ram_mb || 0) + '" data-vram-mb="' + Number(n.vram_mb || 0) + '" data-arch="' + escapeHtml(n.arch || "unknown") + '"' +
-        (swarmInvChecked.has(n.id) ? " checked" : "") + " />" +
-        '<div class="node-info"><strong>' + escapeHtml(n.name) + '</strong><span class="mono">' + escapeHtml(sub) + '</span></div>' +
-        badge + '</label>';
     }).join("");
   }
 
@@ -2178,6 +2264,47 @@
   // 9. Event Wiring & Boot Initialization
   // --------------------------------------------------------------------------
   function initEvents() {
+    // Theme Toggle (Tactical Charcoal/Olive Dark vs OffGridUSB.com Bone Light)
+    const themeToggleBtn = $("#themeToggleBtn");
+    const savedTheme = localStorage.getItem("offgrid_theme");
+    if (savedTheme === "bone") {
+      document.body.classList.add("theme-bone");
+      if (themeToggleBtn) themeToggleBtn.textContent = "🌙 Tactical Dark Theme";
+    }
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener("click", () => {
+        const isBone = document.body.classList.toggle("theme-bone");
+        localStorage.setItem("offgrid_theme", isBone ? "bone" : "tactical");
+        themeToggleBtn.textContent = isBone ? "🌙 Tactical Dark Theme" : "☀ Bone Light Theme";
+      });
+    }
+
+    // Accessibility Text Size Switcher (sm: 92%, md: 100%, lg: 115%, xl: 130%)
+    const TEXT_SCALE_MAP = {
+      sm: { zoom: "0.92", cls: "text-scale-sm" },
+      md: { zoom: "1", cls: "text-scale-md" },
+      lg: { zoom: "1.15", cls: "text-scale-lg" },
+      xl: { zoom: "1.30", cls: "text-scale-xl" },
+    };
+    const applyTextSize = (sizeKey) => {
+      const key = TEXT_SCALE_MAP[sizeKey] ? sizeKey : "md";
+      const cfg = TEXT_SCALE_MAP[key];
+      document.documentElement.style.zoom = cfg.zoom;
+      document.body.classList.remove("text-scale-sm", "text-scale-md", "text-scale-lg", "text-scale-xl");
+      document.body.classList.add(cfg.cls);
+      $$(".text-size-btn").forEach((btn) => {
+        const active = btn.dataset.textSize === key;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+      localStorage.setItem("offgrid_text_size", key);
+    };
+    const savedTextSize = localStorage.getItem("offgrid_text_size") || "md";
+    applyTextSize(savedTextSize);
+    $$(".text-size-btn").forEach((btn) => {
+      btn.addEventListener("click", () => applyTextSize(btn.dataset.textSize));
+    });
+
     // Main Navigation Tabs
     $$(".tab-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -2244,7 +2371,11 @@
     document.body.addEventListener("click", (e) => {
       const citeBtn = e.target.closest(".cite-pill");
       if (citeBtn) {
-        openCitationModal(citeBtn.dataset.citeKind || "Source", citeBtn.dataset.citeTarget || "");
+        openCitationModal(
+          citeBtn.dataset.citeKind || "Source",
+          citeBtn.dataset.citeTarget || "",
+          citeBtn.dataset.citeIdx
+        );
         return;
       }
 
@@ -2274,7 +2405,7 @@
           const uNum = parseFloat(u);
           const eNum = parseFloat(exp);
           const ok = u === exp || (!Number.isNaN(uNum) && !Number.isNaN(eNum) && uNum === eNum) || u.includes(exp);
-          fb.style.color = ok ? "#34d399" : "#fbbf24";
+          fb.style.color = ok ? "#8A9A5B" : "#E8622C";
           fb.textContent = ok
             ? `✓ CORRECT! ${ex.explanation || ""}`
             : `✗ Try again. Expected "${ex.answer}". ${ex.explanation || ""}`;
@@ -2288,7 +2419,7 @@
         const ex = lesson && (lesson.exercises || []).find((x) => x.id === hintBtn.dataset.ex);
         const fb = document.getElementById(`fb-${hintBtn.dataset.ex}`);
         if (ex && fb) {
-          fb.style.color = "#38bdf8";
+          fb.style.color = "#B7A77A";
           fb.textContent = `💡 Hint: ${(ex.hints && ex.hints[0]) || "Review the formula in the lesson passage above."}`;
         }
       }
@@ -2308,9 +2439,77 @@
     $("#citationModal").addEventListener("click", (e) => {
       if (e.target.id === "citationModal") closeModal();
     });
-    $("#modalOpenReaderBtn").addEventListener("click", () => {
+    $("#modalOpenReaderBtn").addEventListener("click", async () => {
+      const src = state.activeModalSource || {};
       closeModal();
-      document.querySelector('.tab-btn[data-tab="tab-iiab"]').click();
+
+      // 1. If the cited source is a Khan Academy STEM / Survival Lesson, open the Khan Tutor sub-tab and load that lesson
+      if (src.source_type === "khan") {
+        const iiabTabBtn = document.querySelector('.tab-btn[data-tab="tab-iiab"]');
+        if (iiabTabBtn) iiabTabBtn.click();
+        const khanSubBtn = $("#subtab-khan") || $('button[data-subtab="iiab-khan"]');
+        if (khanSubBtn) khanSubBtn.click();
+
+        const rawId = String(src.url_or_id || "").trim();
+        const rawTitle = String(src.title || "").trim().toLowerCase();
+        const rawTopic = String(src.section_or_topic || "").trim().toLowerCase();
+        const matchedLesson =
+          state.khanLessons.find((l) => l.lesson_id === rawId) ||
+          state.khanLessons.find(
+            (l) =>
+              (rawTitle && l.title.toLowerCase() === rawTitle) ||
+              (rawTitle && l.title.toLowerCase().includes(rawTitle)) ||
+              (rawTopic && `${l.subject}/${l.topic}`.toLowerCase().includes(rawTopic))
+          );
+        if (matchedLesson) {
+          selectKhanLesson(matchedLesson.lesson_id);
+        }
+        return;
+      }
+
+      // 2. Otherwise it is an Offline ZIM Encyclopedia article: resolve deep-link URL and load directly in #kiwixIframe
+      const baseKiwix = state.kiwixUrl.replace(/\/$/, "");
+      let rawUrl = String(src.url_or_id || "").trim();
+      let deepLinkUrl = "";
+
+      if (rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) {
+        deepLinkUrl = rawUrl;
+      } else if (rawUrl.startsWith("/content/") || rawUrl.startsWith("/viewer")) {
+        deepLinkUrl = `${baseKiwix}${rawUrl}`;
+      } else {
+        // Fallback for built-in seed URI (e.g. kiwix://...): query live Kiwix search endpoint for a direct article URL
+        const searchQ = String(src.title || "").trim();
+        if (searchQ) {
+          try {
+            const sRes = await apiGet(`/api/knowledge/search?q=${encodeURIComponent(searchQ)}`);
+            const liveHit = (sRes.zim_results || sRes.results || []).find(
+              (z) => z.url && (z.url.startsWith("http") || z.url.startsWith("/content/"))
+            );
+            if (liveHit) {
+              deepLinkUrl = liveHit.url.startsWith("http")
+                ? liveHit.url
+                : `${baseKiwix}${liveHit.url.startsWith("/") ? liveHit.url : "/" + liveHit.url}`;
+            }
+          } catch (_) {}
+          if (!deepLinkUrl) {
+            deepLinkUrl = `${baseKiwix}/search?pattern=${encodeURIComponent(searchQ)}`;
+          }
+        } else {
+          deepLinkUrl = baseKiwix;
+        }
+      }
+
+      // Mark kiwixLoaded = true BEFORE switching tabs so ensureKiwixFrameLoaded() doesn't overwrite with the home page
+      state.kiwixLoaded = true;
+      const iiabTabBtn = document.querySelector('.tab-btn[data-tab="tab-iiab"]');
+      if (iiabTabBtn) iiabTabBtn.click();
+      const kiwixSubBtn = $("#subtab-kiwix") || $('button[data-subtab="iiab-kiwix"]');
+      if (kiwixSubBtn) kiwixSubBtn.click();
+
+      const iframe = $("#kiwixIframe");
+      if (iframe && deepLinkUrl) {
+        iframe.src = deepLinkUrl;
+      }
     });
 
     // Survival Calculators

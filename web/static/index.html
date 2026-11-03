@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OffGridUSB // Universal Offline Knowledge &amp; Adaptive AI Harness</title>
+  <title>OffGridUSB // The Towers Are Down. Your Answers Aren't.</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png" />
   <link rel="stylesheet" href="/static/style.css" onerror="this.href='style.css'" />
 </head>
 <body>
@@ -11,20 +12,34 @@
   <header class="cmd-header">
     <div class="cmd-brand-row">
       <div class="brand-block">
-        <div class="brand-logo" aria-hidden="true">OG</div>
+        <div class="brand-logo" aria-hidden="true">
+          <svg viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="OffGridUSB Mark">
+            <!-- USB Body (Ranger Olive #3F4A2C) -->
+            <rect x="6" y="16" width="38" height="28" rx="6" fill="#3F4A2C" stroke="#B7A77A" stroke-width="1.5"/>
+            <!-- Mountain Peaks (Bone #EDE6D6) -->
+            <polygon points="11,39 20,25 27,34 33,27 40,39" fill="#EDE6D6"/>
+            <!-- Signal Sun (Signal Orange #E8622C) -->
+            <circle cx="34.5" cy="23" r="3.2" fill="#E8622C"/>
+            <!-- USB Connector Plug (Bone #EDE6D6 + Khaki #B7A77A) -->
+            <path d="M44 21 H53 A2 2 0 0 1 55 23 V37 A2 2 0 0 1 53 39 H44 Z" fill="#EDE6D6" stroke="#B7A77A" stroke-width="1.2"/>
+            <!-- Connector Contacts (Ranger Olive #3F4A2C) -->
+            <rect x="47" y="24.5" width="4.5" height="3.2" rx="0.8" fill="#3F4A2C"/>
+            <rect x="47" y="32.3" width="4.5" height="3.2" rx="0.8" fill="#3F4A2C"/>
+          </svg>
+        </div>
         <div>
           <h1 class="brand-title" id="brandTitle">
-            OffGridUSB <span class="brand-sep">//</span>
-            <span class="brand-sub" id="brandSub">Universal Offline Knowledge &amp; Adaptive AI Harness</span>
+            OFFGRID<span class="brand-wordmark-badge">USB</span> <span class="brand-sep">//</span>
+            <span class="brand-sub" id="brandSub">The towers are down. Your answers aren't.</span>
           </h1>
           <div class="brand-tagline">
             <span class="seal-pill emerald" id="skuBadge">OffGridUSB — FieldReady</span>
             <span class="dot">•</span>
-            <span>USB Portable Edition</span>
+            <span>No Internet Needed</span>
             <span class="dot">•</span>
-            <span>Zero Docker</span>
+            <span>No Subscription</span>
             <span class="dot">•</span>
-            <span>Zero Cloud</span>
+            <span>Real Answers. Real Sources.</span>
             <span class="dot">•</span>
             <span id="airgapIndicator" class="cyan-text">100% Air-Gapped Ready</span>
           </div>
@@ -33,7 +48,19 @@
 
       <!-- LIVE STAGE HARDWARE SIMULATOR & ACTIVE MODEL -->
       <div class="sim-control-box">
-        <label for="hardwareSimSelect" class="sim-label">STAGE HARDWARE ELASTICITY SIMULATOR</label>
+        <div class="a11y-header-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+          <label for="hardwareSimSelect" class="sim-label" style="margin-bottom:0;">STAGE HARDWARE ELASTICITY SIMULATOR</label>
+          <div class="a11y-controls" role="group" aria-label="Accessibility Display &amp; Text Size Controls">
+            <div class="text-size-group" id="textSizeGroup" role="group" aria-label="Text Size">
+              <span class="a11y-label" aria-hidden="true">TEXT:</span>
+              <button type="button" class="text-size-btn" data-text-size="sm" aria-pressed="false" title="Compact Text Size (90%)">A-</button>
+              <button type="button" class="text-size-btn active" data-text-size="md" aria-pressed="true" title="Standard Text Size (100%)">A</button>
+              <button type="button" class="text-size-btn" data-text-size="lg" aria-pressed="false" title="Large Text for Low Vision (115%)">A+</button>
+              <button type="button" class="text-size-btn" data-text-size="xl" aria-pressed="false" title="Extra-Large High-Legibility Text (130%)">A++</button>
+            </div>
+            <button id="themeToggleBtn" type="button" class="btn-ghost btn-xs" title="Switch between Tactical Dark and OffGridUSB.com Bone Light theme" style="padding:3px 9px;font-size:11px;">☀ Bone Light Theme</button>
+          </div>
+        </div>
         <div class="sim-select-row">
           <select id="hardwareSimSelect" class="tactical-select">
             <option value="auto">Auto (Real Host Hardware Probe)</option>
@@ -204,7 +231,7 @@
           <!-- Main Synthesized / Grounded Answer -->
           <div id="harnessAnswerBody" class="answer-body">
             <p class="placeholder-lead">
-              Select any <strong>1-Click Stage Pitch Demo Prompt</strong> on the left or ask your own question to see grounded RAG synthesis, clickable offline <code>[Source: ...]</code> / <code>[Lesson: ...]</code> citations, and deterministic safety verification live with <strong>Wi-Fi OFF</strong>.
+              Select any <strong>1-Click Prompt</strong> on the left or ask your own question to see grounded clickable offline citations, and deterministic safety verification live with <strong>Wi-Fi OFF &amp; 0 Telemetry</strong>.
             </p>
           </div>
 
@@ -246,10 +273,13 @@
       <!-- Sub-panel 2A: Embedded Kiwix ZIM Server -->
       <div id="iiab-kiwix" class="subtab-panel active">
         <div class="zim-archive-strip" id="zimArchiveStrip">
-          <span class="section-eyebrow">MOUNTED USB ZIM ARCHIVES:</span>
-          <span class="badge badge-emerald">wikipedia_en_medicine_mini (WikiMed)</span>
-          <span class="badge badge-cyan">zimgit-medicine_en (Field Medicine)</span>
-          <span class="badge badge-cyan">zimgit-water_en (Safe Water Engineering)</span>
+          <label for="zimArchiveSelect" class="section-eyebrow" style="margin:0;">MOUNTED ARCHIVES:</label>
+          <select id="zimArchiveSelect" class="tactical-select" style="max-width:460px;">
+            <option value="/">🏠 All Books Catalog</option>
+            <option value="/content/wikipedia_en_medicine_mini_2026-10">wikipedia_en_medicine_mini (WikiMed)</option>
+            <option value="/content/zimgit-medicine_en_2024-08">zimgit-medicine_en (Field Medicine)</option>
+            <option value="/content/zimgit-water_en_2024-08">zimgit-water_en (Safe Water Engineering)</option>
+          </select>
         </div>
         <div class="iframe-shell">
           <iframe

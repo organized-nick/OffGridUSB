@@ -452,10 +452,30 @@ class KiwixRunner:
 
             lib_xml = self.project_root / "data" / "library.xml"
             kiwix_addr = "ipv4" if self.host in ("127.0.0.1", "0.0.0.0", "localhost") else self.host
-            if lib_xml.is_file():
-                cmd = [os.path.normpath(str(binary)), "--library", os.path.normpath(str(lib_xml)), "--port", str(self.port), "--address", kiwix_addr]
+            if zims:
+                # Pass discovered .zim paths directly using OS-native separators so libkiwix on Windows
+                # never embeds a forward-slash 'zim/' directory prefix into the book URL identifier.
+                cmd = [
+                    os.path.normpath(str(binary)),
+                    "-k",
+                    "-z",
+                    "--port",
+                    str(self.port),
+                    "--address",
+                    kiwix_addr,
+                ] + [os.path.normpath(str(z)) for z in zims]
+            elif lib_xml.is_file():
+                cmd = [
+                    os.path.normpath(str(binary)),
+                    "--library",
+                    os.path.normpath(str(lib_xml)),
+                    "--port",
+                    str(self.port),
+                    "--address",
+                    kiwix_addr,
+                ]
             else:
-                cmd = [os.path.normpath(str(binary)), "-k", "--port", str(self.port), "--address", kiwix_addr] + [os.path.normpath(str(z)) for z in zims]
+                return False
             kwargs: Dict[str, Any] = {
                 "stdout": subprocess.DEVNULL,
                 "stderr": subprocess.DEVNULL,
