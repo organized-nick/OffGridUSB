@@ -898,6 +898,25 @@ class EmyrgeRuntime:
         self.swarm_watchdog = wd
         wd.start()
 
+    def _ensure_discovery(self) -> None:
+        """Make sure the UDP announce listener exists (idempotent, safe to call
+        from any swarm path). A bind failure must never take down the caller
+        (it used to 500 the node/start request and then never be retried,
+        leaving a broadcasting node with a deaf coordinator)."""
+        with self._lock:
+            if self.swarm_discovery is not None:
+                return
+        try:
+            d = CoordinatorDiscovery()
+            d.start()
+            with self._lock:
+                self.swarm_discovery = d
+        except OSError as exc:
+            self._swarm_event(
+                "discovery_error",
+                f"could not bind UDP discovery listener ({exc}) — will retry",
+            )
+
     def swarm_status(self) -> Dict[str, Any]:
         with self._lock:
             node = self.swarm_node.info() if self.swarm_node is not None else None
@@ -1075,10 +1094,9 @@ class EmyrgeRuntime:
             except OSError as exc:
                 return {"ok": False, "error": f"failed to bind swarm node ports: {exc}"}
             self.swarm_node = node
-            # Ensure this device also listens for UDP announces so it can see peers
-            if self.swarm_discovery is None:
-                self.swarm_discovery = CoordinatorDiscovery()
-                self.swarm_discovery.start()
+            # Ensure this device also listens for UDP announces so it can see
+            # peers (retrying later via _ensure_discovery if the bind fails)
+            self._ensure_discovery()
             info = node.info()
         self._swarm_event("node_started", f"{info['id']} started ({ram_mb} MB RAM, {vram_mb} MB VRAM, {arch})")
         return {"ok": True, "already_running": False, "node": info, "auto_detected": auto_detect}
@@ -1190,9 +1208,7 @@ class EmyrgeRuntime:
             except (TypeError, ValueError):
                 continue
         with self._lock:
-            if self.swarm_discovery is None:
-                self.swarm_discovery = CoordinatorDiscovery()
-                self.swarm_discovery.start()
+            self._ensure_discovery()
             if self.swarm_coordinator is None:
                 self.swarm_coordinator = CoordinatorRuntime()
             coordinator = self.swarm_coordinator

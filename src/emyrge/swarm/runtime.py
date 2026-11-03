@@ -17,6 +17,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -190,20 +191,20 @@ def is_self_announce(node: Dict[str, Any], local: frozenset, web_port: Optional[
 
     Loopback copies are always self. An entry whose observed ip is one of our
     local addresses is self too (same-host stale instances announce under a
-    different pid-derived id, so id-based dedupe can't catch them). A matching
-    web_port additionally proves same-app origin.
+    different pid-derived id, so id-based dedupe can't catch them).
+
+    IMPORTANT: the observed ip alone decides. web_port is deliberately NOT a
+    self-proof — every machine in the swarm runs the same app on the same
+    default web port, so 'announce carries our web_port' is true for every
+    genuine remote peer. Filtering on web_port made the discovered list
+    empty everywhere (the 2026-11-03 discovery regression). web_port is kept
+    in the signature for call-site compatibility only.
     """
     ip = str(node.get("ip") or "")
     if ip == "127.0.0.1" or ip == "::1":
         return True
     if ip in local:
         return True
-    wp = node.get("web_port")
-    if web_port is not None and wp is not None:
-        try:
-            return int(wp) == int(web_port)
-        except (TypeError, ValueError):
-            pass
     return False
 
 
@@ -289,7 +290,10 @@ class SwarmNode:
                     self._udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                     self._udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                 for target in self._announce_targets():
-                    self._udp_sock.sendto(payload, target)
+                    try:
+                        self._udp_sock.sendto(payload, target)
+                    except OSError:
+                        pass  # one bad target must not skip the rest
             except OSError:
                 pass  # discovery target unreachable — node keeps serving TCP regardless
             stop_evt.wait(self.announce_interval)
@@ -365,6 +369,12 @@ class SwarmNode:
 # from the discovery snapshot (nodes re-announce every ANNOUNCE_INTERVAL_SEC,
 # so this is generous: a node that stopped broadcasting disappears quickly).
 DEFAULT_DISCOVERY_MAX_AGE_SEC = 30.0
+# If NO announce at all arrives within this window (nodes on the LAN usually
+# re-announce every second), the listener socket is assumed to have lost its
+# delivery slot (Windows quirk: a second SO_REUSEADDR binder on the port
+# permanently steals delivery and the earlier socket never recovers) and is
+# re-bound from scratch.
+DEFAULT_DISCOVERY_REBIND_IDLE_SEC = 45.0
 
 
 class CoordinatorDiscovery:
@@ -374,26 +384,99 @@ class CoordinatorDiscovery:
         self,
         discovery_port: int = DEFAULT_DISCOVERY_PORT,
         max_age_sec: float = DEFAULT_DISCOVERY_MAX_AGE_SEC,
+        rebind_idle_sec: float = DEFAULT_DISCOVERY_REBIND_IDLE_SEC,
     ) -> None:
         self.max_age_sec = float(max_age_sec)
+        self.rebind_idle_sec = float(rebind_idle_sec)
         self.discovery_port = discovery_port
         self.nodes: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._disable_windows_connreset(self._sock)
         self._sock.bind(("0.0.0.0", discovery_port))
         self._sock.settimeout(0.5)
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._listen_loop, daemon=True)
 
+    @staticmethod
+    def _disable_windows_connreset(sock: socket.socket) -> None:
+        """Windows quirk: any ICMP port-unreachable aimed at our UDP port
+        (e.g. from announce broadcasts on networks with no listener, or
+        another socket bound to the same port) poisons recvfrom on ALL
+        sockets bound to that port with WSAECONNRESET — which used to kill
+        this listener thread silently, leaving a bound-but-deaf socket.
+        SIO_UDP_CONNRESET=0 stops Windows from raising on ICMP errors."""
+        if sys.platform != "win32":
+            return
+        try:
+            # python >=3.13 exposes socket.SIO_UDP_CONNRESET; older windows
+            # pythons don't, so go through WSAIoctl directly. Either way a
+            # failure must not break discovery setup — this is an enhancement.
+            sock.ioctl(socket.SIO_UDP_CONNRESET, 0)
+        except (AttributeError, OSError, ValueError):
+            try:
+                import ctypes
+                dw = ctypes.c_uint(0)
+                cb = ctypes.c_uint(0)
+                ctypes.windll.ws2_32.WSAIoctl(
+                    sock.fileno(), 0x9800000C,
+                    ctypes.byref(dw), 4, None, 0, ctypes.byref(cb), None, None,
+                )
+            except Exception:
+                pass  # listener hardening below still covers us
+
     def _listen_loop(self) -> None:
+        reset_count = 0
+        last_packet = time.time()
         while not self._stop.is_set():
+            if time.time() - last_packet > self.rebind_idle_sec:
+                # self-heal: no announces for a while despite nodes usually
+                # re-announcing every second — either the network is truly
+                # empty or our socket lost its delivery slot (Windows binds
+                # a second SO_REUSEADDR binder and never hands the port
+                # back). Re-bind from scratch to get a fresh slot.
+                try:
+                    self._sock.close()
+                except OSError:
+                    pass
+                try:
+                    self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    self._disable_windows_connreset(self._sock)
+                    self._sock.bind(("0.0.0.0", self.discovery_port))
+                    self._sock.settimeout(0.5)
+                    last_packet = time.time()
+                    reset_count = 0
+                    print(
+                        f"[swarm-discovery] listener re-bound on port {self.discovery_port} after {self.rebind_idle_sec:.0f}s silence",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                except OSError as exc:
+                    print(
+                        f"[swarm-discovery] re-bind failed (will retry): {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    time.sleep(1.0)
+                    continue
             try:
                 data, addr = self._sock.recvfrom(8192)
             except socket.timeout:
                 continue
-            except OSError:
-                break
+            except OSError as exc:
+                # never die on a socket error: WSAECONNRESET (Windows ICMP
+                # poisoning) and friends are transient — keep listening
+                reset_count += 1
+                if reset_count <= 3 or reset_count % 100 == 0:
+                    print(
+                        f"[swarm-discovery] recv error (continuing): {exc}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                continue
+            last_packet = time.time()
             try:
                 msg = json.loads(data.decode("utf-8"))
             except (ValueError, UnicodeDecodeError):
