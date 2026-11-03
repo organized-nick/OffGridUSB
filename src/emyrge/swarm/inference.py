@@ -23,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import platform
+import hashlib
 import shutil
 import socket
 import subprocess
@@ -48,15 +49,20 @@ class SwarmInferenceError(Exception):
 def _find_binary_in_dir(directory: Path, prefixes: tuple[str, ...]) -> Optional[Path]:
     if not directory.is_dir():
         return None
-    for child in sorted(directory.iterdir()):
-        if not child.is_file():
-            continue
+    children = [c for c in sorted(directory.iterdir()) if c.is_file()]
+    # exact-name pass first: '<prefix>.exe' must win over anything else
+    for prefix in prefixes:
+        for child in children:
+            if child.name.lower() == f"{prefix}.exe":
+                return child
+    for child in children:
         name = child.name.lower()
+        # skip companion builds that share the prefix but aren't runnable targets
+        # (e.g. llama-server-impl.dll next to llama-server.exe)
+        if name.endswith((".dll", ".so.0", ".pdb")):
+            continue
         for prefix in prefixes:
             if name.startswith(prefix):
-                return child
-        for prefix in prefixes:
-            if name == f"{prefix}.exe":
                 return child
     return None
 
@@ -70,6 +76,9 @@ def _ensure_posix_executable(path: Path) -> Path:
     return path
 
 
+_POSIX_RUNTIME_ROOT = "/tmp/emyrge_runtime"  # module-level so tests can override
+
+
 def _extract_posix_tar_runtime(archive: Path, slot_name: str, prefixes: tuple[str, ...]) -> Optional[Path]:
     """Extract a portable tar.gz llama bundle into /tmp/emyrge_runtime/<slot> (RAM-backed).
 
@@ -80,7 +89,7 @@ def _extract_posix_tar_runtime(archive: Path, slot_name: str, prefixes: tuple[st
         return None
     import tarfile
 
-    slot_dir = Path("/tmp/emyrge_runtime") / slot_name
+    slot_dir = Path(_POSIX_RUNTIME_ROOT) / slot_name
     try:
         if not (slot_dir / ".complete").exists():
             slot_dir.mkdir(parents=True, exist_ok=True)
@@ -146,14 +155,17 @@ def find_rpc_server_binary(project_root: Path) -> Optional[Path]:
             return _ensure_posix_executable(found)
     for d in _platform_dirs(root):
         if d.is_dir():
-            for child in sorted(d.iterdir()):
+            # llama/rpc archives first; keep trying the remaining archives if one
+            # doesn't contain the target binary (bin/ may mix kiwix + llama tars)
+            archives = sorted(d.iterdir(), key=lambda c: (not c.name.lower().startswith("llama"), c.name))
+            for child in archives:
                 if not child.is_file() or not child.name.lower().endswith(".tar.gz"):
                     continue
-                slot = f"rpc_{abs(hash(str(child)))}"
+                digest = hashlib.sha256(str(child).encode()).hexdigest()[:16]
+                slot = f"rpc_{digest}"
                 found = _extract_posix_tar_runtime(child, slot, ("ggml-rpc-server",))
                 if found:
                     return found
-                break
     which_bin = shutil.which("ggml-rpc-server") or shutil.which("ggml-rpc-server.exe")
     return Path(which_bin) if which_bin else None
 

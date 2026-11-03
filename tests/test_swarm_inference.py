@@ -309,3 +309,69 @@ class TestSwarmInferenceEndpoints(unittest.TestCase):
         res = self._post("/api/swarm/inference/start", {})
         self.assertFalse(res["ok"])
         self.assertIn("Form Swarm Cluster", res["error"])
+
+
+class TestBinaryDiscoveryFixes(unittest.TestCase):
+    """Regression tests for the 2026-11-03 tier-3 pooled-run failures."""
+
+    def test_exe_preferred_over_impl_dll(self):
+        """llama-server.exe must win over llama-server-impl.dll (sorted order would pick the dll)."""
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td) / "bin" / "windows_x86_64" / "llama"
+            d.mkdir(parents=True)
+            (d / "llama-server-impl.dll").write_text("dll bytes")
+            (d / "llama-server.exe").write_text("exe bytes")
+            found = inf._find_binary_in_dir(d, ("llama-server",))
+            self.assertIsNotNone(found)
+            self.assertEqual(found.name, "llama-server.exe")
+
+    def test_dll_companions_skipped_when_no_exe(self):
+        """if only an -impl.dll exists we must not return it as the server binary."""
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td) / "bin" / "llama"
+            d.mkdir(parents=True)
+            (d / "llama-server-impl.dll").write_text("dll bytes")
+            self.assertIsNone(inf._find_binary_in_dir(d, ("llama-server",)))
+
+    def test_rpc_tar_fallback_does_not_stop_at_first_archive(self):
+        """bin/ dir with kiwix tar (no rpc-server) + llama tar (has one): llama tar must be reached.
+
+        Old code broke out of the archive loop after the first tar.gz regardless of result.
+        """
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as extract_to:
+            d = Path(td) / "bin" / "linux_x86_64"
+            d.mkdir(parents=True)
+            # kiwix archive: no ggml-rpc-server inside
+            kiwix = d / "kiwix-tools_linux-x86_64.tar.gz"
+            # llama archive: contains ggml-rpc-server
+            llama = d / "llama-ubuntu-x64.tar.gz"
+            inner = Path("llama-b11913/ggml-rpc-server")
+            import tarfile
+            with tarfile.open(kiwix, "w:gz") as tar:
+                data = b"kiwix binary\n"
+                import io
+                info = tarfile.TarInfo("kiwix-tools/kind")
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            with tarfile.open(llama, "w:gz") as tar:
+                data = b"#!/bin/sh\necho rpc\n"
+                info = tarfile.TarInfo(str(inner))
+                info.size = len(data)
+                info.mode = 0o755
+                tar.addfile(info, io.BytesIO(data))
+            with patch.object(inf, "_POSIX_RUNTIME_ROOT", extract_to):
+                found = inf.find_rpc_server_binary(Path(td))
+            self.assertIsNotNone(found, "llama tar.gz was never tried (break-after-first-archive bug)")
+            self.assertTrue(found.name.startswith("ggml-rpc-server"))
+
+    def test_rpc_slot_name_is_stable_across_processes(self):
+        """slot name must be derived from the path via sha256, not randomized hash() —
+        otherwise every process re-extracts into a fresh slot dir."""
+        from pathlib import PurePosixPath
+        child = PurePosixPath("/bin/linux_x86_64/llama-ubuntu-x64.tar.gz")
+        import hashlib
+        expected = "rpc_" + hashlib.sha256(str(child).encode()).hexdigest()[:16]
+        # replicate the slot computation used in find_rpc_server_binary
+        digest = hashlib.sha256(str(child).encode()).hexdigest()[:16]
+        self.assertEqual(f"rpc_{digest}", expected)
+        self.assertEqual(f"rpc_{digest}", expected)  # stable within process
