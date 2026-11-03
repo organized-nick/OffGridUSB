@@ -138,6 +138,45 @@ class TestDiscovery(unittest.TestCase):
         finally:
             disc.stop()
 
+    def test_listener_survives_poisoned_recv(self):
+        # Windows WSAECONNRESET: an ICMP error aimed at the discovery port
+        # makes recvfrom raise OSError — the listener thread must keep
+        # running and recover, not break out and leave a deaf-but-bound socket
+        disc = CoordinatorDiscovery(discovery_port=50083)
+        disc.start()
+        target_sock = disc._sock
+        real_recvfrom = socket.socket.recvfrom
+        calls = {"n": 0}
+
+        def poisoned_recvfrom(self, *a, **kw):
+            if self is target_sock:
+                calls["n"] += 1
+                if calls["n"] <= 2:
+                    raise OSError(10054, "Connection reset")
+            return real_recvfrom(self, *a, **kw)
+
+        node = SwarmNode(
+            node_id="poison-test", port=50084, rpc_port=50085,
+            discovery_target=("127.0.0.1", 50083), announce_interval=0.05,
+        )
+        node.start()
+        try:
+            with patch.object(socket.socket, "recvfrom", poisoned_recvfrom):
+                # drive a few loop iterations past the poison window
+                deadline = time.time() + 6
+                while time.time() < deadline:
+                    snap = disc.snapshot()
+                    if any(d["id"] == "poison-test" for d in snap):
+                        break
+                    time.sleep(0.05)
+            self.assertTrue(
+                any(d["id"] == "poison-test" for d in disc.snapshot()),
+                "listener thread died on poisoned recvfrom — announce never recovered",
+            )
+        finally:
+            disc.stop()
+            node.stop()
+
 
 class TestClusterFormation(unittest.TestCase):
     def setUp(self):

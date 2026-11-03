@@ -57,22 +57,18 @@ class TestIsSelfAnnounce(unittest.TestCase):
         self.assertFalse(is_self_announce({"ip": "192.168.8.99"}, LOCAL))
         self.assertFalse(is_self_announce({"ip": ""}, LOCAL))
 
-    def test_matching_web_port_is_self_even_with_foreign_ip(self):
-        # same-app origin proof: an announce carrying OUR web app port
-        self.assertTrue(
+    def test_web_port_never_marks_foreign_ip_self(self):
+        # regression 2026-11-03: a remote peer on the default web port must
+        # NOT be filtered as self — web_port matches are true for every peer
+        # that runs the same app on the same default port
+        self.assertFalse(
             is_self_announce({"ip": "192.168.8.99", "web_port": 8010}, LOCAL, web_port=8010)
         )
-
-    def test_mismatched_web_port_is_not_self(self):
         self.assertFalse(
             is_self_announce({"ip": "192.168.8.99", "web_port": 9999}, LOCAL, web_port=8010)
         )
-
-    def test_web_port_check_skipped_when_no_port_given(self):
         self.assertFalse(is_self_announce({"ip": "192.168.8.99", "web_port": 8010}, LOCAL))
-
-    def test_garbage_web_port_falls_through_to_ip_logic(self):
-        self.assertTrue(is_self_announce({"ip": "10.0.0.5", "web_port": "NaN"}, LOCAL, web_port=8010))
+        self.assertFalse(is_self_announce({"ip": "192.168.8.77", "web_port": "NaN"}, LOCAL, web_port=8010))
 
 
 if __name__ == "__main__":
