@@ -1789,6 +1789,68 @@
     }).join("");
   }
 
+  // Live node inventory for the builder card: this device + discovered peers
+  // + watchdog-tracked peers. Replaces the old hardcoded demo device list.
+  const swarmInvChecked = new Set();
+  let swarmInvInitialized = false;
+
+  function gbLabel(mb) {
+    const v = Math.round((Number(mb) / 1024) * 10) / 10;
+    return v ? v + " GB" : "";
+  }
+
+  function renderSwarmInventory(res) {
+    const list = $("#swarmNodesList");
+    if (!list || !res) return;
+    const nodes = [];
+    const seen = {};
+    const hw = res.local_hardware || {};
+    if (res.node) {
+      const n = res.node;
+      seen[n.id] = true;
+      nodes.push({ id: n.id, name: n.id + " (this device, broadcasting)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: true });
+    } else if (hw.ram_mb) {
+      seen["this-device"] = true;
+      nodes.push({ id: "this-device", name: "This device (node not started)", ip: "127.0.0.1", port: 50052, ram_mb: hw.ram_mb, vram_mb: hw.vram_mb, arch: hw.arch, ok: true });
+    }
+    ((res.health && res.health.nodes) || []).forEach((n) => {
+      if (!n.id || seen[n.id]) return;
+      seen[n.id] = true;
+      nodes.push({ id: n.id, name: n.id + " (watchdog)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: n.ok });
+    });
+    (res.discovered || []).forEach((d) => {
+      if (!d.id || seen[d.id]) return;
+      seen[d.id] = true;
+      nodes.push({ id: d.id, name: d.id + " (discovered)", ip: d.ip, port: d.port, ram_mb: d.ram_mb, vram_mb: d.vram_mb, arch: d.arch, ok: null });
+    });
+    // drop stale selections, seed defaults (all checked) on first render
+    [...swarmInvChecked].forEach((id) => { if (!seen[id]) swarmInvChecked.delete(id); });
+    if (!swarmInvInitialized && nodes.length) {
+      nodes.forEach((n) => swarmInvChecked.add(n.id));
+      swarmInvInitialized = true;
+    }
+    if (!nodes.length) {
+      list.innerHTML = '<div class="muted-note">No swarm nodes yet. Start a node here, and start the app on other LAN machines — they appear here automatically.</div>';
+      return;
+    }
+    list.innerHTML = nodes.map((n) => {
+      const mem = [gbLabel(n.ram_mb) + " RAM", gbLabel(n.vram_mb) + " VRAM"].filter(Boolean).join(" + ");
+      const sub = [mem || "memory unknown", n.arch || "unknown arch", n.ip + ":" + n.port].join(" • ");
+      const badge = n.ok === true
+        ? '<span class="badge badge-emerald">ONLINE</span>'
+        : n.ok === false
+        ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">OFFLINE</span>'
+        : '<span class="badge badge-cyan">DISCOVERED</span>';
+      return '<label class="node-check-card">' +
+        '<input type="checkbox" class="swarm-node-chk" value="' + escapeHtml(n.id) + '"' +
+        ' data-name="' + escapeHtml(n.name) + '" data-ip="' + escapeHtml(n.ip) + '" data-port="' + Number(n.port) + '"' +
+        ' data-ram-mb="' + Number(n.ram_mb || 0) + '" data-vram-mb="' + Number(n.vram_mb || 0) + '" data-arch="' + escapeHtml(n.arch || "unknown") + '"' +
+        (swarmInvChecked.has(n.id) ? " checked" : "") + " />" +
+        '<div class="node-info"><strong>' + escapeHtml(n.name) + '</strong><span class="mono">' + escapeHtml(sub) + '</span></div>' +
+        badge + '</label>';
+    }).join("");
+  }
+
   function renderSwarmStatus(res) {
     const statusEl = $("#swarmLiveStatus");
     const planEl = $("#swarmLivePlan");

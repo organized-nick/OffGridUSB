@@ -361,10 +361,21 @@ class SwarmNode:
         self.stop()
 
 
+# Announced nodes that have not re-announced within this window are dropped
+# from the discovery snapshot (nodes re-announce every ANNOUNCE_INTERVAL_SEC,
+# so this is generous: a node that stopped broadcasting disappears quickly).
+DEFAULT_DISCOVERY_MAX_AGE_SEC = 30.0
+
+
 class CoordinatorDiscovery:
     """Listens for UDP swarm announces and tracks live nodes."""
 
-    def __init__(self, discovery_port: int = DEFAULT_DISCOVERY_PORT) -> None:
+    def __init__(
+        self,
+        discovery_port: int = DEFAULT_DISCOVERY_PORT,
+        max_age_sec: float = DEFAULT_DISCOVERY_MAX_AGE_SEC,
+    ) -> None:
+        self.max_age_sec = float(max_age_sec)
         self.discovery_port = discovery_port
         self.nodes: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.Lock()
@@ -415,6 +426,15 @@ class CoordinatorDiscovery:
 
     def snapshot(self) -> List[Dict[str, Any]]:
         with self._lock:
+            now = time.time()
+            stale = [
+                nid
+                for nid, n in self.nodes.items()
+                if not isinstance(n.get("last_seen"), (int, float))
+                or now - n["last_seen"] > self.max_age_sec
+            ]
+            for nid in stale:
+                del self.nodes[nid]
             return [dict(n) for n in self.nodes.values()]
 
 

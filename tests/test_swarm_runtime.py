@@ -120,6 +120,24 @@ class TestDiscovery(unittest.TestCase):
         finally:
             disc.stop()
 
+    def test_stale_announce_is_pruned(self):
+        # a node that stops re-announcing disappears from the snapshot after
+        # max_age_sec — the UI "discovered" list must not keep dead entries
+        disc = CoordinatorDiscovery(discovery_port=50082, max_age_sec=0.5)
+        disc.start()
+        try:
+            with disc._lock:
+                disc.nodes["ghost"] = {"id": "ghost", "ip": "127.0.0.1", "port": 50099, "last_seen": time.time()}
+                disc.nodes["fresh"] = {"id": "fresh", "ip": "127.0.0.1", "port": 50098, "last_seen": time.time()}
+            self.assertEqual({d["id"] for d in disc.snapshot()}, {"fresh", "ghost"})
+            # age past the window, no re-announce → gone
+            with disc._lock:
+                disc.nodes["fresh"]["last_seen"] = time.time() - 10.0
+                disc.nodes["ghost"]["last_seen"] = time.time() - 10.0
+            self.assertEqual(disc.snapshot(), [])
+        finally:
+            disc.stop()
+
 
 class TestClusterFormation(unittest.TestCase):
     def setUp(self):
