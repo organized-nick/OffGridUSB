@@ -84,28 +84,51 @@ def _ensure_posix_executable(binary_path: Path) -> Path:
         return binary_path
 
 
+_TAR_EXTRACT_LOCK = threading.RLock()
+
+
 def _extract_posix_tar_runtime(archive_path: Path, slot_name: str, prefixes: tuple[str, ...]) -> Optional[Path]:
     """Extracts a bundled Linux/macOS .tar.gz into /tmp/emyrge_runtime/<slot_name> so .so/.dylib symlinks
     and +x permissions work reliably even when running off a FAT32/exFAT USB stick.
     """
     if os.name == "nt" or not archive_path.is_file() or archive_path.stat().st_size < 10240:
         return None
-    runtime_slot = Path(tempfile.gettempdir()) / "emyrge_runtime" / slot_name
-    existing = _find_binary_in_dir(runtime_slot, prefixes)
-    if existing is not None:
-        return _ensure_posix_executable(existing)
-    try:
-        runtime_slot.mkdir(parents=True, exist_ok=True)
-        with tarfile.open(archive_path, "r:gz") as tf:
-            try:
-                tf.extractall(path=runtime_slot, filter="tar")
-            except TypeError:
-                tf.extractall(path=runtime_slot)
-        found = _find_binary_in_dir(runtime_slot, prefixes)
-        if found is not None:
-            return _ensure_posix_executable(found)
-    except Exception:
-        return None
+    base_runtime = Path(tempfile.gettempdir()) / "emyrge_runtime"
+    runtime_slot = base_runtime / slot_name
+    marker = runtime_slot / ".extracted_ok"
+
+    with _TAR_EXTRACT_LOCK:
+        if marker.is_file():
+            existing = _find_binary_in_dir(runtime_slot, prefixes)
+            if existing is not None:
+                return _ensure_posix_executable(existing)
+
+        staging_slot = base_runtime / f"{slot_name}_staging_{os.getpid()}"
+        try:
+            if staging_slot.exists():
+                shutil.rmtree(staging_slot, ignore_errors=True)
+            staging_slot.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(archive_path, "r:gz") as tf:
+                try:
+                    tf.extractall(path=staging_slot, filter="tar")
+                except TypeError:
+                    tf.extractall(path=staging_slot)
+            for item in staging_slot.rglob("*"):
+                if item.is_file() and not item.is_symlink():
+                    try:
+                        os.chmod(item, 0o755)
+                    except OSError:
+                        pass
+            (staging_slot / ".extracted_ok").write_text("ok\n", encoding="utf-8")
+            if runtime_slot.exists():
+                shutil.rmtree(runtime_slot, ignore_errors=True)
+            staging_slot.rename(runtime_slot)
+            found = _find_binary_in_dir(runtime_slot, prefixes)
+            if found is not None:
+                return _ensure_posix_executable(found)
+        except Exception:
+            shutil.rmtree(staging_slot, ignore_errors=True)
+            return None
     return None
 
 
@@ -578,12 +601,18 @@ class KiwixRunner:
     def get_status(self) -> Dict[str, Any]:
         zims = self.discover_zim_files()
         lib_xml = self.project_root / "data" / "library.xml"
-        running = self.ensure_started() if (zims or lib_xml.is_file()) else self.is_running()
+        running = self.is_running()
+        if not running and (zims or lib_xml.is_file()):
+            if self._lock.acquire(blocking=False):
+                try:
+                    running = self.ensure_started()
+                finally:
+                    self._lock.release()
         return {
             "kiwix_running": running,
             "kiwix_port": self.port,
             "kiwix_url": self.base_url,
-            "kiwix_binary": str(self.discover_binary() or ""),
+            "kiwix_binary": str(self.discover_binary() or "") if running else "",
             "zim_files": [
                 {
                     "name": z.name,
@@ -1025,11 +1054,19 @@ class ModelRunner:
 
     def get_status(self) -> Dict[str, Any]:
         model = self._active_model or self.discover_model()
-        binary = self._active_binary or self.discover_binary()
-        running = self.ensure_started() if (binary and model) else self.is_healthy(timeout=0.3)
+        binary = self._active_binary
+        running = self.is_healthy(timeout=0.25)
+        if not running and model is not None:
+            if self._lock.acquire(blocking=False):
+                try:
+                    binary = self._active_binary or self.discover_binary()
+                    if binary and model:
+                        running = self.ensure_started()
+                finally:
+                    self._lock.release()
         return {
             "llm_running": running,
-            "llm_ready": self.is_ready_for_inference(timeout=0.3) if running else False,
+            "llm_ready": self.is_ready_for_inference(timeout=0.25) if running else False,
             "llm_port": self.port,
             "llm_model": model.name if model else "deterministic-fallback (awaiting .gguf)",
             "llm_engine": binary.name if binary else "grounded-synthesis-fallback",

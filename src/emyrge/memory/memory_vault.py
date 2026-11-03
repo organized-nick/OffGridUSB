@@ -56,14 +56,37 @@ class MemoryVault:
             if p.is_dir() or self.db_path_str.endswith(("/", "\\")):
                 p = p / "memory.sqlite"
                 self.db_path_str = str(p)
-            p.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                p.parent.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
 
         self._lock = threading.RLock()
-        self.conn = sqlite3.connect(self.db_path_str, check_same_thread=False)
-        self.conn.row_factory = sqlite3.Row
         self.fts5_available = False
+        try:
+            self.conn = sqlite3.connect(self.db_path_str, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
+            self._init_schema()
+        except (sqlite3.Error, OSError):
+            # Fallback if USB filesystem is mounted read-only or lacks SQLite file locking on Linux exFAT
+            import shutil
+            import tempfile
 
-        self._init_schema()
+            tmp_db = Path(tempfile.gettempdir()) / "emyrge_runtime" / "vault" / "memory.sqlite"
+            try:
+                tmp_db.parent.mkdir(parents=True, exist_ok=True)
+                if self.db_path_str != ":memory:" and Path(self.db_path_str).is_file() and not tmp_db.is_file():
+                    shutil.copy2(self.db_path_str, tmp_db)
+                self.db_path_str = str(tmp_db)
+                self.conn = sqlite3.connect(self.db_path_str, check_same_thread=False)
+                self.conn.row_factory = sqlite3.Row
+                self._init_schema()
+            except Exception:
+                self.db_path_str = ":memory:"
+                self.conn = sqlite3.connect(":memory:", check_same_thread=False)
+                self.conn.row_factory = sqlite3.Row
+                self._init_schema()
+
         if seed_if_empty:
             self._seed_defaults_if_empty()
 

@@ -238,9 +238,21 @@ class EmyrgeConfig:
         self.static_dir = self.project_root / "web" / "static"
 
     def ensure_directories(self) -> None:
-        """Create standard data directories on portable media if missing."""
-        for d in (self.vault_dir, self.zim_dir, self.models_dir, self.uploads_dir):
-            d.mkdir(parents=True, exist_ok=True)
+        """Create standard data directories on portable media if missing (fallback to /tmp if USB is read-only)."""
+        try:
+            for d in (self.vault_dir, self.zim_dir, self.models_dir, self.uploads_dir):
+                d.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            import tempfile
+
+            fallback_base = Path(tempfile.gettempdir()) / "emyrge_runtime" / "data"
+            self.vault_dir = fallback_base / "vault"
+            self.uploads_dir = fallback_base / "uploads"
+            for d in (self.vault_dir, self.uploads_dir):
+                try:
+                    d.mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    pass
 
     @classmethod
     def from_env(cls, project_root: Optional[Path] = None) -> EmyrgeConfig:

@@ -1716,11 +1716,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
-    st = runtime.get_status_payload()
-    hw = st["hardware"]
+    hw = runtime.get_active_hardware()
     print(f"[OffGridUSB] Air-Gapped Backend Ready -> http://{base_cfg.host}:{base_cfg.port}")
     print(f"[OffGridUSB] Detected Hardware: {hw['cpu_model']} | RAM: {hw['ram_total_mb']} MB | {hw['tier_name']}")
-    print(f"[OffGridUSB] Kiwix (8081): {'ONLINE' if st['services']['kiwix_running'] else 'STANDBY'} | LLM (8082): {st['services']['llm_model']}")
+    print("[OffGridUSB] Background Kiwix (8081) & LLM (8082) runners warming up...")
     sys.stdout.flush()
 
     if not base_cfg.headless:
