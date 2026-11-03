@@ -1,5 +1,22 @@
 # live rpc pooled-inference run (2026-11-02)
 
+## tier-3 update (2026-11-03) — Qwen2.5-32B pooled run: SUCCESS
+
+windows host + nixos rpc node, split 6656/44120 (host/nixos), b11913 everywhere:
+
+```
+host:   windows  llama-server :8083 -m C:\Users\19032\Downloads\Qwen2.5-32B-Instruct-Q4_K_M.gguf --rpc 192.168.8.157:50055 --tensor-split 6656,44120 -ngl 99 -c 8192
+rpc:    nixos    ggml-rpc-server :50055 (binary auto-extracted from bin/linux_x86_64/llama-ubuntu-x64.tar.gz)
+```
+
+- completion verified, multi-turn stable. nixos rpc-server RSS climbed to 17.2GB = its 44120/50776 share — remote compute genuinely load-bearing.
+- **model source matters: the USB/exFAT stick is unusable as a live model source for tier-3.** llama-server launched against D:\data\models\Qwen2.5-32B spun one core for 9+ min without opening a single rpc connection (metadata scan over slow USB); the identical file from the local SSD (C:\Users\19032\Downloads) connected rpc immediately and finished load in ~7 min. run tier-3 from a local-disk copy of the gguf.
+- load takes ~7-8 min (nixos fetches its 17GB share over the usb-eth LAN link during load). /health returns 503 "Loading model" until ready — poll, don't restart.
+- port 8081 is kiwix on the windows stick — use 8083 for manual hosts.
+- app-spawned (UI /api/swarm/inference/start) tier-3 still has a gap: the UI-launched host hung the same way the stick-source launch did, and the single-threaded HTTP handler blocks the whole web app while start waits. binary-discovery bugs on that path are fixed in OffGridUSB PR #14 (exe-vs-impl.dll preference, rpc-server tar fallback trying all archives, stable /tmp extraction slots) — next step: point the UI at local-disk model copies and/or background the start handler.
+- windows RAM autodetect is flaky (returned 0 → node advertised the 4096 default); stop/start the node with explicit ram_mb/vram_mb if the plan looks wrong (16224/6144 on this box).
+- teardown: taskkill /F /IM llama-server.exe on windows + pkill -f ggml-rpc-server on nixos; frees ~19GB on the windows box (it was down to 487MB free during the run).
+
 victory condition from john: first actually-run pooled inference on the swarm.
 
 ## result — SUCCESS
