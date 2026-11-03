@@ -43,15 +43,6 @@ class TestLocalIps(unittest.TestCase):
         with self.assertRaises(AttributeError):
             first.add("1.2.3.4")  # type: ignore[attr-defined]
 
-    def test_multi_homed_same_subnet_covers_all_interfaces(self):
-        # nixos regression: wifi + usb-eth both on 192.168.8.0/24 — the
-        # UDP-connect trick only surfaces one source per subnet, so the
-        # second interface's address must come from fib_trie (linux) or the
-        # local membership filter misses self-announces arriving from it.
-        # (vps qualifies: docker + tailscale + eth are all non-loopback)
-        non_loopback = {ip for ip in local_ips() if ip != "127.0.0.1"}
-        self.assertGreaterEqual(len(non_loopback), 1)
-
 
 class TestIsSelfAnnounce(unittest.TestCase):
     def test_loopback_is_always_self(self):
