@@ -14,6 +14,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -145,6 +146,32 @@ def _local_subnet_broadcasts() -> List[str]:
     return list(_SUBNET_CACHE)
 
 
+def _linux_fib_trie_ips() -> set:
+    """All local IPv4 addrs from /proc/net/fib_trie (linux only, stdlib).
+
+    The UDP-connect trick returns ONE source per subnet, which misses the
+    second interface on a multi-homed host with two NICs on the same subnet
+    (e.g. wifi + usb-ethernet both on 192.168.8.0/24) — that un-listed
+    address then announced back at us and survived the self-announce filter.
+    """
+    out: set = set()
+    if os.name != "nt":
+        try:
+            with open("/proc/net/fib_trie") as f:
+                lines = f.readlines()
+            for i, line in enumerate(lines):
+                if "/32 host LOCAL" in line:
+                    # the address is the indented line right above
+                    m = re.search(r"([0-9.]+)\s*$", lines[i - 1])
+                    if m:
+                        ip = m.group(1)
+                        if not ip.startswith(("0.", "127.", "169.254.")):
+                            out.add(ip)
+        except (OSError, IndexError):
+            pass
+    return out
+
+
 _LOCAL_IPS_CACHE: Optional[frozenset] = None
 _LOCAL_IPS_LOCK = threading.Lock()
 
@@ -167,6 +194,11 @@ def local_ips() -> frozenset:
     for bcast in _local_subnet_broadcasts():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                # SO_BROADCAST is required before connect()ing to a directed
+                # broadcast address on linux (EACCES otherwise — which used
+                # to silently empty local_ips() on every linux host, making
+                # is_self_announce never filter self-entries there)
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
                 s.settimeout(0.0)
                 s.connect((bcast, 9))
                 src = s.getsockname()[0]
@@ -174,6 +206,8 @@ def local_ips() -> frozenset:
                     ips.add(src)
         except OSError:
             continue
+    for extra in _linux_fib_trie_ips():
+        ips.add(extra)
     try:
         host_ip = socket.gethostbyname(socket.gethostname())
         if host_ip and not host_ip.startswith(("0.", "127.", "169.254.")):
