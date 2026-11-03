@@ -54,7 +54,7 @@
     },
     swarm: {
       cpu: "4x Scavenged Nodes (x86_64 + ARM64 + Metal)",
-      ram: "36.0 GB Pooled RAM • Exo/RPC Split",
+      ram: "36.0 GB Pooled RAM • RPC Layer-Split",
       tier: "Tier 3 • tool_calling",
       llm: "Qwen2.5-32B Distributed LIVE",
       llmWarn: false,
@@ -1685,30 +1685,21 @@
   }
 
   // --------------------------------------------------------------------------
-  // 8. Tab 6 — Exo / RPC Scavenged Supercomputer Swarm Builder
+  // 8. Tab 6 — Scavenged Supercomputer Swarm (llama.cpp RPC layer splitting)
   // --------------------------------------------------------------------------
   async function computeSwarmPlan() {
     const out = $("#swarmPlanOutput");
     if (!out) return;
-    const checked = $$(".swarm-node-chk:checked").map((el) => ({
-      id: el.value,
-      name: el.dataset.name || el.value,
-      ip: el.dataset.ip || "127.0.0.1",
-      port: Number(el.dataset.port) || 50052,
-      ram_mb: Number(el.dataset.ramMb) || 0,
-      vram_mb: Number(el.dataset.vramMb) || 0,
-      arch: el.dataset.arch || "unknown",
-      online: true,
-    }));
-    const simulateDrop = !!($("#simulateNodeDropChk") && $("#simulateNodeDropChk").checked);
-    if (!checked.length) {
-      out.innerHTML = '<div class="muted-note">No nodes selected — start a node or discover LAN peers, then check the nodes to pool.</div>';
+    // plan against the REAL detected/connected nodes (no checkbox pre-selection)
+    const nodes = swarmInvNodes.filter((n) => n.online !== false);
+    if (!nodes.length) {
+      out.innerHTML = '<div class="muted-note">No nodes detected yet — click Start Node here, then start the app on your other machines and click Start Node there too.</div>';
       return;
     }
-    out.innerHTML = '<div class="muted-note">Computing layer split across ' + checked.length + ' node(s)…</div>';
+    out.innerHTML = '<div class="muted-note">Computing layer split across ' + nodes.length + ' node(s)…</div>';
     let plan = null;
     try {
-      const res = await apiPost("/api/swarm/plan", { nodes: checked, simulate_drop: simulateDrop });
+      const res = await apiPost("/api/swarm/plan", { nodes: nodes });
       if (res && res.ok) plan = res;
     } catch (_) {}
     if (!plan) {
@@ -1731,44 +1722,72 @@
       "</div>"
     ).join("");
 
-    const fb = plan.fallback_status || {};
-    const dropped = fb.dropped_node;
-    const dropBanner = fb.simulate_drop
-      ? '<div class="audit-banner warning" style="margin-top:12px;margin-bottom:0;">' +
-        '<div class="audit-icon">⚡</div><div class="audit-body">' +
-        '<div class="audit-title">SIMULATED DROP: ' + escapeHtml((dropped && dropped.name) || "node") + ' OFFLINE</div>' +
-        '<div class="audit-desc">' + escapeHtml(fb.action || "") + '</div></div></div>'
-      : '<div class="audit-banner verified" style="margin-top:12px;margin-bottom:0;">' +
-        '<div class="audit-icon">✓</div><div class="audit-body">' +
-        '<div class="audit-title">PLAN HEALTHY · ' + escapeHtml(fb.state || "") + '</div>' +
-        '<div class="audit-desc">' + escapeHtml(fb.action || "") + '</div></div></div>';
-
-    const ring = (plan.exo_config && Array.isArray(plan.exo_config.ring_topology)) ? plan.exo_config.ring_topology : [];
-    const ringRows = ring.map((r) =>
-      '<div class="peer-row"><span class="mono">rank ' + r.rank + " · " + escapeHtml(r.node_id) +
-      " · " + escapeHtml(r.layer_range || ("L" + r.start_layer + "-L" + r.end_layer)) +
-      ' → next: ' + escapeHtml(r.peer_addr) + '</span></div>'
-    ).join("");
-
     out.innerHTML =
-      '<div class="section-eyebrow">LIVE DISTRIBUTED CLUSTER TOPOLOGY</div>' +
+      '<div class="section-eyebrow">LIVE CLUSTER TOPOLOGY (LAYER SPLIT)</div>' +
       '<div class="calc-big-metrics" style="margin-top:6px;">' +
       '<div class="metric-item"><span class="metric-val">' + gb(plan.effective_pool_mb || plan.pooled_ram_mb || 0) + ' GB</span><span class="metric-lbl">Effective Cluster Memory</span></div>' +
       '<div class="metric-item"><span class="metric-val">' + split.length + ' Nodes</span><span class="metric-lbl">Layer-Split Peers</span></div>' +
       '</div>' +
       '<div style="margin-top:8px;"><span class="badge badge-emerald">UNLOCKED: ' + escapeHtml(plan.unlocked_model || "") + '</span></div>' +
       '<div class="layer-split-bar">' + (barSegs || '<div class="layer-seg" style="width:100%;background:#10b981;">Local USB Fallback Active</div>') + '</div>' +
-      (ringRows ? '<div style="margin-top:8px;"><div class="section-eyebrow">EXO P2P RING TOPOLOGY</div>' + ringRows + '</div>' : "") +
-      (plan.rpc_command
-        ? '<div class="vision-ocr-box" style="margin-top:10px;font-size:11.5px;color:var(--cyan);"><strong>llama.cpp RPC launch command:</strong><br/>' + escapeHtml(plan.rpc_command) + '</div>'
-        : "") +
-      dropBanner;
+      '<div class="muted-note" style="margin-top:8px;">Auto-updates as nodes join, drop, or return. Launch pooled inference from the card below — entirely from the UI.</div>';
   }
 
   // 8b. Live Swarm Runtime — turnkey UI (auto-detect, health watchdog,
   // auto re-form on drops, event feed). No terminal commands required.
   // --------------------------------------------------------------------------
   let swarmPollTimer = null;
+  let lastPlanSig = "";
+
+  // Live node inventory for the merged swarm card: this device + discovered
+  // peers + watchdog-tracked peers, straight from /api/swarm/status.
+  let swarmInvNodes = [];
+
+  function gbLabel(mb) {
+    const v = Math.round((Number(mb) / 1024) * 10) / 10;
+    return v ? v + " GB" : "";
+  }
+
+  function renderSwarmInventory(res) {
+    const list = $("#swarmNodesList");
+    if (!list || !res) return;
+    const nodes = [];
+    const seen = {};
+    const hw = res.local_hardware || {};
+    if (res.node) {
+      const n = res.node;
+      seen[n.id] = true;
+      nodes.push({ id: n.id, name: n.id + " (this device)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: true });
+    } else if (hw.ram_mb) {
+      seen["this-device"] = true;
+      nodes.push({ id: "this-device", name: "This device (node not started)", ip: "127.0.0.1", port: 50052, ram_mb: hw.ram_mb, vram_mb: hw.vram_mb, arch: hw.arch, ok: true });
+    }
+    ((res.health && res.health.nodes) || []).forEach((n) => {
+      if (!n.id || seen[n.id]) return;
+      seen[n.id] = true;
+      nodes.push({ id: n.id, name: n.id + " (watchdog)", ip: n.ip, port: n.port, ram_mb: n.ram_mb, vram_mb: n.vram_mb, arch: n.arch, ok: n.ok });
+    });
+    (res.discovered || []).forEach((d) => {
+      if (!d.id || seen[d.id]) return;
+      seen[d.id] = true;
+      nodes.push({ id: d.id, name: d.id + " (discovered)", ip: d.ip, port: d.port, ram_mb: d.ram_mb, vram_mb: d.vram_mb, arch: d.arch, ok: null });
+    });
+    swarmInvNodes = nodes;
+    if (!nodes.length) {
+      list.innerHTML = '<div class="muted-note">No swarm nodes yet. Start a node here, and start the app on other LAN machines — they appear here automatically.</div>';
+      return;
+    }
+    list.innerHTML = nodes.map((n) => {
+      const mem = [gbLabel(n.ram_mb) + " RAM", gbLabel(n.vram_mb) + " VRAM"].filter(Boolean).join(" + ");
+      const sub = [mem || "memory unknown", n.arch || "unknown arch", n.ip + ":" + n.port].join(" • ");
+      const badge = n.ok === true
+        ? '<span class="badge badge-emerald">ONLINE</span>'
+        : n.ok === false
+        ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">OFFLINE</span>'
+        : '<span class="badge badge-cyan">DISCOVERED</span>';
+      return '<div class="node-check-card"><div class="node-info"><strong>' + escapeHtml(n.name) + '</strong><span class="mono">' + escapeHtml(sub) + '</span></div>' + badge + '</div>';
+    }).join("");
+  }
 
   // Live node inventory for the builder card: this device + discovered peers
   // + watchdog-tracked peers. Replaces the old hardcoded demo device list.
@@ -1842,17 +1861,20 @@
     const hw = res.local_hardware || {};
     const startBtn = $("#swarmStartNodeBtn");
     const stopBtn = $("#swarmStopNodeBtn");
-    if (startBtn) startBtn.disabled = !!(res.node_running || res.node);
-    if (stopBtn) stopBtn.disabled = !(res.node_running || res.node);
+    // reflect the actual runtime state on the buttons; in-flight guards stop a
+    // pending request's disabled state from being clobbered by the poll timer
+    if (startBtn && !startBtn.dataset.busy) startBtn.disabled = !!(res.node_running || res.node);
+    if (stopBtn && !stopBtn.dataset.busy) stopBtn.disabled = !(res.node_running || res.node);
 
     // auto-fill truthful inventory once
     const ramInput = $("#swarmNodeRamInput");
     const vramInput = $("#swarmNodeVramInput");
     const archInput = $("#swarmNodeArchInput");
     if (hw.ram_mb && ramInput && !ramInput.dataset.touched) {
-      ramInput.value = hw.ram_mb;
-      if (vramInput && hw.vram_mb) vramInput.value = hw.vram_mb;
-      if (archInput && hw.arch && archInput !== "unknown") archInput.value = hw.arch;
+      // prefill 80% of the detected RAM/VRAM — leaves headroom for the OS
+      ramInput.value = Math.round(hw.ram_mb * 0.8);
+      if (vramInput && hw.vram_mb) vramInput.value = Math.round(hw.vram_mb * 0.8);
+      if (archInput && hw.arch && hw.arch !== "unknown") archInput.value = hw.arch;
     }
 
     // cluster health banner
@@ -1863,6 +1885,8 @@
         ? '<span class="badge badge-emerald">CLUSTER HEALTHY</span>'
         : state === "degraded"
         ? '<span class="badge" style="background:#7f1d1d;color:#fecaca;">DEGRADED — ' + droppedCount + ' NODE(S) DOWN</span>'
+        : state === "member"
+        ? '<span class="badge badge-emerald">MEMBER OF SWARM CLUSTER</span>'
         : '<span class="badge badge-cyan">SWARM IDLE</span>';
 
     let statusHtml = stateBadge + " ";
@@ -1876,6 +1900,12 @@
     }
     statusHtml += ' <span class="badge badge-cyan">' + peers.length + ' PEER' + (peers.length === 1 ? "" : "S") + ' SEEN</span>';
     if (res.watchdog_running) statusHtml += ' <span class="badge badge-emerald">WATCHDOG ON</span>';
+    // peers: the coordinator announces membership — reflect it on this UI
+    const membership = res.membership;
+    if (membership) {
+      statusHtml += '<br/><span class="badge badge-emerald">IN CLUSTER</span> <span class="muted-note">coordinated by ' +
+        escapeHtml(String(membership.coordinator)) + ' · ' + ((membership.peers || []).length + 1) + ' node(s) pooled</span>';
+    }
     statusEl.innerHTML = statusHtml;
 
     // live nodes table: watchdog health + discovered peers merged
@@ -1930,11 +1960,24 @@
           (clusterFormed
             ? '<span class="badge badge-emerald">CLUSTER FORMED · ' + escapeHtml(plan.unlocked_model || "") + '</span>'
             : '<span class="badge" style="background:#7f1d1d;color:#fecaca;">NO LIVE NODES VERIFIED</span>') +
-          '</div>' + peerRows +
-          (plan.rpc_command
-            ? '<div class="rpc-cmd"><strong>Coordinator RPC command:</strong><br/>' + escapeHtml(plan.rpc_command) + '</div>'
-            : "");
+          '</div>' + peerRows;
       }
+    }
+
+    // recompute the topology graph automatically whenever the detected node
+    // set changes (join, drop, return, memory change)
+    const sig = JSON.stringify(swarmInvNodes.map((n) => [n.id, n.ram_mb, n.vram_mb, n.ok]));
+    if (sig !== lastPlanSig) {
+      lastPlanSig = sig;
+      computeSwarmPlan();
+    }
+
+    // Form Swarm Cluster is a no-op once a verified cluster exists
+    const scanBtn = $("#swarmScanBtn");
+    if (scanBtn && !scanBtn.dataset.busy) {
+      const formed = state === "healthy" || state === "member";
+      scanBtn.disabled = formed;
+      scanBtn.title = formed ? "Cluster already formed — stop the node or the watchdog to re-form." : "";
     }
   }
 
@@ -2056,6 +2099,8 @@
     // backend auto-detects real hardware (turnkey default)
     if (ramInput && ramInput.value && Number(ramInput.value) > 0) body.ram_mb = Number(ramInput.value);
     if (vramInput && vramInput.value && Number(vramInput.value) > 0) body.vram_mb = Number(vramInput.value);
+    const startBtn = $("#swarmStartNodeBtn");
+    if (startBtn) { startBtn.dataset.busy = "1"; startBtn.disabled = true; }
     try {
       const res = await apiPost("/api/swarm/node/start", body);
       if (res && !res.ok) {
@@ -2065,14 +2110,21 @@
     } catch (e) {
       const statusEl = $("#swarmLiveStatus");
       if (statusEl) statusEl.textContent = "Swarm node start failed: " + e.message;
+    } finally {
+      if (startBtn) delete startBtn.dataset.busy;
     }
     await loadSwarmStatus();
   }
 
   async function stopSwarmNode() {
+    const stopBtn = $("#swarmStopNodeBtn");
+    if (stopBtn) { stopBtn.dataset.busy = "1"; stopBtn.disabled = true; }
     try {
       await apiPost("/api/swarm/node/stop", {});
     } catch (_) {}
+    finally {
+      if (stopBtn) delete stopBtn.dataset.busy;
+    }
     await loadSwarmStatus();
   }
 
@@ -2094,6 +2146,7 @@
     const statusEl = $("#swarmLiveStatus");
     const planEl = $("#swarmLivePlan");
     if (scanBtn) {
+      scanBtn.dataset.busy = "1";
       scanBtn.disabled = true;
       scanBtn.textContent = "Forming cluster…";
     }
@@ -2112,6 +2165,7 @@
       if (statusEl) statusEl.textContent = "Swarm scan failed: " + e.message;
     } finally {
       if (scanBtn) {
+        delete scanBtn.dataset.busy;
         scanBtn.disabled = false;
         scanBtn.textContent = "Form Swarm Cluster ▸";
       }
@@ -2306,21 +2360,10 @@
     $("#sampleVisionBtn").addEventListener("click", generateSampleSpecPlateAndUpload);
     $("#visionSearchInput").addEventListener("input", (e) => renderVisionGrid(e.target.value));
 
-    // Swarm Builder — node checkboxes are re-rendered on every status poll,
-    // so use delegation and keep selections in swarmInvChecked.
-    $("#planSwarmBtn").addEventListener("click", computeSwarmPlan);
-    const swarmList = $("#swarmNodesList");
-    if (swarmList) {
-      swarmList.addEventListener("change", (e) => {
-        const chk = e.target.closest(".swarm-node-chk");
-        if (!chk) return;
-        if (chk.checked) swarmInvChecked.add(chk.value);
-        else swarmInvChecked.delete(chk.value);
-        computeSwarmPlan();
-      });
-    }
-    const simDrop = $("#simulateNodeDropChk");
-    if (simDrop) simDrop.addEventListener("change", computeSwarmPlan);
+    // Swarm topology auto-computes from the live node set on every status
+    // poll (see renderSwarmStatus); manual recompute button below.
+    const planBtn = $("#swarmPlanBtn");
+    if (planBtn) planBtn.addEventListener("click", computeSwarmPlan);
 
     // Live Swarm Runtime
     const startBtn = $("#swarmStartNodeBtn");

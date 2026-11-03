@@ -112,7 +112,7 @@
         <span class="tab-num">05</span> Visual Field Vault
       </button>
       <button class="tab-btn" id="nav-swarm" data-tab="tab-swarm" role="tab" aria-selected="false">
-        <span class="tab-num">06</span> Exo Swarm &amp; Chromebook
+        <span class="tab-num">06</span> Swarm &amp; Chromebook
       </button>
     </nav>
   </header>
@@ -544,76 +544,61 @@
     <!-- ================================================================== -->
     <section id="tab-swarm" class="tab-panel" role="tabpanel">
       <div class="panel-grid two-col">
-        <!-- Exo / RPC Scavenged Supercomputer Builder -->
-        <div class="card">
-          <div class="section-eyebrow">DISTRIBUTED LAYER-SPLITTING (`exo` + `llama.cpp` RPC)</div>
-          <h2 class="card-title">Scavenged Supercomputer Swarm Builder</h2>
+        <!-- Merged live swarm card: inventory + node control + cluster form -->
+        <div class="card" id="swarmLiveCard">
+          <div class="section-eyebrow">DISTRIBUTED LAYER-SPLITTING (LLAMA.CPP RPC)</div>
+          <h2 class="card-title">Scavenged Supercomputer Swarm</h2>
           <p class="muted-note">
-            Pool mismatched laptops and Raspberry Pis over any Ethernet cable or local Wi-Fi router to unlock frontier 32B–70B models with automatic fault-tolerant fallback.
+            Pool mismatched laptops and Raspberry Pis over any Ethernet cable or local Wi-Fi router to unlock frontier 32B–70B models. Everything — discovery, clustering and inference — runs from this UI; no terminal required.
           </p>
 
+          <div class="section-eyebrow" style="margin-top:10px;">CLUSTER NODES (LIVE)</div>
           <div class="swarm-nodes-list" id="swarmNodesList">
             <div class="muted-note">Scanning this device and the LAN for real swarm nodes…</div>
           </div>
+
+          <div class="swarm-live-grid" style="margin-top:10px;">
+            <label class="field-label">Node ID
+              <input type="text" id="swarmNodeIdInput" class="tactical-input input-sm" placeholder="auto (offgrid-<pid>)" />
+            </label>
+            <label class="field-label">VRAM (MB)
+              <input type="number" id="swarmNodeVramInput" class="tactical-input input-sm" placeholder="auto-detect" min="0" step="256" />
+            </label>
+            <label class="field-label">RAM (MB)
+              <input type="number" id="swarmNodeRamInput" class="tactical-input input-sm" placeholder="auto-detect" min="256" step="256" />
+            </label>
+            <label class="field-label">Arch
+              <input type="text" id="swarmNodeArchInput" class="tactical-input input-sm" placeholder="auto-detect" />
+            </label>
+          </div>
+          <div class="swarm-live-actions">
+            <button type="button" id="swarmStartNodeBtn" class="btn-primary">Start Node &#9656;</button>
+            <button type="button" id="swarmStopNodeBtn" class="btn-secondary">Stop Node</button>
+          </div>
           <p class="muted-note" style="margin:6px 0 0;">
-            This list is live inventory: this device's detected hardware plus any swarm nodes broadcasting on the LAN (or tracked by the watchdog). Check the nodes to include in the plan.
+            RAM/VRAM/Arch prefill at 80% of this machine's real hardware — leave them alone and just click Start Node. On other machines, open this app and click Start Node — everything else is automatic.
           </p>
-
-          <label class="checkbox-row fault-toggle">
-            <input type="checkbox" id="simulateNodeDropChk" />
-            <span><strong>Simulate Mid-Inference Node Drop</strong> (Test Fault-Tolerant Local USB Fallback)</span>
-          </label>
-
-          <button type="button" id="planSwarmBtn" class="btn-primary full-w">
-            Compute Exo / RPC Layer-Split Topology ▸
-          </button>
+          <div id="swarmLiveStatus" class="swarm-live-status muted-note">Swarm runtime idle &#8212; no node running.</div>
+          <div id="swarmNodesLive" class="swarm-live-plan" style="margin-top:8px;"></div>
+          <div style="margin-top:10px;">
+            <label class="field-label">Manual seeds (cross-subnet / tailscale &#8212; IP:PORT, comma separated)
+              <input type="text" id="swarmSeedInput" class="tactical-input input-sm" placeholder="100.79.208.5:50052, 100.96.6.124:50052" />
+            </label>
+            <label class="checkbox-row fault-toggle">
+              <input type="checkbox" id="swarmAutoReformChk" checked />
+              <span><strong>Auto-recover:</strong> keep monitoring the cluster and re-form on dropped nodes</span>
+            </label>
+            <button type="button" id="swarmScanBtn" class="btn-primary full-w">Form Swarm Cluster &#9656;</button>
+          </div>
+          <div id="swarmEventsList" class="swarm-live-plan" style="margin-top:10px;"></div>
+          <div id="swarmLivePlan" class="swarm-live-plan"></div>
         </div>
 
         <!-- Right Column: Swarm Topology Readout + Chromebook Wasm Launch -->
         <div class="stack-col">
-          <div class="card" id="swarmPlanOutput"></div>
-
-          <div class="card" id="swarmLiveCard">
-            <div class="section-eyebrow">LIVE LAN SWARM RUNTIME (UDP DISCOVERY + TCP HANDSHAKE)</div>
-            <h3 class="card-title">Live Swarm Node Control</h3>
-            <p class="muted-note">
-              Broadcast this device as a swarm node over the LAN, discover peers, and verify a live distributed cluster via TCP handshake before spawning llama.cpp RPC workers.
-            </p>
-            <div class="swarm-live-grid">
-              <label class="field-label">Node ID
-                <input type="text" id="swarmNodeIdInput" class="tactical-input input-sm" placeholder="auto (offgrid-<pid>)" />
-              </label>
-              <label class="field-label">VRAM (MB)
-                <input type="number" id="swarmNodeVramInput" class="tactical-input input-sm" placeholder="auto-detect" min="0" step="256" />
-              </label>
-              <label class="field-label">RAM (MB)
-                <input type="number" id="swarmNodeRamInput" class="tactical-input input-sm" placeholder="auto-detect" min="256" step="256" />
-              </label>
-              <label class="field-label">Arch
-                <input type="text" id="swarmNodeArchInput" class="tactical-input input-sm" placeholder="auto-detect" />
-              </label>
-            </div>
-            <div class="swarm-live-actions">
-              <button type="button" id="swarmStartNodeBtn" class="btn-primary">Start Node &#9656;</button>
-              <button type="button" id="swarmStopNodeBtn" class="btn-secondary">Stop Node</button>
-            </div>
-            <p class="muted-note" style="margin:6px 0 0;">
-              Leave RAM/VRAM/Arch blank to advertise this machine's real hardware automatically. On other machines, just open this app and click Start Node &#8212; everything else is automatic.
-            </p>
-            <div id="swarmLiveStatus" class="swarm-live-status muted-note">Swarm runtime idle &#8212; no node running.</div>
-            <div id="swarmNodesLive" class="swarm-live-plan" style="margin-top:8px;"></div>
-            <div style="margin-top:10px;">
-              <label class="field-label">Manual seeds (cross-subnet / tailscale &#8212; IP:PORT, comma separated)
-                <input type="text" id="swarmSeedInput" class="tactical-input input-sm" placeholder="100.79.208.5:50052, 100.96.6.124:50052" />
-              </label>
-              <label class="checkbox-row fault-toggle">
-                <input type="checkbox" id="swarmAutoReformChk" checked />
-                <span><strong>Auto-recover:</strong> keep monitoring the cluster and re-form on dropped nodes</span>
-              </label>
-              <button type="button" id="swarmScanBtn" class="btn-primary full-w">Form Swarm Cluster &#9656;</button>
-            </div>
-            <div id="swarmEventsList" class="swarm-live-plan" style="margin-top:10px;"></div>
-            <div id="swarmLivePlan" class="swarm-live-plan"></div>
+          <div class="card" id="swarmPlanCard">
+            <button type="button" id="swarmPlanBtn" class="btn-secondary" style="margin-bottom:8px;">Recompute Layer-Split Topology</button>
+            <div id="swarmPlanOutput"></div>
           </div>
 
           <div class="card" id="swarmInferenceCard">

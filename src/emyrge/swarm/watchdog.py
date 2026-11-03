@@ -38,6 +38,7 @@ class SwarmWatchdog:
         probe_timeout: float = DEFAULT_PROBE_TIMEOUT_SEC,
         reform: Optional[Callable[[List[Dict[str, Any]]], Dict[str, Any]]] = None,
         on_event: Optional[Callable[[str, str], None]] = None,
+        on_cycle: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
     ) -> None:
         # peers: [{"id","ip","port", ...}] — we track everything we've ever
         # verified for this cluster so returning peers get re-adopted.
@@ -49,6 +50,9 @@ class SwarmWatchdog:
         self.probe_timeout = float(probe_timeout)
         self._reform = reform
         self._on_event = on_event
+        # called once per probe cycle with the alive peers (used by the web app
+        # to refresh cluster-membership notices on peer web apps)
+        self._on_cycle = on_cycle
         self._lock = threading.Lock()
         self._stop_evt = threading.Event()
         self._thread: Optional[threading.Thread] = None
@@ -80,6 +84,13 @@ class SwarmWatchdog:
             except Exception as exc:  # defensive: never let the watchdog die
                 dead.append({**peer, "id": pid, "error": f"probe error: {exc}"})
         self._update_health(alive, dead)
+        if self._on_cycle:
+            alive_set = set(alive)
+            alive_peers = [dict(p, ok=True) for pid, p in self._peers.items() if pid in alive_set]
+            try:
+                self._on_cycle(alive_peers)
+            except Exception:
+                pass  # never let a cycle hook kill the watchdog
         return alive, dead
 
     def _update_health(self, alive: List[str], dead: List[Dict[str, Any]]) -> None:

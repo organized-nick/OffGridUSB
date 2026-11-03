@@ -24,6 +24,7 @@ import time
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
 import urllib.parse
+import urllib.request
 import webbrowser
 
 from emyrge.ai.model_runner import KiwixRunner, ModelRunner, probe_usb_platforms
@@ -71,6 +72,10 @@ TIER_NAMES: Dict[int, str] = {
     3: "Tier 3: Exo / llama.cpp RPC Scavenged LAN Swarm (32B)",
     4: "Tier 4: Settlement Workstation / Multi-GPU Hub (70B+)",
 }
+
+# How long a peer keeps a coordinator's cluster-membership notice before it
+# expires (the coordinator refreshes it every watchdog probe cycle).
+MEMBERSHIP_TTL_SEC = 45.0
 
 SIMULATED_PROFILES: Dict[str, Dict[str, Any]] = {
     "esp32": {
@@ -267,6 +272,9 @@ class EmyrgeRuntime:
         self.swarm_events: List[Dict[str, Any]] = []
         self.swarm_dropped: List[Dict[str, Any]] = []
         self.swarm_options: Dict[str, bool] = {"auto_reform": True}
+        # cluster-membership notice pushed to us by the coordinating node
+        # (task: peers' UIs should reflect that they joined a cluster)
+        self.swarm_membership: Dict[str, Any] = {}
         self.swarm_local_hw: Dict[str, Any] = detect_local_hardware()
         # local ip set for self-announce recognition (loopback + per-interface)
         self.swarm_local_ips: frozenset = local_ips()
@@ -804,7 +812,59 @@ class EmyrgeRuntime:
         plan = coordinator.form_cluster(seeds=seeds, discovered=[])
         with self._lock:
             self.swarm_last_plan = plan
+        self._announce_membership((plan.get("live") or {}).get("handshakes") or [])
         return plan
+
+    def _announce_membership(self, handshakes: List[Dict[str, Any]]) -> None:
+        """Tell every verified peer's web app that it is part of this cluster.
+
+        Each peer's UI then shows an "in cluster" badge (membership expires on
+        the peer after MEMBERSHIP_TTL_SEC without a refresh, so a dead
+        coordinator is reflected too). Runs in a background thread so cluster
+        formation and watchdog probe cycles never block on HTTP.
+        """
+        live_hs = [
+            h for h in (handshakes or [])
+            if isinstance(h, dict) and h.get("ok") and h.get("ip") and h.get("web_port")
+        ]
+        # never announce to ourselves (loopback web app on our own port)
+        targets = [
+            (str(h["ip"]), int(h["web_port"]))
+            for h in live_hs
+            if not (str(h["ip"]).startswith("127.") or str(h["ip"]) == "::1")
+            or int(h["web_port"]) != int(self.config.port)
+        ]
+        if not targets:
+            return
+        payload = {
+            "coordinator": f"offgrid-{os.getpid()}",
+            "coordinator_web_port": int(self.config.port),
+            "peers": [
+                {"id": h.get("id"), "ip": h.get("ip"), "port": h.get("port"),
+                 "ram_mb": h.get("ram_mb"), "vram_mb": h.get("vram_mb")}
+                for h in live_hs
+            ],
+        }
+        data = json.dumps(payload).encode("utf-8")
+
+        def _post_all() -> None:
+            for ip, wp in targets:
+                try:
+                    req = urllib.request.Request(
+                        f"http://{ip}:{wp}/api/swarm/cluster/announce",
+                        data=data,
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    urllib.request.urlopen(req, timeout=2.0).read()
+                except Exception:
+                    pass  # best-effort; peer expiry handles unreachable peers
+
+        threading.Thread(target=_post_all, daemon=True, name="swarm-membership-announce").start()
+
+    def _watchdog_cycle(self, alive_peers: List[Dict[str, Any]]) -> None:
+        """Watchdog hook: keep peer membership notices fresh every probe cycle."""
+        self._announce_membership(alive_peers)
 
     def _start_watchdog(self, plan: Dict[str, Any]) -> None:
         """Start (or replace) the health watchdog after a successful scan."""
@@ -833,6 +893,7 @@ class EmyrgeRuntime:
             peers=peers,
             reform=self._reform_cluster,
             on_event=self._swarm_event,
+            on_cycle=self._watchdog_cycle,
         )
         self.swarm_watchdog = wd
         wd.start()
@@ -853,6 +914,7 @@ class EmyrgeRuntime:
             dropped = list(self.swarm_dropped)
             events = list(self.swarm_events[-20:])
             options = dict(self.swarm_options)
+            membership = dict(self.swarm_membership) if self.swarm_membership else None
         # compute peer ages for the UI (stale detection)
         now = time.time()
         for d in discovered:
@@ -868,6 +930,13 @@ class EmyrgeRuntime:
             formed = bool(live.get("cluster_formed"))
             state = "idle" if not last_plan else ("healthy" if formed else "degraded")
             dropped_count = 0
+        # peers learn about cluster membership via the coordinator's announce
+        if membership is not None:
+            age = time.time() - float(membership.get("updated_at") or 0)
+            if age > MEMBERSHIP_TTL_SEC:
+                membership = None
+        if membership is not None and state == "idle":
+            state = "member"
         return {
             "ok": True,
             "node_running": node is not None,
@@ -881,6 +950,8 @@ class EmyrgeRuntime:
             "cluster_state": state,
             "events": events,
             "options": options,
+            "membership": membership,
+            "live_nodes": self.swarm_live_nodes(),
             "local_hardware": self.swarm_local_hw,
             "inference": self.swarm_inference.status(),
         }
@@ -938,6 +1009,26 @@ class EmyrgeRuntime:
                 "arch": d.get("arch") or "unknown", "online": True,
             }
         return list(nodes.values())
+
+    def swarm_cluster_announce(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Peer endpoint: the coordinator told us we are part of its cluster."""
+        coordinator = str(params.get("coordinator") or "unknown")
+        peers_raw = params.get("peers") if isinstance(params.get("peers"), list) else []
+        peers = [p for p in peers_raw if isinstance(p, dict) and p.get("id")]
+        with self._lock:
+            prev = self.swarm_membership.get("coordinator")
+            self.swarm_membership = {
+                "coordinator": coordinator,
+                "coordinator_web_port": params.get("coordinator_web_port"),
+                "peers": peers,
+                "updated_at": time.time(),
+            }
+        if prev != coordinator:
+            self._swarm_event(
+                "cluster_joined",
+                f"this node is part of a swarm cluster coordinated by {coordinator} ({len(peers)} peer(s) + coordinator)",
+            )
+        return {"ok": True}
 
     def swarm_set_options(self, params: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
@@ -1144,6 +1235,7 @@ class EmyrgeRuntime:
                 f"cluster formed: {len(live.get('verified_nodes') or [])} node(s) verified — {plan.get('unlocked_model', '')}",
             )
             self._start_watchdog(plan)
+            self._announce_membership(live.get("handshakes") or [])
         elif dropped_after_scan:
             self._swarm_event("scan_failed", f"no cluster: {[h.get('error') for h in dropped_after_scan]}")
         return {"ok": True, **plan}
@@ -1511,6 +1603,10 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
             if path == "/api/swarm/rpc/stop":
                 self._send_json(200, self.runtime.swarm_rpc_stop())
+                return
+
+            if path == "/api/swarm/cluster/announce":
+                self._send_json(200, self.runtime.swarm_cluster_announce(body))
                 return
 
             if path == "/api/swarm/inference/start":
