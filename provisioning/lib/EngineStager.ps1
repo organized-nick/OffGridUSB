@@ -224,7 +224,8 @@ function Invoke-EngineStaging {
             continue
         }
 
-        $archive = Join-Path $tmpDl $e.Archive
+        $archiveName = if ($e.Archive) { $e.Archive } else { [System.IO.Path]::GetFileName($e.Path) }
+        $archive = Join-Path $tmpDl $archiveName
         Invoke-ResumableDownload -Url $e.Url -Dest $archive -MagicCheck $e.Magic
 
         switch ($e.Kind) {
