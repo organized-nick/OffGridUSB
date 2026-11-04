@@ -170,22 +170,52 @@ def find_rpc_server_binary(project_root: Path) -> Optional[Path]:
     return Path(which_bin) if which_bin else None
 
 
-def discover_models(project_root: Path) -> List[Dict[str, Any]]:
-    """List valid GGUF weights in data/models/ (>= 5 MB with GGUF magic)."""
-    models_dir = Path(project_root) / "data" / "models"
+def local_model_dirs() -> List[Path]:
+    """Local-disk (non-app-dir) model directories to prefer for big models.
+
+    Tier-3 weights (20 GB+) are unusable from a slow USB/exFAT stick as a live
+    model source — the metadata scan spins forever — but the same file on the
+    local SSD loads fine. These dirs are scanned only when explicitly asked.
+    """
+    home = Path.home()
+    if os.name == "nt":
+        return [home / "Downloads", home / "swarm-tools" / "models"]
+    return [home / "models", home / ".local" / "share" / "emyrge" / "models"]
+
+
+def discover_models(project_root: Path, include_local: bool = False) -> List[Dict[str, Any]]:
+    """List valid GGUF weights (>= 5 MB with GGUF magic).
+
+    ``project_root``/data/models is the app's own model dir (the stick).
+    With ``include_local``=True, well-known local-disk model dirs are scanned
+    too and preferred — UI-launched tier-3 inference must load weights from
+    the local disk, never the stick.
+    """
+    wanted: List[tuple] = [(Path(project_root) / "data" / "models", "app")]
+    if include_local:
+        for d in local_model_dirs():
+            wanted.append((d, "local"))
     out: List[Dict[str, Any]] = []
-    if not models_dir.is_dir():
-        return out
-    for p in sorted(models_dir.glob("*.gguf")):
-        try:
-            if p.stat().st_size < 5 * 1024 * 1024:
-                continue
-            with open(p, "rb") as fh:
-                if fh.read(4) != b"GGUF":
-                    continue
-            out.append({"path": str(p), "name": p.name, "size_mb": p.stat().st_size // (1024 * 1024)})
-        except OSError:
+    seen: set = set()
+    # local-disk entries first, then the app dir; alphabetical within each
+    for d, label in sorted(wanted, key=lambda t: (t[1] != "local", str(t[0]))):
+        if not d.is_dir():
             continue
+        for p in sorted(d.glob("*.gguf")):
+            if str(p) in seen:
+                continue
+            try:
+                if p.stat().st_size < 5 * 1024 * 1024:
+                    continue
+                with open(p, "rb") as fh:
+                    if fh.read(4) != b"GGUF":
+                        continue
+                seen.add(str(p))
+                out.append({"path": str(p), "name": p.name,
+                            "size_mb": p.stat().st_size // (1024 * 1024),
+                            "source": label})
+            except OSError:
+                continue
     return out
 
 
@@ -263,6 +293,8 @@ class SwarmInference:
         self.web_port = int(web_port)
         self._event = on_event or (lambda kind, msg: None)
         self._lock = threading.RLock()
+        self._starting = False
+        self._last_error: Optional[str] = None
         self._rpc_proc: Optional[subprocess.Popen] = None
         self._rpc_port: Optional[int] = None
         self._rpc_binary: Optional[Path] = None
@@ -457,6 +489,41 @@ class SwarmInference:
         return {"ok": False, "error": f"llama-server exited or failed to open port {llama_port} (in use?)",
                 "peers": started, "plan": plan}
 
+    def start_async(self, model: str, peers: List[Dict[str, Any]],
+                    host_weight: Optional[float] = None,
+                    rpc_port: int = DEFAULT_INFERENCE_RPC_PORT,
+                    llama_port: int = DEFAULT_LLAMA_PORT,
+                    extra_args: Optional[List[str]] = None,
+                    rpc_binary: Optional[str] = None) -> Dict[str, Any]:
+        """Coordinator role, backgrounded: return immediately and run start() in a thread.
+
+        Loading a tier-3 model blocks for minutes; the web app is single-threaded
+        and must never wedge on the /api/swarm/inference/start handler. Progress
+        and the outcome surface through status() ("starting", "last_error").
+        """
+        with self._lock:
+            if self._starting:
+                return {"ok": False, "error": "a launch is already in progress"}
+            if self.llama_running():
+                return {"ok": False, "error": f"inference already running on port {self._llama_port}; stop it first"}
+            self._starting = True
+            self._last_error = None
+
+        def _run() -> None:
+            try:
+                res = self.start(model=model, peers=peers, host_weight=host_weight,
+                                 rpc_port=rpc_port, llama_port=llama_port,
+                                 extra_args=extra_args, rpc_binary=rpc_binary)
+                if not res.get("ok"):
+                    with self._lock:
+                        self._last_error = res.get("error") or "inference launch failed"
+            finally:
+                with self._lock:
+                    self._starting = False
+
+        threading.Thread(target=_run, daemon=True, name="swarm-inference-start").start()
+        return {"ok": True, "starting": True, "model": str(model)}
+
     def stop(self) -> Dict[str, Any]:
         with self._lock:
             proc, self._llama_proc, port = self._llama_proc, None, self._llama_port
@@ -509,6 +576,8 @@ class SwarmInference:
         with self._lock:
             return {
                 "running": self.llama_running(),
+                "starting": self._starting,
+                "last_error": self._last_error,
                 "llama_port": self._llama_port,
                 "model": self._llama_model,
                 "rpc_endpoints": list(self._rpc_endpoints),

@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -375,3 +376,69 @@ class TestBinaryDiscoveryFixes(unittest.TestCase):
         digest = hashlib.sha256(str(child).encode()).hexdigest()[:16]
         self.assertEqual(f"rpc_{digest}", expected)
         self.assertEqual(f"rpc_{digest}", expected)  # stable within process
+
+
+class TestLocalDiskModelPreference(unittest.TestCase):
+    """UI-launched tier-3 must load weights from local disk, never the stick."""
+
+    def test_discover_models_app_dir_only_by_default(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            mdir = root / "data" / "models"
+            mdir.mkdir(parents=True)
+            (mdir / "smollm2-135m.gguf").write_bytes(b"GGUF" + b"\0" * (5 * 1024 * 1024))
+            models = inf.discover_models(root)
+            self.assertEqual(len(models), 1)
+            self.assertEqual(models[0]["source"], "app")
+            # local dirs (real ~/.models etc.) must NOT leak into the default scan
+            self.assertEqual(models, inf.discover_models(root, include_local=False))
+
+    def test_local_dirs_preferred_and_labeled(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            stick = root / "data" / "models"
+            stick.mkdir(parents=True)
+            (stick / "huge-stick.gguf").write_bytes(b"GGUF" + b"\0" * (5 * 1024 * 1024))
+            local = root / "fakehome" / "models"
+            local.mkdir(parents=True)
+            (local / "huge-local.gguf").write_bytes(b"GGUF" + b"\0" * (6 * 1024 * 1024))
+            with unittest.mock.patch.object(inf, "local_model_dirs", return_value=[local]):
+                models = inf.discover_models(root, include_local=True)
+            self.assertEqual([m["name"] for m in models], ["huge-local.gguf", "huge-stick.gguf"])
+            self.assertEqual(models[0]["source"], "local")
+            self.assertEqual(models[1]["source"], "app")
+
+    def test_start_async_returns_immediately_and_sets_starting(self):
+        started = threading.Event()
+        released = threading.Event()
+
+        class _SlowStart(inf.SwarmInference):
+            def start(self, model, peers, **kwargs):  # noqa: A002
+                started.set()
+                released.wait(timeout=10)
+                return {"ok": False, "error": "killed"}
+
+        with tempfile.TemporaryDirectory() as td:
+            si = _SlowStart(td, on_event=lambda k, m: None)
+            (Path(td) / "model.gguf").write_bytes(b"GGUF")
+            t0 = time.time()
+            res = si.start_async(model=str(Path(td) / "model.gguf"), peers=[{"ip": "10.0.0.9", "port": 50025}])
+            self.assertTrue(res["ok"])
+            self.assertTrue(res["starting"])
+            self.assertLess(time.time() - t0, 5.0, "start_async must not block")
+            self.assertTrue(started.wait(timeout=10))
+            self.assertTrue(si.status()["starting"])
+            # a second launch while one is in flight is refused
+            dup = si.start_async(model=str(Path(td) / "model.gguf"), peers=[])
+            self.assertFalse(dup["ok"])
+            released.set()
+            for _ in range(100):
+                if not si.status()["starting"]:
+                    break
+                time.sleep(0.05)
+            self.assertFalse(si.status()["starting"])
+            self.assertEqual(si.status()["last_error"], "killed")
+
+
+if __name__ == "__main__":
+    unittest.main()

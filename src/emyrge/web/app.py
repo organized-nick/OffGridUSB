@@ -1285,7 +1285,9 @@ class EmyrgeRuntime:
         return self.swarm_inference.stop_local_rpc()
 
     def swarm_inference_models(self) -> Dict[str, Any]:
-        return {"ok": True, "models": discover_models(self.config.project_root)}
+        # include_local: prefer local-disk model copies over the stick —
+        # tier-3 weights are unusable as a live model source over slow USB
+        return {"ok": True, "models": discover_models(self.config.project_root, include_local=True)}
 
     def swarm_inference_start(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Coordinator: launch distributed inference across the verified cluster."""
@@ -1315,9 +1317,10 @@ class EmyrgeRuntime:
             return {"ok": False, "error": "no cluster peers with a web app to control — upgrade peers to this build"}
         model = str(params.get("model") or "")
         if not model:
-            models = discover_models(self.config.project_root)
+            models = discover_models(self.config.project_root, include_local=True)
             if not models:
-                return {"ok": False, "error": "no .gguf model staged in data/models/"}
+                return {"ok": False, "error": "no .gguf model staged in data/models/ or local model dirs"}
+            # models are sorted local-disk-first: never launch tier-3 off the stick
             model = models[0]["path"]
         host_w = None
         local = detect_local_hardware()
@@ -1331,7 +1334,9 @@ class EmyrgeRuntime:
             extra = params.get("extra_args") if isinstance(params.get("extra_args"), list) else None
         except Exception:
             extra = None
-        return self.swarm_inference.start(
+        # backgrounded: loading a tier-3 model blocks for minutes and the web
+        # app is single-threaded — the handler must return immediately
+        return self.swarm_inference.start_async(
             model=model,
             peers=peers,
             host_weight=host_w,
