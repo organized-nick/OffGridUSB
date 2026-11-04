@@ -148,110 +148,135 @@
   <main class="workspace">
 
     <!-- ================================================================== -->
-    <!-- TAB 1: AI PROFESSOR HARNESS (RAG + CITATIONS + 2-PASS AUDIT)       -->
+    <!-- TAB 1: AI PROFESSOR HARNESS (NATIVE CONVERSATIONAL CHAT + AUDIT)   -->
     <!-- ================================================================== -->
     <section id="tab-harness" class="tab-panel active" role="tabpanel">
-      <div class="panel-grid harness-layout">
-        <!-- Left Column: Query Controls & Stage Pitch Prompts -->
-        <div class="card control-card">
-          <div class="card-header-row">
-            <h2 class="card-title">Grounded Survival &amp; STEM Query</h2>
-            <div class="mode-toggle" id="harnessModeToggle" role="group" aria-label="Execution Mode">
-              <button type="button" class="mode-btn active" data-mode="harness">
-                Harness Mode <span class="mode-sub">AI + Citations + 2-Pass Audit</span>
-              </button>
-              <button type="button" class="mode-btn" data-mode="direct">
-                Direct Lookup <span class="mode-sub">Zero-AI Instant Passages</span>
-              </button>
-            </div>
+      <div class="card harness-chat-shell" id="harnessResponseCard">
+        <!-- Top Chat Window Header -->
+        <div class="chat-shell-header">
+          <div class="chat-shell-title-group">
+            <h2 class="card-title">Grounded Survival &amp; STEM Chat</h2>
+            <div class="strategy-hint mono" id="activeStrategyHint">Active Strategy: Grounded RAG + Safety Oracle</div>
           </div>
 
-          <form id="harnessForm" class="query-form" style="margin-top:12px;">
-            <label for="harnessInput" class="section-eyebrow" style="display:block;margin-bottom:6px;">ASK YOUR OFFLINE QUESTION</label>
-            <input type="file" id="harnessImageInput" accept="image/*" style="display:none">
-            <textarea
-              id="harnessInput"
-              rows="4"
-              placeholder="Ask any medical, water, electrical, engineering, or STEM question (100% offline)..."
-              required
-            >How do I purify 20 liters of cloudy river water using household 6% bleach?</textarea>
-            <div id="harnessImagePreviewContainer" class="hidden" style="margin:8px 0;padding:6px 10px;border:1px dashed var(--border);border-radius:6px;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.15);">
-              <img id="harnessImagePreview" src="" alt="Thumbnail" style="width:48px;height:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border);">
-              <span id="harnessImageMeta" class="mono" style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">No image attached</span>
-              <button type="button" id="harnessImageRemoveBtn" class="btn-ghost btn-xs" style="color:var(--danger,#f43f5e);" title="Remove image">✕ Remove</button>
-            </div>
-            <div class="query-actions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <button type="button" id="harnessAttachBtn" class="btn-secondary">📎 Attach Image</button>
-              <span id="harnessRoutingIndicator" class="badge badge-cyan hidden" style="font-size:11px;">Multimodal Routing Ready</span>
-              <button type="submit" class="btn-primary" id="harnessSubmitBtn" style="margin-left:auto;">
-                Execute Offline Query ▸
+          <div class="chat-shell-controls">
+            <div class="mode-toggle chat-mode-toggle" id="harnessModeToggle" role="group" aria-label="Execution Mode">
+              <button type="button" class="mode-btn active" data-mode="harness" title="AI synthesis with citations and 2-pass numerical safety verification">
+                Harness Mode <span class="mode-sub">AI + Citations + Audit</span>
+              </button>
+              <button type="button" class="mode-btn" data-mode="direct" title="Instant offline ZIM &amp; Khan passage retrieval with 0 LLM tokens">
+                Direct Lookup <span class="mode-sub">Zero-AI Passages</span>
               </button>
             </div>
-            <div class="strategy-hint mono" id="activeStrategyHint" style="margin-top:6px;">Active Strategy: Grounded RAG + Safety Oracle</div>
-          </form>
-
-          <div class="pitch-prompts-block" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border-subtle);margin-bottom:0;">
-            <div class="section-eyebrow">1-CLICK PROMPTS</div>
-            <div class="demo-prompt-grid">
-              <button type="button" class="demo-prompt-btn" data-prompt="How do I purify 20 liters of cloudy river water using household 6% bleach?">
-                <span class="prompt-tag emerald">CDC WATER + ORACLE</span>
-                How do I purify 20 liters of cloudy river water using household 6% bleach?
-              </button>
-              <button type="button" class="demo-prompt-btn" data-prompt="Field protocol for severe hypothermia and rewarming without hospital gear">
-                <span class="prompt-tag cyan">WIKIMED EMERGENCY</span>
-                Field protocol for severe hypothermia and rewarming without hospital gear
-              </button>
-              <button type="button" class="demo-prompt-btn" data-prompt="Size a 12V off-grid solar & LiFePO4 battery bank for 600Wh/day medical fridge">
-                <span class="prompt-tag amber">IEEE SOLAR SIZING</span>
-                Size a 12V off-grid solar &amp; LiFePO4 battery bank for 600Wh/day medical fridge
-              </button>
-              <button type="button" class="demo-prompt-btn" data-prompt="Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A">
-                <span class="prompt-tag cyan">KHAN STEM + NEC WIRE</span>
-                Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A
-              </button>
-            </div>
+            <button type="button" id="clearChatBtn" class="btn-ghost btn-sm hidden" title="Clear conversation history">
+              ↺ New Chat
+            </button>
           </div>
         </div>
 
-        <!-- Right Column: Rich Grounded Answer + Audit + Citations + Auto-Calculator -->
-        <div class="card response-card" id="harnessResponseCard">
-          <div class="response-meta-bar">
-            <div class="meta-badges" id="responseBadges">
-              <span class="badge badge-cyan">READY FOR STAGE DEMO</span>
-              <span class="badge badge-slate">Offline ZIM + Khan + Safety Oracles Armed</span>
+        <!-- Scrollable Multi-Turn Conversation Thread -->
+        <div id="harnessChatThread" class="chat-thread" role="log" aria-live="polite">
+          <!-- Initial Empty-Chat Welcome State -->
+          <div id="chatWelcomeState" class="chat-welcome-state">
+            <div class="response-meta-bar">
+              <div class="meta-badges" id="responseBadges">
+                <span class="badge badge-cyan">OFFLINE CHAT READY</span>
+                <span class="badge badge-slate">Offline ZIM + Khan + Safety Oracles Armed</span>
+              </div>
+              <span class="latency-readout mono" id="responseLatency">0 ms</span>
             </div>
-            <span class="latency-readout mono" id="responseLatency">0 ms</span>
-          </div>
 
-          <!-- 2-Pass Numerical Safety Audit Banner -->
-          <div id="auditBanner" class="audit-banner verified">
-            <div class="audit-icon">✓</div>
-            <div class="audit-body">
-              <div class="audit-title" id="auditTitle">2-PASS NUMERICAL SAFETY AUDIT ARMED</div>
-              <div class="audit-desc" id="auditDesc">
-                Every dosage, wattage, and measurement generated by the AI is cross-verified against offline CDC/WHO/IEEE calculators and ZIM passages before display.
+            <div id="auditBanner" class="audit-banner verified">
+              <div class="audit-icon">✓</div>
+              <div class="audit-body">
+                <div class="audit-title" id="auditTitle">2-PASS NUMERICAL SAFETY AUDIT ARMED</div>
+                <div class="audit-desc" id="auditDesc">
+                  Every dosage, wattage, and measurement generated in this chat is cross-verified against offline CDC/WHO/IEEE calculators and ZIM passages before display.
+                </div>
+              </div>
+            </div>
+
+            <div id="autoCalcCard" class="auto-calc-card hidden"></div>
+
+            <div id="harnessAnswerBody" class="answer-body welcome-answer-body">
+              <p class="placeholder-lead">
+                Select any <strong>1-Click Prompt</strong> below or ask your own question in the chat box to see grounded clickable offline citations, and deterministic safety verification live with <strong>Wi-Fi OFF &amp; 0 Telemetry</strong>.
+              </p>
+            </div>
+
+            <div class="pitch-prompts-block chat-welcome-prompts">
+              <div class="section-eyebrow">1-CLICK STARTER PROMPTS</div>
+              <div class="demo-prompt-grid chat-starter-grid">
+                <button type="button" class="demo-prompt-btn" data-prompt="How do I purify 20 liters of cloudy river water using household 6% bleach?">
+                  <span class="prompt-tag emerald">CDC WATER + ORACLE</span>
+                  How do I purify 20 liters of cloudy river water using household 6% bleach?
+                </button>
+                <button type="button" class="demo-prompt-btn" data-prompt="Field protocol for severe hypothermia and rewarming without hospital gear">
+                  <span class="prompt-tag cyan">WIKIMED EMERGENCY</span>
+                  Field protocol for severe hypothermia and rewarming without hospital gear
+                </button>
+                <button type="button" class="demo-prompt-btn" data-prompt="Size a 12V off-grid solar & LiFePO4 battery bank for 600Wh/day medical fridge">
+                  <span class="prompt-tag amber">IEEE SOLAR SIZING</span>
+                  Size a 12V off-grid solar &amp; LiFePO4 battery bank for 600Wh/day medical fridge
+                </button>
+                <button type="button" class="demo-prompt-btn" data-prompt="Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A">
+                  <span class="prompt-tag cyan">KHAN STEM + NEC WIRE</span>
+                  Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A
+                </button>
+              </div>
+            </div>
+
+            <div class="citations-tray hidden" id="citationsTray">
+              <div class="section-eyebrow">GROUNDED OFFLINE SOURCES (CLICK ANY PILL TO INSPECT PASSAGE)</div>
+              <div id="citationPillsList" class="citation-pills-list">
+                <span class="muted-note">Retrieved ZIM encyclopedia &amp; Khan curriculum citations will appear here.</span>
               </div>
             </div>
           </div>
 
-          <!-- Auto-Triggered Deterministic Calculator Card (shown dynamically) -->
-          <div id="autoCalcCard" class="auto-calc-card hidden"></div>
-
-          <!-- Main Synthesized / Grounded Answer -->
-          <div id="harnessAnswerBody" class="answer-body">
-            <p class="placeholder-lead">
-              Select any <strong>1-Click Prompt</strong> on the left or ask your own question to see grounded clickable offline citations, and deterministic safety verification live with <strong>Wi-Fi OFF &amp; 0 Telemetry</strong>.
-            </p>
-          </div>
-
-          <!-- Grounded Citations & Retrieved Offline Passages -->
-          <div class="citations-tray" id="citationsTray">
-            <div class="section-eyebrow">GROUNDED OFFLINE SOURCES (CLICK ANY PILL TO INSPECT PASSAGE)</div>
-            <div id="citationPillsList" class="citation-pills-list">
-              <span class="muted-note">Retrieved ZIM encyclopedia &amp; Khan curriculum citations will appear here.</span>
-            </div>
-          </div>
+          <!-- Dynamic Conversation Turns Append Here -->
+          <div id="chatMessagesList" class="chat-messages-list"></div>
         </div>
+
+        <!-- Compact Quick-Prompts Strip (visible during active multi-turn chat) -->
+        <div id="chatQuickPrompts" class="chat-quick-prompts hidden">
+          <span class="chat-quick-label mono">1-CLICK:</span>
+          <button type="button" class="demo-prompt-btn chat-chip-btn" data-prompt="How do I purify 20 liters of cloudy river water using household 6% bleach?">💧 20L Cloudy Water</button>
+          <button type="button" class="demo-prompt-btn chat-chip-btn" data-prompt="Field protocol for severe hypothermia and rewarming without hospital gear">🩺 Severe Hypothermia</button>
+          <button type="button" class="demo-prompt-btn chat-chip-btn" data-prompt="Size a 12V off-grid solar & LiFePO4 battery bank for 600Wh/day medical fridge">☀ 12V Solar Bank</button>
+          <button type="button" class="demo-prompt-btn chat-chip-btn" data-prompt="Teach me Ohm's Law and check voltage drop on 15m of 12 AWG wire at 20A">⚡ Ohm's Law &amp; 12 AWG</button>
+        </div>
+
+        <!-- Docked Inline Chat Composer -->
+        <form id="harnessForm" class="query-form chat-composer">
+          <label for="harnessInput" class="sr-only">Ask your offline question</label>
+          <input type="file" id="harnessImageInput" accept="image/*" style="display:none">
+
+          <div id="harnessImagePreviewContainer" class="chat-image-preview hidden">
+            <img id="harnessImagePreview" src="" alt="Thumbnail">
+            <span id="harnessImageMeta" class="mono">No image attached</span>
+            <button type="button" id="harnessImageRemoveBtn" class="btn-ghost btn-xs chat-img-remove" title="Remove image">✕ Remove</button>
+          </div>
+
+          <div class="chat-composer-box">
+            <button type="button" id="harnessAttachBtn" class="btn-secondary chat-attach-btn" title="Attach image or drag &amp; drop into chat">
+              📎 <span class="attach-label">Image</span>
+            </button>
+            <textarea
+              id="harnessInput"
+              rows="1"
+              placeholder="Ask an offline survival, medical, power, or STEM question... (Enter to send, Shift+Enter for new line)"
+            ></textarea>
+            <button type="submit" class="btn-primary chat-send-btn" id="harnessSubmitBtn">
+              Ask ▸
+            </button>
+          </div>
+
+          <div class="chat-composer-footer">
+            <span id="harnessRoutingIndicator" class="badge badge-slate hidden" style="font-size:11px;">👁 Multimodal Vision Ready</span>
+            <span class="chat-composer-hint mono">Enter to send • Shift+Enter for new line • Wi-Fi OFF &amp; 0 Telemetry</span>
+          </div>
+        </form>
       </div>
     </section>
 

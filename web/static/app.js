@@ -18,7 +18,14 @@
     memoryData: { master_notes: [], ledger: [] },
     visionItems: [],
     product: null,
+    attachedImage: null,
+    attachedImageName: "",
+    selectedModel: "auto",
+    currentTier: 2,
+    chatTurns: [],
+    nextTurnId: 1,
   };
+
 
   // --------------------------------------------------------------------------
   // Built-in Resilient Datasets & Hardware Presets (Guarantees 0 Blank Screens)
@@ -318,7 +325,133 @@
     ],
   };
 
+  function getCurrentTier() {
+    if (state.simPreset === "esp32") return -1;
+    if (state.simPreset === "pi_zero" || state.simPreset === "chromebook") return 0;
+    if (state.simPreset === "old_laptop") return 1;
+    if (state.simPreset === "swarm") return 3;
+    if (state.simPreset === "supercomputer") return 4;
+    if (state.currentTier !== undefined && state.currentTier !== null) return Number(state.currentTier);
+    if (state.product && Array.isArray(state.product.tiers)) {
+      return state.product.tiers.reduce((m, t) => Math.max(m, Number(t) || 0), 0);
+    }
+    return 1;
+  }
+
+  function applyImageGating(tier) {
+    const effectiveTier = (tier !== undefined && tier !== null) ? Number(tier) : getCurrentTier();
+    const isTier0 = effectiveTier <= 0 || state.simPreset === "pi_zero" || state.simPreset === "chromebook" || state.simPreset === "esp32";
+
+    const attachBtn = $("#harnessAttachBtn");
+    const previewContainer = $("#harnessImagePreviewContainer");
+
+    if (attachBtn) {
+      if (isTier0) {
+        attachBtn.classList.add("hidden");
+        attachBtn.disabled = true;
+      } else {
+        attachBtn.classList.remove("hidden");
+        attachBtn.disabled = false;
+      }
+    }
+
+    if (previewContainer) {
+      if (isTier0) {
+        previewContainer.classList.add("hidden");
+        state.attachedImage = null;
+        state.attachedImageName = "";
+        const img = $("#harnessImagePreview");
+        if (img) img.src = "";
+      } else {
+        if (state.attachedImage) {
+          previewContainer.classList.remove("hidden");
+        } else {
+          previewContainer.classList.add("hidden");
+        }
+      }
+    }
+
+    updateMultimodalRoutingIndicator();
+  }
+
+  function updateMultimodalRoutingIndicator() {
+    const indicator = $("#harnessRoutingIndicator");
+    if (!indicator) return;
+
+    const curTier = getCurrentTier();
+    const isTier0 = curTier <= 0 || state.simPreset === "pi_zero" || state.simPreset === "chromebook" || state.simPreset === "esp32";
+
+    if (isTier0) {
+      indicator.classList.add("hidden");
+      return;
+    }
+
+    const selModel = String(state.selectedModel || $("#modelSelect")?.value || "").toLowerCase();
+    const isVlm = selModel.includes("qwen2-vl") || selModel.includes("vl");
+
+    if (state.attachedImage) {
+      indicator.classList.remove("hidden");
+      if (curTier >= 2 && !isVlm) {
+        indicator.textContent = "⚡ Auto-Routing via Qwen2-VL-2B (Vision -> 7B/9B)";
+        indicator.className = "badge badge-cyan";
+        indicator.title = "Attached image will be visually extracted via Qwen2-VL and reasoned by the selected 7B/9B model.";
+      } else {
+        indicator.textContent = "👁 Direct Multimodal (Qwen2-VL-2B)";
+        indicator.className = "badge badge-emerald";
+        indicator.title = "Direct multimodal execution with Qwen2-VL vision model.";
+      }
+    } else {
+      indicator.classList.remove("hidden");
+      if (curTier >= 2 && !isVlm) {
+        indicator.textContent = "⚡ Multimodal Auto-Route Ready";
+        indicator.className = "badge badge-slate";
+        indicator.title = "Attach an image to enable automatic visual extraction and synthesis.";
+      } else {
+        indicator.textContent = "👁 Multimodal Vision Ready";
+        indicator.className = "badge badge-slate";
+        indicator.title = "Attach an image to execute multimodal query.";
+      }
+    }
+  }
+
+  function handleImageFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      state.attachedImage = e.target.result;
+      state.attachedImageName = file.name || "attached_image";
+      const preview = $("#harnessImagePreview");
+      const meta = $("#harnessImageMeta");
+      const container = $("#harnessImagePreviewContainer");
+      if (preview) preview.src = state.attachedImage;
+      if (meta) {
+        const szKb = Math.round(file.size / 1024);
+        meta.textContent = `${file.name} (${szKb} KB)`;
+      }
+      if (container && getCurrentTier() >= 1) {
+        container.classList.remove("hidden");
+      }
+      updateMultimodalRoutingIndicator();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeAttachedImage() {
+    state.attachedImage = null;
+    state.attachedImageName = "";
+    const preview = $("#harnessImagePreview");
+    const meta = $("#harnessImageMeta");
+    const container = $("#harnessImagePreviewContainer");
+    const input = $("#harnessImageInput");
+    if (preview) preview.src = "";
+    if (meta) meta.textContent = "No image attached";
+    if (container) container.classList.add("hidden");
+    if (input) input.value = "";
+    updateMultimodalRoutingIndicator();
+  }
+
   function applySkuGating(product) {
+
     const p = product || state.product || DEFAULT_SKU_DATA;
     state.product = p;
 
@@ -364,6 +497,7 @@
       } else if (activeModels.length > 0) {
         sel.value = activeModels[0];
       }
+      state.selectedModel = sel.value || "auto";
     });
 
     // 3. Dynamic Hardware Sim Filtering
@@ -487,7 +621,13 @@
 
     // 5. Air-Gap Hygiene & Commercial Link Elimination
     sanitizeAirGapHygiene();
+
+    // 6. Multimodal Agent Harness Tier Gating
+    state.currentTier = maxSkuTier;
+    applyImageGating(maxSkuTier);
+    updateMultimodalRoutingIndicator();
   }
+
 
   function sanitizeAirGapHygiene() {
     // Remove all external links pointing to offgridusb.com and commercial buy pills
@@ -545,6 +685,13 @@
     $("#valTier").textContent = `${tierRaw} • ${strat}`;
     $("#valTier").title = hw.tier_name || tierRaw;
     $("#activeStrategyHint").textContent = `Active Strategy: ${strat} (${state.mode === "harness" ? "Grounded RAG + 2-Pass Audit" : "Direct Zero-AI Passage"})`;
+
+    const activeHwTier = hw.tier !== undefined ? Number(hw.tier) : (data.tier !== undefined ? Number(data.tier) : undefined);
+    if (activeHwTier !== undefined) {
+      state.currentTier = activeHwTier;
+      applyImageGating(activeHwTier);
+    }
+
 
     // LLM Engine Status
     const llmRunning = svc.llm_running || svc.llm_ready || data.llm_live;
@@ -661,6 +808,16 @@
 
   async function handleHardwareSimChange(preset) {
     state.simPreset = preset;
+    let simTier = 2;
+    if (preset === "esp32") simTier = -1;
+    else if (preset === "pi_zero" || preset === "chromebook") simTier = 0;
+    else if (preset === "old_laptop") simTier = 1;
+    else if (preset === "swarm") simTier = 3;
+    else if (preset === "supercomputer") simTier = 4;
+    else if (state.currentTier !== undefined) simTier = state.currentTier;
+    state.currentTier = simTier;
+    applyImageGating(simTier);
+
     try {
       const res = await apiPost("/api/simulate-hardware", {
         preset,
@@ -669,6 +826,7 @@
         mode: preset,
       });
       renderStatus(res);
+      applyImageGating(state.currentTier);
     } catch (_) {
       if (preset === "auto") {
         await refreshStatus();
@@ -682,6 +840,7 @@
         const strat = p.tier.split("•")[1]?.trim() || "search_then_summarize";
         $("#activeStrategyHint").textContent = `Simulated Strategy: ${strat}`;
       }
+      applyImageGating(simTier);
     }
   }
 
@@ -1048,14 +1207,15 @@
     };
   }
 
-  function formatAnswerHtmlWithCitations(rawText, sources) {
+  function formatAnswerHtmlWithCitations(rawText, sources, turnId = "") {
     let html = escapeHtml(rawText);
     // Bold **...**
     html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     // Citation tags: [Source: ...] or [Lesson: ...]
+    const turnAttr = turnId ? ` data-turn-id="${escapeHtml(turnId)}"` : "";
     html = html.replace(/\[(Source|Lesson):\s*([^\]]+)\]/g, (full, kind, target) => {
       const cls = kind.toLowerCase() === "lesson" ? "cite-pill lesson" : "cite-pill";
-      return `<button type="button" class="${cls}" data-cite-kind="${escapeHtml(kind)}" data-cite-target="${escapeHtml(target)}">[${escapeHtml(kind)}: ${escapeHtml(target)}]</button>`;
+      return `<button type="button" class="${cls}"${turnAttr} data-cite-kind="${escapeHtml(kind)}" data-cite-target="${escapeHtml(target)}">[${escapeHtml(kind)}: ${escapeHtml(target)}]</button>`;
     });
     return html
       .split(/\n{2,}/)
@@ -1063,26 +1223,32 @@
       .join("");
   }
 
-  function openCitationModal(kind, target, sourceIdx) {
+  function openCitationModal(kind, target, sourceIdx, turnId = "") {
     const rawTarget = String(target || "");
     const titlePart = rawTarget.split("#")[0].trim().toLowerCase();
     const sectionPart = (rawTarget.split("#")[1] || "").trim().toLowerCase();
     const tailPart = titlePart.split("/").pop().trim();
 
+    const turnObj = turnId ? state.chatTurns.find((t) => t.id === turnId) : null;
+    const sourcePool =
+      turnObj && Array.isArray(turnObj.sources) && turnObj.sources.length > 0
+        ? turnObj.sources
+        : state.lastSources;
+
     let match = null;
-    if (sourceIdx !== undefined && sourceIdx !== null && sourceIdx !== "" && state.lastSources[Number(sourceIdx)]) {
-      match = state.lastSources[Number(sourceIdx)];
+    if (sourceIdx !== undefined && sourceIdx !== null && sourceIdx !== "" && sourcePool[Number(sourceIdx)]) {
+      match = sourcePool[Number(sourceIdx)];
     }
     if (!match) {
       match =
-        state.lastSources.find(
+        sourcePool.find(
           (s) =>
             (titlePart && String(s.title || "").trim().toLowerCase() === titlePart) ||
             (titlePart && String(s.title || "").toLowerCase().includes(titlePart)) ||
             (sectionPart && String(s.section_or_topic || "").toLowerCase().includes(sectionPart)) ||
             (tailPart && String(s.title || "").toLowerCase().includes(tailPart)) ||
             (tailPart && String(s.section_or_topic || "").toLowerCase().includes(tailPart))
-        ) || state.lastSources[0];
+        ) || sourcePool[0];
     }
 
     const isKhan = (match && match.source_type === "khan") || String(kind || "").toLowerCase() === "lesson";
@@ -1111,8 +1277,149 @@
     $("#citationModal").classList.remove("hidden");
   }
 
-  function renderHarnessResult(res, elapsedMs, queryText) {
-    state.lastSources = Array.isArray(res.sources) ? res.sources : [];
+  const LATEST_TURN_DOM_IDS = [
+    "responseBadges",
+    "responseLatency",
+    "auditBanner",
+    "auditTitle",
+    "auditDesc",
+    "autoCalcCard",
+    "harnessAnswerBody",
+    "citationPillsList",
+  ];
+
+  function releaseLatestTurnIds() {
+    LATEST_TURN_DOM_IDS.forEach((id) => {
+      const existing = document.getElementById(id);
+      if (existing) existing.removeAttribute("id");
+    });
+  }
+
+  function autoResizeChatInput() {
+    const input = $("#harnessInput");
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 150)}px`;
+  }
+
+  function scrollChatToBottom() {
+    const thread = $("#harnessChatThread");
+    if (!thread) return;
+    requestAnimationFrame(() => {
+      thread.scrollTop = thread.scrollHeight;
+    });
+  }
+
+  function appendChatTurn(queryText, attachedImageDataUrl, mode) {
+    const welcome = $("#chatWelcomeState");
+    const clearBtn = $("#clearChatBtn");
+    const quickPrompts = $("#chatQuickPrompts");
+    const list = $("#chatMessagesList");
+
+    if (welcome) welcome.classList.add("hidden");
+    if (clearBtn) clearBtn.classList.remove("hidden");
+    if (quickPrompts) quickPrompts.classList.remove("hidden");
+
+    const turnId = `turn-${state.nextTurnId++}`;
+    const nowLabel = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const displayQuery = queryText || "Analyze attached image";
+
+    const turnObj = {
+      id: turnId,
+      query: displayQuery,
+      image: attachedImageDataUrl || null,
+      mode: mode || state.mode,
+      answer: "",
+      sources: [],
+    };
+    state.chatTurns.push(turnObj);
+
+    if (list) {
+      const userEl = document.createElement("div");
+      userEl.className = "chat-turn chat-turn-user";
+      userEl.id = `chat-user-${turnId}`;
+      userEl.dataset.turnId = turnId;
+      const imgHtml = attachedImageDataUrl
+        ? `<img src="${escapeHtml(attachedImageDataUrl)}" alt="Attached field image" class="chat-user-attachment">`
+        : "";
+      userEl.innerHTML = `
+        <div class="chat-turn-meta">
+          <span>${escapeHtml(nowLabel)}</span>
+          <span class="chat-role-pill user">YOU</span>
+        </div>
+        <div class="chat-user-bubble">${imgHtml}${escapeHtml(displayQuery)}</div>
+      `;
+
+      const assistantEl = document.createElement("div");
+      assistantEl.className = "chat-turn chat-turn-assistant";
+      assistantEl.id = `chat-assistant-${turnId}`;
+      assistantEl.dataset.turnId = turnId;
+      const thinkingText =
+        mode === "direct"
+          ? "Retrieving verified offline ZIM & Khan passages (0 LLM tokens)..."
+          : "Synthesizing grounded answer & running 2-Pass Numerical Safety Audit...";
+      assistantEl.innerHTML = `
+        <div class="chat-turn-meta">
+          <span class="chat-role-pill assistant">OFFGRID AI</span>
+          <span>${mode === "direct" ? "DIRECT LOOKUP" : "HARNESS + 2-PASS AUDIT"}</span>
+        </div>
+        <div class="chat-assistant-card">
+          <div class="chat-thinking-row">
+            <span class="chat-dots" aria-hidden="true"><span></span><span></span><span></span></span>
+            <span>${escapeHtml(thinkingText)}</span>
+          </div>
+        </div>
+      `;
+
+      list.appendChild(userEl);
+      list.appendChild(assistantEl);
+    }
+
+    scrollChatToBottom();
+    return turnObj;
+  }
+
+  function clearChatHistory() {
+    state.chatTurns = [];
+    const list = $("#chatMessagesList");
+    if (list) list.innerHTML = "";
+    releaseLatestTurnIds();
+
+    const welcome = $("#chatWelcomeState");
+    if (welcome) {
+      welcome.classList.remove("hidden");
+      const wBadges = welcome.querySelector(".meta-badges");
+      const wLat = welcome.querySelector(".latency-readout");
+      const wBanner = welcome.querySelector(".audit-banner");
+      const wTitle = welcome.querySelector(".audit-title");
+      const wDesc = welcome.querySelector(".audit-desc");
+      const wCalc = welcome.querySelector(".auto-calc-card");
+      const wAns = welcome.querySelector(".answer-body");
+      const wPills = welcome.querySelector(".citation-pills-list");
+      if (wBadges) wBadges.id = "responseBadges";
+      if (wLat) wLat.id = "responseLatency";
+      if (wBanner) wBanner.id = "auditBanner";
+      if (wTitle) wTitle.id = "auditTitle";
+      if (wDesc) wDesc.id = "auditDesc";
+      if (wCalc) wCalc.id = "autoCalcCard";
+      if (wAns) wAns.id = "harnessAnswerBody";
+      if (wPills) wPills.id = "citationPillsList";
+    }
+
+    const clearBtn = $("#clearChatBtn");
+    const quickPrompts = $("#chatQuickPrompts");
+    if (clearBtn) clearBtn.classList.add("hidden");
+    if (quickPrompts) quickPrompts.classList.add("hidden");
+
+    const thread = $("#harnessChatThread");
+    if (thread) thread.scrollTop = 0;
+    const input = $("#harnessInput");
+    if (input) input.focus();
+  }
+
+  function renderHarnessResult(res, elapsedMs, queryText, turnObj = null) {
+    const sources = Array.isArray(res.sources) ? res.sources : [];
+    state.lastSources = sources;
     const autoCalc = res.autoCalc || detectInlineCalculatorForQuery(queryText);
 
     // Meta Badges
@@ -1121,19 +1428,25 @@
       res.engine ||
       (res.mode === "direct" || res.mode === "non_harness"
         ? "direct-zim-khan-index (0 LLM tokens)"
-        : $("#valLlm").textContent || "Grounded RAG Harness");
+        : $("#valLlm")?.textContent || "Grounded RAG Harness");
     const stratBadge = res.strategy ? `<span class="badge badge-slate">Strategy: ${escapeHtml(res.strategy)}</span>` : "";
     const distillBadge = res.queued_for_distillation
       ? `<span class="badge badge-amber">Queued for 70B Dock</span>`
       : "";
-    $("#responseBadges").innerHTML = `
+    const routeBadge = res.routing === "multimodal_autoroute"
+      ? `<span class="badge badge-cyan">⚡ Multimodal Auto-Route</span>`
+      : (res.visual_observation ? `<span class="badge badge-emerald">👁 Multimodal Vision</span>` : "");
+    const modelBadge = res.model_used ? `<span class="badge badge-slate">${escapeHtml(res.model_used)}</span>` : "";
+
+    const badgesHtml = `
       <span class="badge badge-emerald">${escapeHtml(engineLabel)}</span>
       <span class="badge badge-cyan">Mode: ${escapeHtml((res.mode || state.mode).toUpperCase())}</span>
+      ${modelBadge}
+      ${routeBadge}
       ${stratBadge}
-      <span class="badge badge-slate">${state.lastSources.length} Grounded Passages</span>
+      <span class="badge badge-slate">${sources.length} Grounded Passages</span>
       ${distillBadge}
     `;
-    $("#responseLatency").textContent = `${elapsedMs} ms`;
 
     // 2-Pass Numerical Safety Audit Banner
     const auditObj = res.audit || {};
@@ -1143,20 +1456,18 @@
       : Array.isArray(res.audit_flags)
         ? res.audit_flags
         : [];
-    const banner = $("#auditBanner");
-    banner.className = `audit-banner ${passed ? "verified" : "warning"}`;
-    banner.querySelector(".audit-icon").textContent = passed ? "✓" : "⚠";
-    $("#auditTitle").textContent = passed
+    const auditTitleText = passed
       ? "VERIFIED AGAINST OFFLINE SOURCES (2-PASS NUMERICAL AUDIT CLEAN)"
       : `WARNING: UNVERIFIED NUMERICAL CLAIM (${flags.length} Flagged)`;
-    $("#auditDesc").textContent = passed
+    const auditDescText = passed
       ? "All numerical dosages, wattages, and durations match deterministic CDC/WHO/IEEE calculators & retrieved ZIM passages."
       : `Flagged claims not found in retrieved context: ${flags.map((f) => f.claim || f.value || f.number || JSON.stringify(f)).join(", ")}`;
 
     // Auto-Attached Deterministic Calculator Oracle Card
-    const calcBox = $("#autoCalcCard");
     const backendCalc = res.calculator_result || res.calculator || res.calc_result;
-    if (backendCalc || autoCalc) {
+    let calcHtml = "";
+    const hasCalc = Boolean(backendCalc || autoCalc);
+    if (hasCalc) {
       const title =
         (backendCalc && (backendCalc.title || `${String(backendCalc.calculator_type || "").toUpperCase()} SAFETY ORACLE`)) ||
         (autoCalc && autoCalc.title) ||
@@ -1165,68 +1476,147 @@
         (backendCalc && (backendCalc.summary || JSON.stringify(backendCalc))) ||
         (autoCalc && autoCalc.data.summary);
       const note = (backendCalc && backendCalc.note) || (autoCalc && autoCalc.data.note) || "";
-      calcBox.classList.remove("hidden");
-      calcBox.innerHTML = `
+      calcHtml = `
         <div class="auto-calc-title">⚡ AUTO-ATTACHED DETERMINISTIC ORACLE — ${escapeHtml(title)}</div>
         <div class="auto-calc-metrics">${escapeHtml(summary)}</div>
         ${note ? `<div class="audit-desc" style="margin-top:4px;">${escapeHtml(note)}</div>` : ""}
       `;
-    } else {
-      calcBox.classList.add("hidden");
     }
 
-    // Answer Body
     const answerText = res.answer || res.response || "No response text returned.";
-    $("#harnessAnswerBody").innerHTML = formatAnswerHtmlWithCitations(answerText, state.lastSources);
+    const activeTurn = turnObj || appendChatTurn(queryText, null, res.mode || state.mode);
+    activeTurn.answer = answerText;
+    activeTurn.sources = sources;
+
+    const answerHtml = formatAnswerHtmlWithCitations(answerText, sources, activeTurn.id);
+    const pillsHtml =
+      sources.length > 0
+        ? sources
+            .map((s, idx) => {
+              const isKhan = s.source_type === "khan";
+              const kind = isKhan ? "Lesson" : "Source";
+              const label = s.section_or_topic ? `${s.title}#${s.section_or_topic}` : s.title;
+              return `<button type="button" class="cite-pill ${isKhan ? "lesson" : ""}" data-turn-id="${escapeHtml(activeTurn.id)}" data-cite-idx="${idx}" data-cite-kind="${kind}" data-cite-target="${escapeHtml(label)}">[${kind}: ${escapeHtml(label)}]</button>`;
+            })
+            .join("")
+        : `<span class="muted-note">Direct response rendered.</span>`;
+
+    releaseLatestTurnIds();
+
+    const assistantWrap = document.getElementById(`chat-assistant-${activeTurn.id}`);
+    const cardEl = assistantWrap ? assistantWrap.querySelector(".chat-assistant-card") : null;
+    if (cardEl) {
+      cardEl.innerHTML = `
+        <div class="response-meta-bar">
+          <div class="meta-badges" id="responseBadges">${badgesHtml}</div>
+          <span class="latency-readout mono" id="responseLatency">${elapsedMs} ms</span>
+        </div>
+
+        <div id="auditBanner" class="audit-banner ${passed ? "verified" : "warning"}">
+          <div class="audit-icon">${passed ? "✓" : "⚠"}</div>
+          <div class="audit-body">
+            <div class="audit-title" id="auditTitle">${escapeHtml(auditTitleText)}</div>
+            <div class="audit-desc" id="auditDesc">${escapeHtml(auditDescText)}</div>
+          </div>
+        </div>
+
+        <div id="autoCalcCard" class="auto-calc-card ${hasCalc ? "" : "hidden"}">${calcHtml}</div>
+
+        <div id="harnessAnswerBody" class="answer-body">${answerHtml}</div>
+
+        <div class="citations-tray">
+          <div class="section-eyebrow">GROUNDED OFFLINE SOURCES (CLICK ANY PILL TO INSPECT PASSAGE)</div>
+          <div id="citationPillsList" class="citation-pills-list">${pillsHtml}</div>
+        </div>
+      `;
+    }
 
     // Refresh memory vault asynchronously if an interaction was logged
     if (res.memory_id) {
       loadMemoryVault("");
     }
 
-    // Citation Pills Tray
-    const pillsTray = $("#citationPillsList");
-    if (state.lastSources.length > 0) {
-      pillsTray.innerHTML = state.lastSources
-        .map((s, idx) => {
-          const isKhan = s.source_type === "khan";
-          const kind = isKhan ? "Lesson" : "Source";
-          const label = s.section_or_topic ? `${s.title}#${s.section_or_topic}` : s.title;
-          return `<button type="button" class="cite-pill ${isKhan ? "lesson" : ""}" data-cite-idx="${idx}" data-cite-kind="${kind}" data-cite-target="${escapeHtml(label)}">[${kind}: ${escapeHtml(label)}]</button>`;
-        })
-        .join("");
-    } else {
-      pillsTray.innerHTML = `<span class="muted-note">Direct response rendered.</span>`;
+    // Smoothly keep the newly generated response in view while keeping composer ready below
+    const userTurnEl = document.getElementById(`chat-user-${activeTurn.id}`);
+    const thread = $("#harnessChatThread");
+    if (thread && userTurnEl) {
+      requestAnimationFrame(() => {
+        const remaining = thread.scrollHeight - userTurnEl.offsetTop;
+        if (remaining <= thread.clientHeight) {
+          thread.scrollTop = thread.scrollHeight;
+        } else {
+          userTurnEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
     }
   }
 
   async function runHarnessQuery(queryText) {
     const btn = $("#harnessSubmitBtn");
-    btn.disabled = true;
-    btn.textContent = "Synthesizing & Auditing...";
+    const input = $("#harnessInput");
+    const cleanQuery = String(queryText || "").trim();
+    const sentImage = state.attachedImage;
+    if (!cleanQuery && !sentImage) return;
+
+    // Clear inline chat composer immediately so it behaves like a native chat window
+    if (input) {
+      input.value = "";
+      autoResizeChatInput();
+    }
+    if (sentImage) {
+      removeAttachedImage();
+    }
+
+    const priorHistory = state.chatTurns
+      .filter((t) => t.answer)
+      .slice(-4)
+      .map((t) => ({ query: t.query, answer: t.answer }));
+
+    const turnObj = appendChatTurn(cleanQuery, sentImage, state.mode);
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Thinking…";
+    }
     const t0 = performance.now();
+
+    const curModel = state.selectedModel || $("#modelSelect")?.value || "auto";
+    const payload = {
+      prompt: cleanQuery,
+      query: cleanQuery,
+      mode: state.mode,
+      tier: getCurrentTier(),
+      history: priorHistory,
+    };
+    if (curModel && curModel !== "auto") {
+      payload.model = curModel;
+    }
+    if (sentImage) {
+      payload.image = sentImage;
+    }
 
     try {
       const res = await postFirstAvailable(
-        ["/api/query", "/api/chat", "/api/ask"],
-        [
-          { query: queryText, mode: state.mode },
-          { message: queryText, mode: state.mode },
-        ]
+        ["/api/ask", "/api/query", "/api/chat"],
+        [payload, payload]
       );
-      // If backend returned generic/empty sources on micro-ZIM, enrich smoothly if needed
       if (!res.answer || res.answer.includes("No matching offline knowledge")) {
-        const fb = buildOfflineGroundedFallback(queryText, state.mode);
-        renderHarnessResult(fb, Math.round(performance.now() - t0), queryText);
+        const fb = buildOfflineGroundedFallback(cleanQuery, state.mode);
+        renderHarnessResult(fb, Math.round(performance.now() - t0), cleanQuery, turnObj);
       } else {
-        renderHarnessResult(res, Math.round(performance.now() - t0), queryText);
+        renderHarnessResult(res, Math.round(performance.now() - t0), cleanQuery, turnObj);
       }
     } catch (_) {
-      const fb = buildOfflineGroundedFallback(queryText, state.mode);
-      renderHarnessResult(fb, Math.max(12, Math.round(performance.now() - t0)), queryText);
+      const fb = buildOfflineGroundedFallback(cleanQuery, state.mode);
+      renderHarnessResult(fb, Math.max(12, Math.round(performance.now() - t0)), cleanQuery, turnObj);
     } finally {
-      btn.disabled = false;
-      btn.textContent = "Execute Offline Query ▸";
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Ask ▸";
+      }
+      if (input) {
+        input.focus();
+      }
     }
   }
 
@@ -2352,29 +2742,110 @@
       });
     });
 
-    // 1-Click Stage Pitch Demo Prompts
+    // 1-Click Starter & Quick Chat Prompts
     $$(".demo-prompt-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         const p = btn.dataset.prompt;
-        $("#harnessInput").value = p;
-        runHarnessQuery(p);
+        if (p) runHarnessQuery(p);
       });
     });
+
+    const clearChatBtn = $("#clearChatBtn");
+    if (clearChatBtn) {
+      clearChatBtn.addEventListener("click", clearChatHistory);
+    }
+
+    // Multimodal Agent Harness Image Attach, Preview, Paste, and Drag-and-Drop
+    const attachBtn = $("#harnessAttachBtn");
+    const imageInput = $("#harnessImageInput");
+    const removeImgBtn = $("#harnessImageRemoveBtn");
+    const harnessInput = $("#harnessInput");
+    const composerBox = $(".chat-composer-box");
+
+    if (attachBtn && imageInput) {
+      attachBtn.addEventListener("click", () => imageInput.click());
+      imageInput.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          handleImageFile(e.target.files[0]);
+        }
+      });
+    }
+
+    if (removeImgBtn) {
+      removeImgBtn.addEventListener("click", () => removeAttachedImage());
+    }
+
+    if (harnessInput) {
+      harnessInput.addEventListener("input", autoResizeChatInput);
+      harnessInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+          e.preventDefault();
+          const submitBtn = $("#harnessSubmitBtn");
+          if (submitBtn && !submitBtn.disabled) {
+            $("#harnessForm").requestSubmit();
+          }
+        }
+      });
+      harnessInput.addEventListener("paste", (e) => {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) return;
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.startsWith("image/")) {
+            const file = items[i].getAsFile();
+            if (file) {
+              handleImageFile(file);
+              break;
+            }
+          }
+        }
+      });
+      harnessInput.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (composerBox) composerBox.style.borderColor = "#E8622C";
+      });
+      harnessInput.addEventListener("dragleave", (e) => {
+        e.preventDefault();
+        if (composerBox) composerBox.style.borderColor = "";
+      });
+      harnessInput.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (composerBox) composerBox.style.borderColor = "";
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+          handleImageFile(e.dataTransfer.files[0]);
+        }
+      });
+    }
+
+    // Model Selector Listener
+    const modelSelect = $("#modelSelect");
+    if (modelSelect) {
+      modelSelect.addEventListener("change", (e) => {
+        state.selectedModel = e.target.value;
+        updateMultimodalRoutingIndicator();
+      });
+      state.selectedModel = modelSelect.value || "auto";
+      updateMultimodalRoutingIndicator();
+    }
 
     $("#harnessForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const q = $("#harnessInput").value.trim();
-      if (q) runHarnessQuery(q);
+      if (q || state.attachedImage) runHarnessQuery(q);
     });
 
     // Delegated click handler for Citation Pills & Khan Interactive Tutor
     document.body.addEventListener("click", (e) => {
       const citeBtn = e.target.closest(".cite-pill");
       if (citeBtn) {
+        const turnId =
+          citeBtn.dataset.turnId ||
+          citeBtn.closest("[data-turn-id]")?.dataset.turnId ||
+          "";
         openCitationModal(
           citeBtn.dataset.citeKind || "Source",
           citeBtn.dataset.citeTarget || "",
-          citeBtn.dataset.citeIdx
+          citeBtn.dataset.citeIdx,
+          turnId
         );
         return;
       }
