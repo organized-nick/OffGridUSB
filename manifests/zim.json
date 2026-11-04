@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "description": "OffGridUSB (offgridusb.com) OpenZIM Offline Knowledge Archives Catalog (Tiers 0-4)",
+  "description": "OffGridUSB (offgridusb.com) OpenZIM Offline Knowledge Archives Catalog (Tiers 0-4, full content available on all SKUs)",
   "archives": [
     {
       "id": "zimgit-water",
@@ -131,7 +131,9 @@
       "sha256": null,
       "magic_header": "5A494D04",
       "verified_local": false,
-      "required_for_skus": ["Product1_full"],
+      "required_for_skus": [
+        "Product1_full"
+      ],
       "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en-simple_all_nopic_2026-09.zim",
       "description": "Full Simple English Wikipedia explaining scientific, historical, and technical concepts in accessible language."
     },
@@ -230,6 +232,888 @@
       ],
       "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en_all_maxi_2026-08.zim",
       "description": "The flagship 110 GB English Wikipedia complete with millions of historical photographs, charts, and illustrations."
+    },
+    {
+      "id": "armypubs-en-all",
+      "name": "US Army Publishing Directorate Field Manuals",
+      "filename": "armypubs_en_all_2024-12.zim",
+      "tier": 0,
+      "category": "military_manuals",
+      "size_bytes": 8232397824,
+      "size_mb": 7851.0,
+      "sha256": "f34f1bcb07ed2ad55abf7ba25d2c66c450e40d009f6c37d2f0b27382b2d11f04",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/armypubs_en_all_2024-12.zim",
+      "description": "US Army field manuals: survival (FM 3-05.70), first aid, mountaineering, rangers, etc. US-gov public domain."
+    },
+    {
+      "id": "cd3wd-en-all",
+      "name": "CD3WD Core Data for Development",
+      "filename": "cd3wdproject.org_en_all_2025-11.zim",
+      "tier": 0,
+      "category": "appropriate_technology",
+      "size_bytes": 581166080,
+      "size_mb": 554.2,
+      "sha256": "f79a27413af0bd17d14adb3a556d282515a8bc1e127d791a5961c93ea9167b92",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/cd3wdproject.org_en_all_2025-11.zim",
+      "description": "Hundreds of technical engineering docs for low-resource settings: agriculture, water, construction, energy."
+    },
+    {
+      "id": "appropedia-en-maxi",
+      "name": "Appropedia (Maxi)",
+      "filename": "appropedia_en_all_maxi_2026-02.zim",
+      "tier": 0,
+      "category": "appropriate_technology",
+      "size_bytes": 581642240,
+      "size_mb": 554.7,
+      "sha256": "dcf200ba723c27397e1c9a2e4891ff91fa13993df1fa285315190d8525a53469",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/appropedia_en_all_maxi_2026-02.zim",
+      "description": "Open wiki of appropriate technology, permaculture, off-grid infrastructure, and sustainability solutions."
+    },
+    {
+      "id": "energypedia-en-nopic",
+      "name": "energypedia (No-Pic)",
+      "filename": "energypedia_en_all_nopic_2026-06.zim",
+      "tier": 0,
+      "category": "appropriate_technology",
+      "size_bytes": 722590720,
+      "size_mb": 689.1,
+      "sha256": "f1b2cf0afde2927eab9acd2b6365144eae35986894c2a8eac7071045fd01d295",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/energypedia_en_all_nopic_2026-06.zim",
+      "description": "Community wiki on off-grid renewable energy, microgrids, solar PV design, and energy access."
+    },
+    {
+      "id": "readygov-en-all",
+      "name": "Ready.gov Emergency Preparedness (EN)",
+      "filename": "ready.gov_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "emergency_prep",
+      "size_bytes": 2063895552,
+      "size_mb": 1968.3,
+      "sha256": "c88ce03db2a6dd855c1075d87abb6dceac678718e0dd3fa7912009469b9ca225",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/ready.gov_en_all_2026-10.zim",
+      "description": "FEMA preparedness guidance: disaster plans, go-bags, hazard-specific response. Public domain."
+    },
+    {
+      "id": "readygov-es-all",
+      "name": "Ready.gov Emergency Preparedness (ES)",
+      "filename": "ready.gov_es_all_2026-10.zim",
+      "tier": 0,
+      "category": "emergency_prep",
+      "size_bytes": 2065999872,
+      "size_mb": 1970.3,
+      "sha256": "8be8b8a490035d4adbbb981a04325bea268ddd156a2ff7c61f49e35852665165",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/ready.gov_es_all_2026-10.zim",
+      "description": "FEMA preparedness guidance, Spanish edition. Public domain."
+    },
+    {
+      "id": "medlineplus-en-all",
+      "name": "MedlinePlus Medical Reference",
+      "filename": "medlineplus.gov_en_all_2025-01.zim",
+      "tier": 0,
+      "category": "medical_first_aid",
+      "size_bytes": 1944841216,
+      "size_mb": 1854.7,
+      "sha256": "3ce8933e8b249cf685f5f108e8f10d9a7e3becb2ee4e91f3aedb5b0cf4d2e596",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/medlineplus.gov_en_all_2025-01.zim",
+      "description": "US National Library of Medicine consumer health reference: conditions, drugs, procedures, tests."
+    },
+    {
+      "id": "worldfactbook-en-all",
+      "name": "CIA World Factbook",
+      "filename": "theworldfactbook_en_all_2026-02.zim",
+      "tier": 0,
+      "category": "situational_awareness",
+      "size_bytes": 407350272,
+      "size_mb": 388.5,
+      "sha256": "61d559d4e4e62f667697f38223f38e1e6a58a881c824733f71e924233d7ce76f",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/theworldfactbook_en_all_2026-02.zim",
+      "description": "Country profiles: geography, infrastructure, demographics, communications. US-gov public domain."
+    },
+    {
+      "id": "fas-military-medicine-en",
+      "name": "FAS Military Medicine & Warfare Reference",
+      "filename": "irp.fas.org_en_military-medicine_2026-10.zim",
+      "tier": 0,
+      "category": "military_manuals",
+      "size_bytes": 64986112,
+      "size_mb": 62.0,
+      "sha256": "9fc5e5d0302504f57a33e0d3aad9c94761cfd6caab22354ed04b9e9bad2ff57f",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/irp.fas.org_en_military-medicine_2026-10.zim",
+      "description": "Federation of American Scientists military medicine and warfare reference library."
+    },
+    {
+      "id": "nhs-medicines-en",
+      "name": "NHS Medicines A to Z",
+      "filename": "nhs.uk_en_medicines_2026-09b.zim",
+      "tier": 0,
+      "category": "medical_first_aid",
+      "size_bytes": 15323136,
+      "size_mb": 14.6,
+      "sha256": "349f7bc833aa1cfedd1cdd10fbb9ae575aac63b22e17639bfaee6568b6668b62",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/nhs.uk_en_medicines_2026-09b.zim",
+      "description": "UK National Health Service drug formulary: uses, doses, side effects for hundreds of medicines."
+    },
+    {
+      "id": "cdc-travelers-health-en",
+      "name": "CDC Travelers' Health",
+      "filename": "wwwnc.cdc.gov_en_all_2024-11.zim",
+      "tier": 0,
+      "category": "medical_first_aid",
+      "size_bytes": 178327552,
+      "size_mb": 170.1,
+      "sha256": "45c1c8d79a38a814098be41044a42d4ac7cc3dfa5cdfe398e9974e08d80591dc",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/wwwnc.cdc.gov_en_all_2024-11.zim",
+      "description": "CDC travel health notices, disease reference, vaccination guidance."
+    },
+    {
+      "id": "mdwiki-en-maxi",
+      "name": "MDWiki Medical Encyclopedia (Maxi)",
+      "filename": "mdwiki_en_all_maxi_2025-11.zim",
+      "tier": 0,
+      "category": "medical_first_aid",
+      "size_bytes": 2302838784,
+      "size_mb": 2196.2,
+      "sha256": "ee51df7860dbcab8c628aad32cf9972726ab708d784cdaf3e217d596920edf80",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/mdwiki_en_all_maxi_2025-11.zim",
+      "description": "Simplified medicine encyclopedia distilled from Wikipedia for austere clinical use."
+    },
+    {
+      "id": "quickguides-medicine-en",
+      "name": "Quick Guides for Medicine (Surviving Residency)",
+      "filename": "quickguidesformedicine_en_all_2026-06.zim",
+      "tier": 0,
+      "category": "medical_first_aid",
+      "size_bytes": 527712256,
+      "size_mb": 503.3,
+      "sha256": "28fcfa5d06fd776e690d88a68bf6392664acf8c766977b0cb7c0caf0dfb71211",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/videos/quickguidesformedicine_en_all_2026-06.zim",
+      "description": "Rapid clinical reference videos for frontline and austere medicine."
+    },
+    {
+      "id": "trueprepper-en-all",
+      "name": "TruePrepper Preparedness Archive",
+      "filename": "trueprepper.com_en_all_2026-05.zim",
+      "tier": 0,
+      "category": "prepper_community",
+      "size_bytes": 1423585280,
+      "size_mb": 1357.6,
+      "sha256": "64ddae8ca29ca24db23fae403f12af510f3f3119e09933974e91c899b41be940",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/trueprepper.com_en_all_2026-05.zim",
+      "description": "Preparedness guides: bug-out planning, stockpiling, SHTF scenarios, EDC."
+    },
+    {
+      "id": "canadian-prepper-bugoutroll-en",
+      "name": "Canadian Prepper — Bug-Out Roll",
+      "filename": "canadian-prepper_en_bugoutroll_2026-10.zim",
+      "tier": 0,
+      "category": "prepper_community",
+      "size_bytes": 879090688,
+      "size_mb": 838.4,
+      "sha256": "478c4a013a57970970c85475b33daddbae5118eaa173372c62fff6e0cd0fec4c",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/videos/canadian-prepper_en_bugoutroll_2026-10.zim",
+      "description": "Video series on bug-out bag and loadout design for evacuation scenarios."
+    },
+    {
+      "id": "lrnselfreliance-en-all",
+      "name": "Learning Self-Reliance",
+      "filename": "lrnselfreliance_en_all_2026-09.zim",
+      "tier": 0,
+      "category": "prepper_community",
+      "size_bytes": 3974044672,
+      "size_mb": 3789.9,
+      "sha256": "e5b6cb51a65c4d4d97f1f4eadbe4752891ba54ab03b70a4aa18c9f63e024897c",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/videos/lrnselfreliance_en_all_2026-09.zim",
+      "description": "Video channel on homesteading, bushcraft, food preservation, and self-reliance skills."
+    },
+    {
+      "id": "s2underground-en-all",
+      "name": "S2 Underground — Grid-Down Intelligence",
+      "filename": "s2underground_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "prepper_community",
+      "size_bytes": 5492854784,
+      "size_mb": 5238.4,
+      "sha256": "52de9dad0eec4a9e0482ae4b5d652c8f926e219eced127958671485195683d0e",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/videos/s2underground_en_all_2026-10.zim",
+      "description": "Video series on grid-down infrastructure analysis, SHTF situational awareness, and preparedness intel."
+    },
+    {
+      "id": "urban-prepper-en-all",
+      "name": "Urban Prepper",
+      "filename": "urban-prepper_en_all_2026-08.zim",
+      "tier": 0,
+      "category": "prepper_community",
+      "size_bytes": 2245235712,
+      "size_mb": 2141.2,
+      "sha256": "84e0b6212f6cd0010042fa7ed4595a5738d073a377c3e5f6c0e73e61e0e469e2",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/videos/urban-prepper_en_all_2026-08.zim",
+      "description": "Video series on apartment-scale prepping, storage food, and urban survival."
+    },
+    {
+      "id": "100r-co-en-all",
+      "name": "Hundred Rabbits (100r.co)",
+      "filename": "100r.co_en_all_2026-08.zim",
+      "tier": 0,
+      "category": "offgrid_living",
+      "size_bytes": 177187840,
+      "size_mb": 169.0,
+      "sha256": "4520e5e0b308c5c357f3707acaaff82aaa5b7ff3b788731a271522f5b9712083",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/100r.co_en_all_2026-08.zim",
+      "description": "Off-grid sailing crew's documentation of low-power computing, solar setups, and passage-making."
+    },
+    {
+      "id": "lowtech-solar-en",
+      "name": "Low-tech Magazine (Solar Edition)",
+      "filename": "solar.lowtechmagazine.com_mul_all_2025-01.zim",
+      "tier": 0,
+      "category": "offgrid_living",
+      "size_bytes": 700556288,
+      "size_mb": 668.1,
+      "sha256": "0a21bde8e3be3b80b8b7dea13118fb2190a60274f2341a5b72715f89fd049740",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/zimit/solar.lowtechmagazine.com_mul_all_2025-01.zim",
+      "description": "Solar-powered site covering low-energy technology, hand tools, and off-grid living design."
+    },
+    {
+      "id": "restarters-en-maxi",
+      "name": "Restarters Repair Wiki (Maxi)",
+      "filename": "restarters_en_all_maxi_2026-10.zim",
+      "tier": 0,
+      "category": "repair",
+      "size_bytes": 17045504,
+      "size_mb": 16.3,
+      "sha256": "c57dddaee3d82f735292ee62b4e29e9dd90ba898d5ae691863d2c56eb99999bd",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/restarters_en_all_maxi_2026-10.zim",
+      "description": "Community repair wiki: electronics, appliances, and device troubleshooting."
+    },
+    {
+      "id": "ifixit-en-all",
+      "name": "iFixit Repair Manuals (English)",
+      "filename": "ifixit_en_all_2025-12.zim",
+      "tier": 0,
+      "category": "repair",
+      "size_bytes": 3570696192,
+      "size_mb": 3405.3,
+      "sha256": "9bb5f3408707fd0300c6ef47a425c3217187f144cd9154a928183816aa72eead",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/ifixit/ifixit_en_all_2025-12.zim",
+      "description": "Tens of thousands of step-by-step device and hardware repair guides."
+    },
+    {
+      "id": "osm-wiki-en-nopic",
+      "name": "OpenStreetMap Wiki (No-Pic)",
+      "filename": "openstreetmap-wiki_en_all_nopic_2026-10.zim",
+      "tier": 0,
+      "category": "maps",
+      "size_bytes": 534241280,
+      "size_mb": 509.5,
+      "sha256": "050823b112351f6ec19a12eb1962313ae44873e873de937b606efa0ac7d77c0f",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/other/openstreetmap-wiki_en_all_nopic_2026-10.zim",
+      "description": "OSM project wiki: how mapping works, tagging, tools for offline map workflows."
+    },
+    {
+      "id": "maps-usa-en",
+      "name": "OSM Map: United States",
+      "filename": "maps_en_united-states-of-america_2026-06.zim",
+      "tier": 0,
+      "category": "maps",
+      "size_bytes": 16601606144,
+      "size_mb": 15832.5,
+      "sha256": "cfc169f5722ef68694d738eaa07f77eebd2dcc087148ff11b05bad435e0fa7e0",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/maps/maps_en_united-states-of-america_2026-06.zim",
+      "description": "Full OpenStreetMap map of the USA with roads, landmarks and address data, browsable offline."
+    },
+    {
+      "id": "maps-canada-en",
+      "name": "OSM Map: Canada",
+      "filename": "maps_en_canada_2026-06.zim",
+      "tier": 0,
+      "category": "maps",
+      "size_bytes": 11159405568,
+      "size_mb": 10642.4,
+      "sha256": "0ff4020424da52bfa2218ad02a3d604c6d73d6b3c6d3c84b39edc2088418c4ac",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/maps/maps_en_canada_2026-06.zim",
+      "description": "Full OpenStreetMap map of Canada with roads, landmarks and address data, browsable offline."
+    },
+    {
+      "id": "se-diy-en-all",
+      "name": "Home Improvement Q&A",
+      "filename": "diy.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 2086025216,
+      "size_mb": 1989.4,
+      "sha256": "df795a094698282164ddee422814f88bf84841a2413c89ac23401efd71f22731",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: construction, plumbing, electrical, workshop practice."
+    },
+    {
+      "id": "se-electronics-en-all",
+      "name": "Electronics Q&A",
+      "filename": "electronics.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 4261398528,
+      "size_mb": 4064.0,
+      "sha256": "b28e58b24ed55c602265729b34b0c6cc4e12228e6fe2f55df5b5e9eae169b266",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: circuit design, repair, embedded electronics."
+    },
+    {
+      "id": "se-outdoors-en-all",
+      "name": "The Great Outdoors Q&A",
+      "filename": "outdoors.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 141820928,
+      "size_mb": 135.3,
+      "sha256": "73752057bd2253af6cf80c69caf0def158bcf378188f0fbc7ab8ed07bbbe9bc5",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/outdoors.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: backpacking, navigation, wilderness skills."
+    },
+    {
+      "id": "se-woodworking-en-all",
+      "name": "Woodworking Q&A",
+      "filename": "woodworking.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 106657792,
+      "size_mb": 101.7,
+      "sha256": "2ba925d1028f9442c153569701868b5b7abc6dbb2551c620680a92be9272b062",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/woodworking.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: joinery, tool use, timber framing."
+    },
+    {
+      "id": "se-mechanics-en-all",
+      "name": "Motor Vehicle Mechanics Q&A",
+      "filename": "mechanics.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 341672960,
+      "size_mb": 325.8,
+      "sha256": "3b8790dcde480f466d0d55fae23941cdb1f06ff464a77168f27110f98d8eb923",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/mechanics.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: vehicle repair and diagnostics."
+    },
+    {
+      "id": "se-engineering-en-all",
+      "name": "Engineering Q&A",
+      "filename": "engineering.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 258556928,
+      "size_mb": 246.6,
+      "sha256": "5c0e625750963139cd274c4d75f310ed742a5eaf305b790e0c619f80a9d572a1",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/engineering.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: general engineering practice."
+    },
+    {
+      "id": "se-arduino-en-all",
+      "name": "Arduino Q&A",
+      "filename": "arduino.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 259577856,
+      "size_mb": 247.6,
+      "sha256": "a7fb8bba8845f4c30712d587cc369c994baf120bc1e881abfb0ca8d7937d387b",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/arduino.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: microcontrollers, sensors, DIY automation."
+    },
+    {
+      "id": "se-3dprinting-en-all",
+      "name": "3D Printing Q&A",
+      "filename": "3dprinting.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 120338432,
+      "size_mb": 114.8,
+      "sha256": "97be8fa0145f9940dc40da7faea17f99aa8f88fc9d0b7d675249aa83c9ded378",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/3dprinting.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: additive manufacturing and printer maintenance."
+    },
+    {
+      "id": "se-gis-en-all",
+      "name": "Geographic Information Systems Q&A",
+      "filename": "gis.stackexchange.com_en_all_2026-10.zim",
+      "tier": 0,
+      "category": "stackexchange",
+      "size_bytes": 2135327744,
+      "size_mb": 2036.4,
+      "sha256": "c94de77b751be71081679ec2400db0c7099ba3ef8a0d4a88a8544ccbc3be5238",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/stack_exchange/gis.stackexchange.com_en_all_2026-10.zim",
+      "description": "Stack Exchange Q&A archive: GIS, GPS, cartography, offline geodata workflows."
+    },
+    {
+      "id": "phet-en-all",
+      "name": "PhET Interactive Science Simulations",
+      "filename": "phet_en_all_2026-08.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 108981248,
+      "size_mb": 103.9,
+      "sha256": "b102abf8af1c982c498c167efe6a9099e3cb543df184b93c99421b2fdef7e1a0",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/phet/phet_en_all_2026-08.zim",
+      "description": "University of Colorado physics/chemistry/biology/math interactive simulations."
+    },
+    {
+      "id": "wikiversity-en-nopic",
+      "name": "Wikiversity (No-Pic)",
+      "filename": "wikiversity_en_all_nopic_2026-11.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 1614819328,
+      "size_mb": 1540.0,
+      "sha256": "a9b7b97ed83a28d41bf437c03a6b7d469cbadc8c134fc1ff0ecde568ca882bb2",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/wikiversity/wikiversity_en_all_nopic_2026-11.zim",
+      "description": "Wikimedia open-learning community: courses, tutorials, research."
+    },
+    {
+      "id": "libretexts-chem-en",
+      "name": "Chemistry LibreTexts",
+      "filename": "libretexts.org_en_chem_2025-01.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 2182917120,
+      "size_mb": 2081.8,
+      "sha256": "83ba2fbfe36d72abe919661de5548103bb6674749bc26531cd61f83d8a825764",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_chem_2025-01.zim",
+      "description": "Open-access chemistry textbook library."
+    },
+    {
+      "id": "libretexts-phys-en",
+      "name": "Physics LibreTexts",
+      "filename": "libretexts.org_en_phys_2026-01.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 559554560,
+      "size_mb": 533.6,
+      "sha256": "ace498581e085093cc86383439342d9ff5a4604bd87f6b82448c019e1264830f",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_phys_2026-01.zim",
+      "description": "Open-access physics textbook library."
+    },
+    {
+      "id": "libretexts-bio-en",
+      "name": "Biology LibreTexts",
+      "filename": "libretexts.org_en_bio_2025-01.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 2240947200,
+      "size_mb": 2137.1,
+      "sha256": "aa914c19a690429b5d41ccbc91ba8cf7bc2980211b998c8a4a82ef3a21375321",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_bio_2025-01.zim",
+      "description": "Open-access biology textbook library."
+    },
+    {
+      "id": "libretexts-med-en",
+      "name": "Medicine LibreTexts",
+      "filename": "libretexts.org_en_med_2025-01.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 1192567808,
+      "size_mb": 1137.3,
+      "sha256": "1def4fb3c76d347cfd2af9eabd8f8edefd24086cc17b476130f710214a5bbc1e",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_med_2025-01.zim",
+      "description": "Open-access anatomy/physiology/clinical textbook library."
+    },
+    {
+      "id": "libretexts-k12-en",
+      "name": "K-12 Education LibreTexts",
+      "filename": "libretexts.org_en_k12_2026-01.zim",
+      "tier": 0,
+      "category": "education_stem",
+      "size_bytes": 369809408,
+      "size_mb": 352.7,
+      "sha256": "101d5b54aba8ff5c6c63c263b2da6ef1a60eda3d5a600a4182bf55c6bc853895",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_k12_2026-01.zim",
+      "description": "Open-access K-12 textbook library."
+    },
+    {
+      "id": "devdocs-man-en",
+      "name": "Linux man Pages",
+      "filename": "devdocs_en_man_2026-10.zim",
+      "tier": 0,
+      "category": "software_docs",
+      "size_bytes": 29591552,
+      "size_mb": 28.2,
+      "sha256": "89f699d6b77df358847f36bd72129eeb1b7d9f9f2a16c35e550005d04cda51ac",
+      "magic_header": "5A494D04",
+      "verified_local": false,
+      "required_for_skus": [
+        "Product1",
+        "Product2",
+        "Product3",
+        "Tier3",
+        "Tier4"
+      ],
+      "url": "https://download.kiwix.org/zim/devdocs/devdocs_en_man_2026-10.zim",
+      "description": "Offline Unix manual pages for the rebuild-the-software-stack angle."
     }
   ]
 }
