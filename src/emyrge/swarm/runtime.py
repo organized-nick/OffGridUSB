@@ -11,6 +11,8 @@ and macOS with zero pip dependencies.
 
 from __future__ import annotations
 
+import ctypes
+import functools
 import ipaddress
 import json
 import os
@@ -787,18 +789,48 @@ def detect_local_hardware() -> Dict[str, Any]:
 
     Used by the web app so "Start Node" can advertise truthful inventory
     instead of the 4096 MB placeholder. Cross-platform, stdlib only.
+    Result is cached — detection runs once per process, not per HTTP request.
     """
+    return _detect_local_hardware_cached()
+
+
+@functools.lru_cache(maxsize=1)
+def _detect_local_hardware_cached() -> Dict[str, Any]:
     ram_mb = 0
     vram_mb = 0
     arch = "unknown"
     try:
         if os.name == "nt":
-            out = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "[int](Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB"],
-                capture_output=True, text=True, timeout=10,
-            ).stdout.strip()
-            ram_mb = int(float(out)) if out else 0
+            # ctypes GlobalMemoryStatusEx: instant and deterministic. The old
+            # PowerShell spawn was flaky — under memory pressure or cold start
+            # it hit the 10s timeout and the node advertised ram_mb 0 (→ 4096).
+            try:
+                class _MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+
+                stat = _MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(_MEMORYSTATUSEX)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                    ram_mb = int(stat.ullTotalPhys // (1024 * 1024))
+            except Exception:
+                ram_mb = 0
+            if not ram_mb:
+                out = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     "[int](Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB"],
+                    capture_output=True, text=True, timeout=10,
+                ).stdout.strip()
+                ram_mb = int(float(out)) if out else 0
         else:
             with open("/proc/meminfo", "r", encoding="utf-8") as fh:
                 for line in fh:

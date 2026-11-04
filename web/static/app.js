@@ -2489,8 +2489,8 @@
       const res = await apiGet("/api/swarm/inference/models");
       const models = (res && res.models) || [];
       sel.innerHTML = models.length
-        ? models.map((m) => '<option value="' + escapeHtml(m.path) + '">' + escapeHtml(m.name) + ' (' + m.size_mb + ' MB)</option>').join("")
-        : '<option value="">no models staged in data/models/</option>';
+        ? models.map((m) => '<option value="' + escapeHtml(m.path) + '">' + escapeHtml(m.name) + ' (' + m.size_mb + ' MB' + (m.source && m.source !== 'app' ? ', ' + escapeHtml(m.source) : '') + ')</option>').join("")
+        : '<option value="">no .gguf models staged</option>';
     } catch (_) {
       sel.innerHTML = '<option value="">model list unavailable</option>';
     }
@@ -2502,8 +2502,12 @@
     if (!statusEl || !inf) return;
     const launchBtn = $("#swarmInfLaunchBtn");
     const stopBtn = $("#swarmInfStopBtn");
-    if (launchBtn) launchBtn.disabled = !!inf.running;
+    if (launchBtn) launchBtn.disabled = !!inf.running || !!inf.starting;
     if (stopBtn) stopBtn.disabled = !inf.running;
+    if (inf.starting) {
+      statusEl.innerHTML = '<span class="badge badge-cyan">STARTING</span> launching distributed inference in the background — starting rpc backends on peers and loading the model…';
+      return;
+    }
     if (inf.running) {
       const peers = (inf.peers || []).map((p) => String(p.id || p.ip) + (p.ok ? " ✓" : " ✗")).join(", ");
       statusEl.innerHTML = '<span class="badge badge-emerald">RUNNING</span> llama-server :' + inf.llama_port +
@@ -2512,7 +2516,8 @@
         (inf.tensor_split ? ' · split ' + escapeHtml(String(inf.tensor_split)) : '') +
         (peers ? '<br/><span class="muted-note">peers: ' + escapeHtml(peers) + '</span>' : '');
     } else {
-      statusEl.innerHTML = '<span class="badge">IDLE</span> no distributed inference running — form a cluster above, then launch.';
+      const lastErr = inf.last_error ? '<br/><span class="muted-note">last launch failed: ' + escapeHtml(String(inf.last_error)) + '</span>' : '';
+      statusEl.innerHTML = '<span class="badge">IDLE</span> no distributed inference running — form a cluster above, then launch.' + lastErr;
     }
   }
 
@@ -2527,7 +2532,11 @@
     if (statusEl) statusEl.innerHTML = '<span class="badge badge-cyan">STARTING</span> starting rpc backends on peers and loading the model…';
     try {
       const res = await apiPost("/api/swarm/inference/start", body);
-      if (res && !res.ok && statusEl) {
+      if (res && res.ok && res.starting) {
+        // backgrounded launch: the handler returned immediately; the status
+        // poller reports STARTING → RUNNING (or the failure reason)
+        if (statusEl) statusEl.innerHTML = '<span class="badge badge-cyan">STARTING</span> launching in the background — starting rpc backends on peers and loading the model…';
+      } else if (res && !res.ok && statusEl) {
         const failed = (res.peers || []).filter((p) => !p.ok)
           .map((p) => String(p.id || p.ip) + ": " + p.detail).join(", ");
         statusEl.innerHTML = '<span class="badge" style="background:#7f1d1d;color:#fecaca;">LAUNCH FAILED</span> ' +
