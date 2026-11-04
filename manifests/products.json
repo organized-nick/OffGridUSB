@@ -6,9 +6,11 @@
     {
       "sku": "Product1",
       "product_id": "pocketsurvival",
-      "name": "OffGridUSB — PocketSurvival",
+      "name": "OffGridUSB \u2014 PocketSurvival",
       "tagline": "Ultra-Compact 8 GB Tactical Survival, Medical Reference & Offline AI USB",
-      "tiers": [0],
+      "tiers": [
+        0
+      ],
       "target_drive_type": "Standard 8 GB USB Flash Drive",
       "target_drive_size_gb": 8,
       "min_drive_capacity_bytes": 7700000000,
@@ -20,7 +22,8 @@
           "total_gb": 1.39,
           "models": [
             "smollm2-135m-instruct-q4_k_m.gguf",
-            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -35,7 +38,8 @@
           "total_gb": 3.48,
           "models": [
             "smollm2-135m-instruct-q4_k_m.gguf",
-            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+            "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -71,9 +75,12 @@
     {
       "sku": "Product2",
       "product_id": "fieldready",
-      "name": "OffGridUSB — FieldReady",
+      "name": "OffGridUSB \u2014 FieldReady",
       "tagline": "Tactical Field Survival, Clinical Medical Vault, STEM Education & 3.8B Offline AI",
-      "tiers": [0, 1],
+      "tiers": [
+        0,
+        1
+      ],
       "target_drive_type": "Standard 32 GB USB 3.2 Flash Drive (e.g. attached Drive D:)",
       "target_drive_size_gb": 32,
       "min_drive_capacity_bytes": 31450000000,
@@ -87,7 +94,10 @@
             "smollm2-135m-instruct-q4_k_m.gguf",
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
             "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -104,7 +114,10 @@
             "smollm2-135m-instruct-q4_k_m.gguf",
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
             "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -141,9 +154,13 @@
     {
       "sku": "Product3",
       "product_id": "civilizationark",
-      "name": "OffGridUSB — CivilizationArk",
+      "name": "OffGridUSB \u2014 CivilizationArk",
       "tagline": "Complete Human Knowledge Repository with 6.8M English Wikipedia & Multi-Model AI",
-      "tiers": [0, 1, 2],
+      "tiers": [
+        0,
+        1,
+        2
+      ],
       "target_drive_type": "128 GB USB 3.2 Flash Drive or SSD (Note: 64 GB is insufficient)",
       "target_drive_size_gb": 128,
       "min_drive_capacity_bytes": 120000000000,
@@ -157,7 +174,10 @@
             "smollm2-135m-instruct-q4_k_m.gguf",
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
             "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -175,7 +195,12 @@
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
             "qwen2.5-1.5b-instruct-q4_k_m.gguf",
             "llama-3.2-3b-instruct-q4_k_m.gguf",
-            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
+            "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+            "gemma-2-9b-it-Q4_K_M.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -213,9 +238,14 @@
     {
       "sku": "Tier3",
       "product_id": "swarmcluster",
-      "name": "OffGridUSB — SwarmCluster",
+      "name": "OffGridUSB \u2014 SwarmCluster",
       "tagline": "Distributed LAN Computing Swarm & 32B Scavenged Cluster",
-      "tiers": [0, 1, 2, 3],
+      "tiers": [
+        0,
+        1,
+        2,
+        3
+      ],
       "target_drive_type": "256 GB Portable SSD (USB 3.2 Gen 2)",
       "target_drive_size_gb": 256,
       "min_drive_capacity_bytes": 240000000000,
@@ -229,7 +259,10 @@
             "smollm2-135m-instruct-q4_k_m.gguf",
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
             "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-            "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+            "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -248,7 +281,12 @@
             "qwen2.5-1.5b-instruct-q4_k_m.gguf",
             "llama-3.2-3b-instruct-q4_k_m.gguf",
             "Phi-3.5-mini-instruct-Q4_K_S.gguf",
-            "qwen2.5-32b-instruct-q4_k_m.gguf"
+            "qwen2.5-32b-instruct-q4_k_m.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
+            "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+            "gemma-2-9b-it-Q4_K_M.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",
@@ -286,9 +324,15 @@
     {
       "sku": "Tier4",
       "product_id": "settlementhub",
-      "name": "OffGridUSB — SettlementHub",
+      "name": "OffGridUSB \u2014 SettlementHub",
       "tagline": "Autonomous Community Hub with 110 GB Illustrated Wikipedia, 70B AI & LoRa Mesh",
-      "tiers": [0, 1, 2, 3, 4],
+      "tiers": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
       "target_drive_type": "512 GB / 1 TB NVMe SSD in Rugged Enclosure",
       "target_drive_size_gb": 512,
       "min_drive_capacity_bytes": 480000000000,
@@ -305,7 +349,12 @@
             "llama-3.2-3b-instruct-q4_k_m.gguf",
             "Phi-3.5-mini-instruct-Q4_K_S.gguf",
             "qwen2.5-32b-instruct-q4_k_m.gguf",
-            "llama-3.3-70b-instruct-q4_k_m.gguf"
+            "llama-3.3-70b-instruct-q4_k_m.gguf",
+            "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+            "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+            "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
+            "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+            "gemma-2-9b-it-Q4_K_M.gguf"
           ],
           "zim_archives": [
             "zimgit-water_en_2024-08.zim",

@@ -2,9 +2,12 @@
   "schema_version": "1.0",
   "sku": "Product2",
   "product_id": "fieldready",
-  "name": "OffGridUSB — FieldReady",
+  "name": "OffGridUSB \u2014 FieldReady",
   "tagline": "Tactical Field Survival, Clinical Medical Vault, STEM Education & 3.8B Offline AI",
-  "tiers": [0, 1],
+  "tiers": [
+    0,
+    1
+  ],
   "target_drive_size_gb": 32,
   "min_drive_capacity_bytes": 31450000000,
   "features": [
@@ -28,7 +31,10 @@
     "smollm2-135m-instruct-q4_k_m.gguf",
     "qwen2.5-0.5b-instruct-q4_k_m.gguf",
     "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-    "Phi-3.5-mini-instruct-Q4_K_S.gguf"
+    "Phi-3.5-mini-instruct-Q4_K_S.gguf",
+    "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
+    "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
+    "mmproj-Qwen2-VL-2B-Instruct-f16.gguf"
   ],
   "active_zim_archives": [
     "zimgit-water_en_2024-08.zim",

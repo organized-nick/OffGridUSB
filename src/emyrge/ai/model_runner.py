@@ -662,6 +662,65 @@ class KiwixRunner:
                     self._proc = None
 
 
+def discover_mmproj(
+    model_path: Optional[Any] = None,
+    models_dir: Optional[Any] = None,
+) -> Optional[Path]:
+    """Auto-locates matching mmproj-*.gguf files in the model's directory or data/models/."""
+    search_dirs: List[Path] = []
+    model_p = Path(model_path) if model_path is not None else None
+
+    if model_p is not None:
+        if model_p.is_file():
+            search_dirs.append(model_p.parent)
+        elif model_p.is_dir():
+            search_dirs.append(model_p)
+
+    if models_dir is not None:
+        md = Path(models_dir)
+        if md not in search_dirs and md.is_dir():
+            search_dirs.append(md)
+
+    if not search_dirs:
+        for candidate_rel in (Path("data/models"), Path("models")):
+            if candidate_rel.is_dir() and candidate_rel not in search_dirs:
+                search_dirs.append(candidate_rel)
+
+    candidates: List[Path] = []
+    for sdir in search_dirs:
+        if not sdir.is_dir():
+            continue
+        try:
+            for item in sorted(sdir.glob("*.gguf")):
+                name_low = item.name.lower()
+                if "mmproj" in name_low and item.is_file():
+                    try:
+                        if item.stat().st_size > 1024:
+                            with open(item, "rb") as f:
+                                if f.read(4) == b"GGUF":
+                                    candidates.append(item)
+                    except OSError:
+                        continue
+        except OSError:
+            continue
+
+    if not candidates:
+        return None
+
+    if model_p is not None:
+        mname = model_p.name.lower()
+        is_vlm = any(k in mname for k in ("-vl-", "-vl_", "_vl_", "vl-2b", "qwen2-vl", "-vl."))
+        if is_vlm:
+            for token in ("qwen2-vl-2b", "qwen2-vl", "qwen2_vl", "vl"):
+                for c in candidates:
+                    if token in c.name.lower():
+                        return c
+            return candidates[0]
+        return None
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # ModelRunner (Port 8082)
 # ---------------------------------------------------------------------------
@@ -686,6 +745,7 @@ class ModelRunner:
         self._proc: Optional[subprocess.Popen] = None
         self._active_model: Optional[Path] = None
         self._active_binary: Optional[Path] = None
+        self._active_mmproj: Optional[Path] = None
         self._lock = threading.RLock()
         atexit.register(self.stop)
 
@@ -776,7 +836,12 @@ class ModelRunner:
         which_bin = shutil.which("llama-server") or shutil.which("llama-server.exe")
         return Path(which_bin) if which_bin else None
 
-    def discover_model(self) -> Optional[Path]:
+    def discover_mmproj(self, model_path: Optional[Any] = None) -> Optional[Path]:
+        """Auto-locates matching mmproj-*.gguf for this runner or a specific model."""
+        target = Path(model_path) if model_path is not None else (self._active_model or self.discover_model())
+        return discover_mmproj(target, models_dir=self.models_dir)
+
+    def discover_model(self, preferred_model: Optional[str] = None) -> Optional[Path]:
         """Discovers valid .gguf weights in data/models/ (> 5 MB to skip partial files).
 
         Boot-time selection skips models larger than currently available physical
@@ -789,6 +854,9 @@ class ModelRunner:
         ggufs: List[Path] = []
         for p in sorted(self.models_dir.glob("*.gguf")):
             try:
+                # Skip mmproj vision projector files from being selected as the base LLM
+                if p.name.lower().startswith("mmproj") or "-mmproj" in p.name.lower():
+                    continue
                 # GGUF magic check ('GGUF') + minimum complete header/weights threshold
                 if p.stat().st_size < 5 * 1024 * 1024:
                     continue
@@ -801,6 +869,13 @@ class ModelRunner:
         if not ggufs:
             return None
 
+        # 0. Preferred model parameter (e.g. from /api/ask request or UI selector)
+        if preferred_model:
+            pref_lower = preferred_model.lower().replace(".gguf", "")
+            for g in ggufs:
+                if pref_lower in g.name.lower():
+                    return g
+
         # 1. Explicit model override via environment variable
         explicit_model = os.environ.get("OFFGRIDUSB_MODEL") or os.environ.get("EMYRGE_MODEL")
         if explicit_model:
@@ -811,9 +886,13 @@ class ModelRunner:
 
         # 2. Check explicit tier constraint (e.g. EMYRGE_TIER="0" forces Tier 0 model)
         tier_env = os.environ.get("EMYRGE_TIER") or os.environ.get("OFFGRIDUSB_TIER")
-        if tier_env == "0":
+        if tier_env in ("0", "0.0"):
             for g in ggufs:
-                if "qwen2.5-0.5b" in g.name.lower():
+                g_low = g.name.lower()
+                if "0.5b" in g_low and "q8_0" in g_low:
+                    return g
+            for g in ggufs:
+                if "0.5b" in g.name.lower():
                     return g
             for g in ggufs:
                 if "smollm2-135m" in g.name.lower():
@@ -821,29 +900,49 @@ class ModelRunner:
 
         # 3. Dynamic tier-aware prioritization:
         # Prioritize highest tier staged in data/models/:
-        # Tier 4 (Llama 3.3 70B) > Tier 3 (Qwen 2.5 32B) > Tier 2 (Llama 3.2 3B) >
-        # Tier 1 (Qwen 2.5 1.5B) > Tier 0 (Qwen 2.5 0.5B) > Tier 0 (SmolLM2 135M)
+        # Tier 4 (Llama 3.3 70B) > Tier 3 (Qwen 2.5 32B) >
+        # Tier 2 (Gemma 2 9B / Qwen 2.5 7B / Llama 3.2 3B) >
+        # Tier 1 (Qwen2-VL 2B / Qwen 2.5 1.5B) >
+        # Tier 0 (Qwen 2.5 0.5B Q8_0 / Qwen 2.5 0.5B / SmolLM2 135M)
         tier_priority_patterns = [
             "llama-3.3-70b",
             "qwen2.5-32b",
+            "gemma-2-9b-it-q4",
+            "gemma-2-9b",
+            "qwen2.5-7b-instruct-q4",
+            "qwen2.5-7b",
             "llama-3.2-3b",
+            "qwen2-vl-2b-instruct-q4",
+            "qwen2-vl-2b",
             "qwen2.5-1.5b",
+            "qwen2.5-0.5b-q8_0",
             "qwen2.5-0.5b",
             "smollm2-135m",
         ]
 
         allowed_patterns = tier_priority_patterns
-        if tier_env == "3":
+        if tier_env in ("3", "3.0"):
             allowed_patterns = [p for p in tier_priority_patterns if "70b" not in p]
         elif tier_env in ("2", "2.0"):
             allowed_patterns = [p for p in tier_priority_patterns if "70b" not in p and "32b" not in p]
         elif tier_env in ("1", "1.0"):
-            allowed_patterns = [p for p in tier_priority_patterns if not any(k in p for k in ("70b", "32b", "3.2-3b"))]
+            allowed_patterns = [
+                p for p in tier_priority_patterns
+                if not any(k in p for k in ("70b", "32b", "9b", "7b", "3.2-3b"))
+            ]
+        elif tier_env in ("0", "0.0"):
+            allowed_patterns = ["qwen2.5-0.5b-q8_0", "qwen2.5-0.5b", "smollm2-135m"]
 
         avail_mb = _available_ram_mb()
         for pat in allowed_patterns:
             for g in ggufs:
-                if pat in g.name.lower():
+                g_low = g.name.lower()
+                matched = (
+                    ("0.5b" in g_low and "q8_0" in g_low)
+                    if pat == "qwen2.5-0.5b-q8_0"
+                    else (pat in g_low)
+                )
+                if matched:
                     if avail_mb is not None and g.stat().st_size > avail_mb * 1024 * 1024:
                         # won't fit in what's free right now — leave it for explicit launch
                         continue
@@ -854,6 +953,7 @@ class ModelRunner:
         if fitting:
             return max(fitting, key=lambda p: p.stat().st_size)
         return max(ggufs, key=lambda p: p.stat().st_size)
+
 
     def is_healthy(self, timeout: float = 0.6) -> bool:
         """Checks HTTP `/health` on llama-server."""
@@ -879,84 +979,146 @@ class ModelRunner:
         except Exception:
             return False
 
-    def ensure_started(self) -> bool:
+    def wait_until_ready(self, timeout: float = 90.0) -> bool:
+        """Waits until llama-server completes loading the model and reports HTTP 200 health."""
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.is_ready_for_inference(timeout=0.5):
+                return True
+            time.sleep(0.5)
+        return False
+
+    def switch_model(self, model: Any) -> bool:
+        """Stops the active llama-server process and restarts with the requested model."""
+        with self._lock:
+            self.stop()
+            if os.name == "nt":
+                try:
+                    res = subprocess.run(
+                        ["netstat", "-ano", "-p", "tcp"],
+                        capture_output=True,
+                        text=True,
+                        timeout=3,
+                    )
+                    for line in res.stdout.splitlines():
+                        if f":{self.port} " in line and "LISTENING" in line:
+                            pid = line.strip().split()[-1]
+                            if pid.isdigit() and int(pid) > 4:
+                                subprocess.run(["taskkill", "/F", "/PID", pid], capture_output=True, timeout=2)
+                except Exception:
+                    pass
+
+            for _ in range(30):
+                if not _is_port_open(self.host, self.port, timeout=0.1):
+                    break
+                time.sleep(0.1)
+
+            if isinstance(model, Path) and model.is_file():
+                target_model = model
+            else:
+                target_model = self.discover_model(str(model))
+
+            self._active_model = target_model
+            return self._spawn_server(target_model)
+
+    def _spawn_server(self, model: Optional[Path]) -> bool:
+        """Directly launches llama-server subprocess for the given model path."""
+        binary = self.discover_binary()
+        if not binary or not model or not model.is_file():
+            return False
+
+        mmproj_path = self.discover_mmproj(model)
+
+        threads = self.optimal_threads()
+        is_llamafile = "llamafile" in binary.name.lower()
+        if is_llamafile:
+            llamafile_args = [
+                str(binary),
+                "--server",
+                "--nobrowser",
+                "-m",
+                str(model),
+                "--host",
+                self.host,
+                "--port",
+                str(self.port),
+                "-c",
+                str(self.context_size),
+                "--threads",
+                str(threads),
+            ]
+            if mmproj_path and mmproj_path.is_file():
+                llamafile_args.extend(["--mmproj", str(mmproj_path)])
+            cmd = llamafile_args if os.name == "nt" else ["/bin/sh"] + llamafile_args
+        else:
+            cmd = [
+                os.path.normpath(str(binary)),
+                "-m",
+                os.path.normpath(str(model)),
+                "--host",
+                self.host,
+                "--port",
+                str(self.port),
+                "-c",
+                str(self.context_size),
+                "--threads",
+                str(threads),
+            ]
+            if mmproj_path and mmproj_path.is_file():
+                cmd.extend(["--mmproj", os.path.normpath(str(mmproj_path))])
+
+        env = os.environ.copy()
+        if os.name != "nt":
+            lib_dir = str(binary.parent)
+            env["LD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
+            env["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('DYLD_LIBRARY_PATH', '')}".rstrip(":")
+
+        kwargs: Dict[str, Any] = {
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "stdin": subprocess.DEVNULL,
+            "cwd": str(binary.parent),
+            "env": env,
+        }
+        if hasattr(subprocess, "CREATE_NO_WINDOW"):
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+        try:
+            self._proc = subprocess.Popen(cmd, **kwargs)
+            self._active_model = model
+            self._active_binary = binary
+            self._active_mmproj = mmproj_path
+            for _ in range(8):
+                if _is_port_open(self.host, self.port, timeout=0.2):
+                    break
+                time.sleep(0.25)
+            return self._proc.poll() is None
+        except OSError:
+            self._proc = None
+            return False
+
+    def ensure_started(self, preferred_model: Optional[str] = None) -> bool:
         """Spawns llama-server in background if binary and .gguf exist and port 8082 isn't active."""
         with self._lock:
             if self._proc is not None and self._proc.poll() is None:
-                return True
+                if preferred_model:
+                    pref_low = str(preferred_model).lower()
+                    if self._active_model and pref_low in self._active_model.name.lower():
+                        return True
+                    self.stop()
+                else:
+                    return True
             if _is_port_open(self.host, self.port, timeout=0.25):
                 if self._active_model is None:
-                    self._active_model = self.discover_model()
+                    self._active_model = self.discover_model(preferred_model)
                 return True
 
-            binary = self.discover_binary()
-            model = self.discover_model()
-            if not binary or not model:
-                return False
-
-            threads = self.optimal_threads()
-            is_llamafile = "llamafile" in binary.name.lower()
-            if is_llamafile:
-                llamafile_args = [
-                    str(binary),
-                    "--server",
-                    "--nobrowser",
-                    "-m",
-                    str(model),
-                    "--host",
-                    self.host,
-                    "--port",
-                    str(self.port),
-                    "-c",
-                    str(self.context_size),
-                    "--threads",
-                    str(threads),
-                ]
-                # On Linux/macOS, invoke Cosmopolitan APE polyglot via /bin/sh so FAT32 noexec & WSL binfmt never block it
-                cmd = llamafile_args if os.name == "nt" else ["/bin/sh"] + llamafile_args
-            else:
-                cmd = [
-                    os.path.normpath(str(binary)),
-                    "-m",
-                    os.path.normpath(str(model)),
-                    "--host",
-                    self.host,
-                    "--port",
-                    str(self.port),
-                    "-c",
-                    str(self.context_size),
-                    "--threads",
-                    str(threads),
-                ]
-
-            env = os.environ.copy()
-            if os.name != "nt":
-                lib_dir = str(binary.parent)
-                env["LD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
-                env["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('DYLD_LIBRARY_PATH', '')}".rstrip(":")
-
-            kwargs: Dict[str, Any] = {
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-                "stdin": subprocess.DEVNULL,
-                "cwd": str(binary.parent),
-                "env": env,
-            }
-            if hasattr(subprocess, "CREATE_NO_WINDOW"):
-                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
-
-            try:
-                self._proc = subprocess.Popen(cmd, **kwargs)
-                self._active_model = model
-                self._active_binary = binary
-                for _ in range(8):
-                    if _is_port_open(self.host, self.port, timeout=0.2):
-                        break
-                    time.sleep(0.25)
-                return self._proc.poll() is None
-            except OSError:
-                self._proc = None
-                return False
+            model = (
+                self._active_model
+                if (self._active_model and self._active_model.is_file())
+                else self.discover_model(preferred_model)
+            )
+            return self._spawn_server(model)
 
     def complete_chat(
         self,
@@ -965,9 +1127,11 @@ class ModelRunner:
         max_tokens: int = 320,
         fallback_sources: Optional[List[Dict[str, Any]]] = None,
         calculator_summary: Optional[str] = None,
+        image: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Calls llama-server `/v1/chat/completions` (timeout 25s).
         Falls back cleanly to deterministic grounded synthesis if server isn't ready.
+        Supports multimodal image input (data URI or base64) via OpenAI-compatible payloads.
         """
         self.ensure_started()
 
@@ -979,10 +1143,20 @@ class ModelRunner:
                     break
 
         if self.is_ready_for_inference(timeout=0.5):
+            if image:
+                image_str = str(image).strip()
+                image_uri = image_str if image_str.startswith("data:") else f"data:image/png;base64,{image_str}"
+                user_content: Any = [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": image_uri}},
+                ]
+            else:
+                user_content = user_prompt
+
             payload = {
                 "messages": [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
+                    {"role": "user", "content": user_content},
                 ],
                 "max_tokens": max_tokens,
                 "temperature": 0.15,
@@ -997,7 +1171,7 @@ class ModelRunner:
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(req, timeout=25.0) as resp:
+                with urllib.request.urlopen(req, timeout=420.0) as resp:
                     resp_data = json.loads(resp.read().decode("utf-8", errors="ignore"))
                 choices = resp_data.get("choices") or []
                 if choices:
@@ -1009,6 +1183,8 @@ class ModelRunner:
                             "text": text,
                             "engine": f"llama-server ({model_name})",
                             "live_llm": True,
+                            "usage": resp_data.get("usage", {}),
+                            "timings": resp_data.get("timings", {}),
                         }
             except Exception:
                 pass
@@ -1018,6 +1194,7 @@ class ModelRunner:
             user_prompt=user_prompt,
             fallback_sources=fallback_sources or [],
             calculator_summary=calculator_summary,
+            image=image,
         )
         return {
             "text": synthesized,
@@ -1040,6 +1217,7 @@ class ModelRunner:
         user_prompt: str,
         fallback_sources: Optional[List[Dict[str, Any]]] = None,
         calculator_summary: Optional[str] = None,
+        image: Optional[str] = None,
     ) -> str:
         """Produces a clear, structured, citation-backed answer directly from retrieved offline sources."""
         sections: List[str] = []
@@ -1101,14 +1279,19 @@ class ModelRunner:
                         running = self.ensure_started()
                 finally:
                     self._lock.release()
+        mmproj_name = self._active_mmproj.name if self._active_mmproj else (
+            self.discover_mmproj(model).name if (model and self.discover_mmproj(model)) else None
+        )
         return {
             "llm_running": running,
             "llm_ready": self.is_ready_for_inference(timeout=0.25) if running else False,
             "llm_port": self.port,
             "llm_model": model.name if model else "deterministic-fallback (awaiting .gguf)",
             "llm_engine": binary.name if binary else "grounded-synthesis-fallback",
+            "llm_mmproj": mmproj_name,
             "platforms_ready": probe_usb_platforms(self.project_root),
         }
+
 
     def stop(self) -> None:
         with self._lock:
