@@ -132,6 +132,30 @@ def _extract_posix_tar_runtime(archive_path: Path, slot_name: str, prefixes: tup
     return None
 
 
+def _available_ram_mb() -> Optional[int]:
+    """Best-effort available physical RAM in MB (None if undetectable).
+
+    Used to keep boot-time auto-selection from loading a gguf larger than
+    what the machine can actually hold right now (wedged the windows box
+    when the 32B tier-3 model was staged on the USB stick).
+    """
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "[int](Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            return int(float(out)) if out else None
+        with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+            for line in fh:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except Exception:
+        pass
+    return None
+
+
 def probe_usb_platforms(project_root: Path) -> List[Dict[str, Any]]:
     """Checks all cross-platform binaries staged on the portable USB drive."""
     targets = [
@@ -753,7 +777,13 @@ class ModelRunner:
         return Path(which_bin) if which_bin else None
 
     def discover_model(self) -> Optional[Path]:
-        """Discovers valid .gguf weights in data/models/ (> 5 MB to skip partial files)."""
+        """Discovers valid .gguf weights in data/models/ (> 5 MB to skip partial files).
+
+        Boot-time selection skips models larger than currently available physical
+        RAM (2026-11-03: the 32B tier-3 gguf staged on the slow exFAT USB stick
+        wedged the windows box at boot — metadata scan over USB + 19GB of
+        working set on a 16GB machine). Explicit OFFGRIDUSB_MODEL/EMYRGE_MODEL
+        env overrides are still honored (the operator asked for it)."""
         if not self.models_dir.is_dir():
             return None
         ggufs: List[Path] = []
@@ -810,12 +840,19 @@ class ModelRunner:
         elif tier_env in ("1", "1.0"):
             allowed_patterns = [p for p in tier_priority_patterns if not any(k in p for k in ("70b", "32b", "3.2-3b"))]
 
+        avail_mb = _available_ram_mb()
         for pat in allowed_patterns:
             for g in ggufs:
                 if pat in g.name.lower():
+                    if avail_mb is not None and g.stat().st_size > avail_mb * 1024 * 1024:
+                        # won't fit in what's free right now — leave it for explicit launch
+                        continue
                     return g
 
-        # 4. Fallback: select largest valid .gguf by file size
+        # 4. Fallback: select largest valid .gguf by file size that still fits free RAM
+        fitting = [g for g in ggufs if avail_mb is None or g.stat().st_size <= avail_mb * 1024 * 1024]
+        if fitting:
+            return max(fitting, key=lambda p: p.stat().st_size)
         return max(ggufs, key=lambda p: p.stat().st_size)
 
     def is_healthy(self, timeout: float = 0.6) -> bool:
