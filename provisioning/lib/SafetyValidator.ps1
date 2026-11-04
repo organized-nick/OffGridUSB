@@ -350,6 +350,43 @@ function Get-FilesystemPlan {
     return $plan
 }
 
+function Find-CandidateUsbDrives {
+    [CmdletBinding()]
+    param()
+
+    $sysLetter = ($env:SystemDrive -replace "[:\\/\s]", "").ToUpper()
+    if (-not $sysLetter) { $sysLetter = "C" }
+
+    $candidates = @()
+    Get-Volume -ErrorAction SilentlyContinue | Where-Object {
+        $_.DriveLetter -and $_.DriveLetter.ToString().ToUpper() -notin @("C", $sysLetter) -and $_.Size -gt 0
+    } | Sort-Object DriveLetter | ForEach-Object {
+        $vol = $_
+        $dl = $vol.DriveLetter.ToString().ToUpper()
+        try {
+            $part = Get-Partition -DriveLetter $dl -ErrorAction Stop
+            $disk = Get-Disk -Number $part.DiskNumber -ErrorAction Stop
+            if ($disk.Number -ne 0 -and -not $disk.IsBoot -and -not $disk.IsSystem -and -not $part.IsBoot -and -not $part.IsSystem) {
+                if ($disk.BusType -eq "USB" -or $vol.DriveType -eq "Removable") {
+                    $candidates += [PSCustomObject]@{
+                        DriveLetter     = $dl
+                        DiskNumber      = $disk.Number
+                        FriendlyName    = $disk.FriendlyName
+                        BusType         = $disk.BusType
+                        FileSystem      = $vol.FileSystem
+                        FileSystemLabel = $vol.FileSystemLabel
+                        SizeBytes       = $vol.Size
+                        SizeGB          = [math]::Round($vol.Size / 1e9, 2)
+                        SizeGiB         = [math]::Round($vol.Size / 1GB, 2)
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    return $candidates
+}
+
 if ($MyInvocation.MyCommand.ModuleName) {
-    Export-ModuleMember -Function Assert-TargetDriveSafety, Assert-DriveCapacity, Get-DriveRunningProcesses, Stop-TargetDriveProcesses, Test-IsAdministrator, Get-FilesystemPlan -ErrorAction SilentlyContinue
+    Export-ModuleMember -Function Assert-TargetDriveSafety, Assert-DriveCapacity, Get-DriveRunningProcesses, Stop-TargetDriveProcesses, Test-IsAdministrator, Get-FilesystemPlan, Find-CandidateUsbDrives -ErrorAction SilentlyContinue
 }

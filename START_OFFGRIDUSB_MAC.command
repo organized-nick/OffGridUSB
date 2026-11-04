@@ -3,59 +3,67 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "${SCRIPT_DIR}"
+export PYTHONDONTWRITEBYTECODE=1
 
-# ==============================================================================
-# Pre-Flight Storage Integrity Check: Detect Counterfeit Phantom Sectors (<2.0s)
-# ==============================================================================
+clear 2>/dev/null || true
+cat <<'BANNER'
+================================================================================
+    ____   __  __  _____      _     _ _    _  _____ ____      _______
+   / __ \ / _|/ _|/ ____|    (_)   | | |  | |/ ____|  _ \    |  ___  |===+
+  | |  | | |_| |_| |  __ _ __ _  __| | |  | | (___ | |_) |   | [AI+] |:::|
+  | |  | |  _|  _| | |_ | '__| |/ _` | |  | |\___ \|  _ <    | [ZIM] |:::|
+  | |__| | | | | | |__| | |  | | (_| | |__| |____) | |_) |   |_______|===+
+   \____/|_| |_|  \_____|_|  |_|\__,_|\____/|_____/|____/   OFFGRIDUSB.COM
+--------------------------------------------------------------------------------
+  macOS USB Portable Edition (Apple Silicon ARM64 & Intel x86_64)
+  Zero Docker  |  Zero Cloud  |  100% Air-Gapped
+  Signed: @TheBlindHacker  *  @johndikeman  *  @organized-nick  *  OffGridUSB Team
+  [*] 100% Air-Gapped Offline Operation: Zero External Network Access Required
+================================================================================
+BANNER
+echo "  Active USB Mount     : ${SCRIPT_DIR}"
+echo "  Offline ZIM Library  : http://127.0.0.1:8081"
+echo "================================================================================"
+echo "  [1/2] Verifying flash media integrity..."
+
 check_integrity() {
     local target_files=()
-    
-    # 1. High-LBA Canary file
+
     if [[ -f "${SCRIPT_DIR}/data/.integrity_canary" ]]; then
         target_files+=("${SCRIPT_DIR}/data/.integrity_canary")
     fi
-    
-    # 2. Large content assets (ZIM and GGUF)
-    for f in "${SCRIPT_DIR}"/data/zim/*.zim "${SCRIPT_DIR}"/data/models/*.gguf; do
+
+    for f in "${SCRIPT_DIR}"/data/zim/*.zim; do
         if [[ -f "${f}" ]]; then
             target_files+=("${f}")
+            break
         fi
     done
-    
-    # 3. Fallback to bin archives if no data assets staged yet
-    if [[ ${#target_files[@]} -eq 0 ]]; then
-        for f in "${SCRIPT_DIR}"/bin/*/*.tar.gz "${SCRIPT_DIR}"/bin/*/*/*; do
-            if [[ -f "${f}" ]]; then
-                target_files+=("${f}")
-                if [[ ${#target_files[@]} -ge 4 ]]; then break; fi
-            fi
-        done
-    fi
-    
+    for f in "${SCRIPT_DIR}"/data/models/*.gguf; do
+        if [[ -f "${f}" ]]; then
+            target_files+=("${f}")
+            break
+        fi
+    done
+
     for f in "${target_files[@]}"; do
         if [[ ! -s "${f}" ]]; then
             continue
         fi
-        
-        # Check Head (first 512 bytes)
+
         local non_null_head
-        non_null_head=$(dd if="${f}" bs=512 count=1 2>/dev/null | tr -d '\000' | wc -c)
+        non_null_head=$(head -c 512 "${f}" 2>/dev/null | LC_ALL=C tr -d '\000' | wc -c || echo 1)
         if [[ "${non_null_head}" -eq 0 ]]; then
             return 1
         fi
-        
-        # Check Tail for large files (> 10MB)
+
         local fsize
-        fsize=$(wc -c < "${f}" 2>/dev/null || echo 0)
+        fsize=$(stat -f %z "${f}" 2>/dev/null || wc -c < "${f}" 2>/dev/null || echo 0)
         if [[ "${fsize}" -gt 10485760 ]]; then
             local non_null_tail
-            local blocks=$(( fsize / 512 ))
-            if [[ "${blocks}" -gt 0 ]]; then
-                local skip_blocks=$(( blocks - 1 ))
-                non_null_tail=$(dd if="${f}" bs=512 skip="${skip_blocks}" count=1 2>/dev/null | tr -d '\000' | wc -c)
-                if [[ "${non_null_tail}" -eq 0 ]]; then
-                    return 1
-                fi
+            non_null_tail=$(tail -c 512 "${f}" 2>/dev/null | LC_ALL=C tr -d '\000' | wc -c || echo 1)
+            if [[ "${non_null_tail}" -eq 0 ]]; then
+                return 1
             fi
         fi
     done
@@ -75,38 +83,8 @@ if ! check_integrity; then
     exit 1
 fi
 
-PORT="${EMYRGE_PORT:-8000}"
-
-clear 2>/dev/null || true
-cat <<'BANNER'
-================================================================================
-    ____   __  __  _____      _     _ _    _  _____ ____      _______
-   / __ \ / _|/ _|/ ____|    (_)   | | |  | |/ ____|  _ \    |  ___  |===+
-  | |  | | |_| |_| |  __ _ __ _  __| | |  | | (___ | |_) |   | [AI+] |:::|
-  | |  | |  _|  _| | |_ | '__| |/ _` | |  | |\___ \|  _ <    | [ZIM] |:::|
-  | |__| | | | | | |__| | |  | | (_| | |__| |____) | |_) |   |_______|===+
-   \____/|_| |_|  \_____|_|  |_|\__,_|\____/|_____/|____/   OFFGRIDUSB.COM
---------------------------------------------------------------------------------
-  macOS USB Portable Edition (Apple Silicon ARM64 & Intel x86_64)
-  Zero Docker  |  Zero Cloud  |  100% Air-Gapped
-  Signed: @TheBlindHacker  •  @johndikeman  •  @organized-nick  •  OffGridUSB Team
-  [*] 100% Air-Gapped Offline Operation: Zero External Network Access Required
-================================================================================
-BANNER
-echo "  Local Command Center : http://127.0.0.1:${PORT}"
-echo "  Offline ZIM Library  : http://127.0.0.1:8081"
-echo "================================================================================"
+echo "  [2/2] Starting OffGridUSB Engine & opening web client..."
 echo ""
-
-(
-    for _ in {1..30}; do
-        if curl -sf "http://127.0.0.1:${PORT}/api/status" >/dev/null 2>&1; then
-            break
-        fi
-        sleep 0.5
-    done
-    open "http://127.0.0.1:${PORT}" >/dev/null 2>&1 || true
-) &
 
 RUNNER="${SCRIPT_DIR}/run_macos.command"
 if [[ ! -f "${RUNNER}" && -f "${SCRIPT_DIR}/bin/run_macos.command" ]]; then
@@ -114,4 +92,4 @@ if [[ ! -f "${RUNNER}" && -f "${SCRIPT_DIR}/bin/run_macos.command" ]]; then
 fi
 
 chmod +x "${RUNNER}" 2>/dev/null || true
-exec bash "${RUNNER}" --host 127.0.0.1 --port "${PORT}" --headless
+exec /bin/bash "${RUNNER}" "$@"

@@ -384,6 +384,18 @@ if ($Info) {
     exit 0
 }
 
+# Auto-detect connected external USB drive (D:, E:, F:, etc.) when -Drive is omitted
+if (-not $Drive) {
+    $detectedUsb = @(Find-CandidateUsbDrives)
+    if ($detectedUsb.Count -eq 1) {
+        $Drive = $detectedUsb[0].DriveLetter
+        Write-Host ">>> Auto-detected external USB drive on port '${Drive}:' ($($detectedUsb[0].FriendlyName), $($detectedUsb[0].SizeGiB) GiB)" -ForegroundColor Cyan
+    } elseif ($detectedUsb.Count -gt 1 -and $NonInteractive) {
+        $portsList = ($detectedUsb | ForEach-Object { "$($_.DriveLetter): ($($_.FriendlyName), $($_.SizeGiB) GiB)" }) -join ", "
+        throw "Multiple external USB drives detected ($portsList). Please specify -Drive <Letter> explicitly."
+    }
+}
+
 # ------------------------------------------------------------------------------
 # 3. Interactive Menu (If invoked without required parameters)
 # ------------------------------------------------------------------------------
@@ -685,6 +697,13 @@ if ($fsPlan.ResolvedAction -eq "FormatExFAT") {
     Get-ChildItem -Path $targetRoot -Force -ErrorAction SilentlyContinue | Where-Object {
         $_.Name -ne "System Volume Information"
     } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($fsPlan.FileSystemLabel)) {
+        try {
+            Set-Volume -DriveLetter $cleanDrive -NewFileSystemLabel "OFFGRIDUSB" -ErrorAction Stop | Out-Null
+        } catch {
+            & cmd.exe /c "label ${cleanDrive}: OFFGRIDUSB" >$null 2>&1
+        }
+    }
     Write-Host "  [OK] Volume clean wiped." -ForegroundColor Green
 }
 

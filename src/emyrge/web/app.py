@@ -237,6 +237,7 @@ class EmyrgeRuntime:
         self._lock = threading.RLock()
         self.simulated_tier: str = "auto"
         self.host_cpu_model: str = _detect_host_cpu_model()
+        self._hw_probe_cache: Optional[Tuple[float, Any]] = None
         self.product_info: Dict[str, Any] = load_product_sku(self.config.project_root)
 
         # Initialize Memory & Visual Vaults
@@ -315,7 +316,13 @@ class EmyrgeRuntime:
             profile = HardwareProbe.probe_system(mock_data=preset["mock"])
             cpu_model = preset["cpu_model"]
         else:
-            profile = HardwareProbe.probe_system()
+            now_mono = time.monotonic()
+            cached = self._hw_probe_cache
+            if cached is not None and (now_mono - cached[0]) < 15.0:
+                profile = cached[1]
+            else:
+                profile = HardwareProbe.probe_system()
+                self._hw_probe_cache = (now_mono, profile)
             if self.config.tier_override is not None:
                 profile.tier = self.config.tier_override
             cpu_model = self.host_cpu_model
@@ -1561,6 +1568,17 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         try:
+            if path in ("/api/ping", "/healthz"):
+                self._send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "service": "offgridusb",
+                        "port": self.runtime.config.port,
+                    },
+                )
+                return
+
             if path in ("/api/status", "/api/health", "/api/telemetry"):
                 self._send_json(200, self.runtime.get_status_payload())
                 return
@@ -1894,13 +1912,50 @@ def create_server(config: Optional[EmyrgeConfig] = None) -> Tuple[ReusableThread
     return server, runtime
 
 
+def _probe_port_state(host: str, preferred_port: int) -> str:
+    """Probes `host:preferred_port` and returns `EXISTING:<port>` if OffGridUSB is active,
+    or `FREE:<port>` with either `preferred_port` or the first unbound port in `+1..+20`.
+    """
+    probe_host = "127.0.0.1" if host in ("0.0.0.0", "") else host
+
+    def _port_open(p: int) -> bool:
+        try:
+            with socket.create_connection((probe_host, p), timeout=0.25):
+                return True
+        except OSError:
+            return False
+
+    if not _port_open(preferred_port):
+        return f"FREE:{preferred_port}"
+
+    for ep in ("/api/ping", "/api/status"):
+        try:
+            with urllib.request.urlopen(f"http://{probe_host}:{preferred_port}{ep}", timeout=1.5) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                if data.get("service") == "offgridusb" or "product" in data or "hardware" in data:
+                    return f"EXISTING:{preferred_port}"
+        except Exception:
+            pass
+
+    for candidate in range(preferred_port + 1, preferred_port + 21):
+        if not _port_open(candidate):
+            return f"FREE:{candidate}"
+    return f"FREE:{preferred_port}"
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="OffGridUSB (offgridusb.com) Zero-Dependency HTTP Backend")
     parser.add_argument("--host", default=os.environ.get("EMYRGE_HOST", "127.0.0.1"), help="Bind host address")
     parser.add_argument("--port", type=int, default=int(os.environ.get("EMYRGE_PORT", "8000")), help="Bind TCP port")
+    parser.add_argument("--auto-port", action="store_true", help="Automatically fall back to next free port if busy")
+    parser.add_argument("--probe-port", action="store_true", help="Print EXISTING:<port> or FREE:<port> and exit")
     parser.add_argument("--headless", action="store_true", help="Headless server mode")
     parser.add_argument("--tier", type=int, default=None, help="Optional hardware tier override (-1..4)")
     args, _ = parser.parse_known_args(argv)
+
+    if args.probe_port:
+        print(_probe_port_state(args.host, args.port))
+        return 0
 
     base_cfg = EmyrgeConfig.from_env()
     base_cfg.host = args.host
@@ -1910,11 +1965,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.tier is not None:
         base_cfg.tier_override = HardwareTier(args.tier)
 
-    try:
-        server, runtime = create_server(base_cfg)
-    except OSError as e:
+    server = None
+    runtime = None
+    last_err: Optional[OSError] = None
+    candidate_ports = [base_cfg.port]
+    if args.auto_port:
+        candidate_ports.extend([p for p in range(base_cfg.port + 1, base_cfg.port + 21)])
+
+    for candidate_port in candidate_ports:
+        base_cfg.port = candidate_port
+        try:
+            server, runtime = create_server(base_cfg)
+            break
+        except OSError as e:
+            last_err = e
+            continue
+
+    if server is None or runtime is None:
         sys.stderr.write(
-            f"[ERROR] Failed to bind {base_cfg.host}:{base_cfg.port} ({e}). "
+            f"[ERROR] Failed to bind {base_cfg.host}:{args.port} ({last_err}). "
             f"Try specifying a free port with --port <PORT>.\n"
         )
         return 1

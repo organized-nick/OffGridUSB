@@ -957,6 +957,38 @@ class OffGridUSBAuditor:
                     )
                 )
 
+        # Optional Linux desktop launcher forensic audit (pure LF + no BOM + [Desktop Entry])
+        desktop_launcher = self.drive / "START_OFFGRIDUSB_LINUX.desktop"
+        if desktop_launcher.is_file():
+            raw_desk = desktop_launcher.read_bytes()
+            has_desk_bom = raw_desk.startswith(b"\xef\xbb\xbf")
+            desk_cr = raw_desk.count(b"\r")
+            has_header = b"[Desktop Entry]" in raw_desk
+            if not has_desk_bom and desk_cr == 0 and has_header:
+                self.results.append(
+                    CheckResult(
+                        category="Script Forensics / Launcher Scripts",
+                        check_name="Linux Desktop Launcher (START_OFFGRIDUSB_LINUX.desktop)",
+                        target=str(desktop_launcher),
+                        status=AuditStatus.PASS,
+                        expected="[Desktop Entry], 0 CR, No BOM",
+                        observed=f"{raw_desk.count(b'\\n')} LF lines, 0 CR, No BOM",
+                        details="Valid Freedesktop .desktop launcher for Linux file managers",
+                    )
+                )
+            else:
+                self.results.append(
+                    CheckResult(
+                        category="Script Forensics / Launcher Scripts",
+                        check_name="Linux Desktop Launcher (START_OFFGRIDUSB_LINUX.desktop)",
+                        target=str(desktop_launcher),
+                        status=AuditStatus.FAIL,
+                        expected="[Desktop Entry], 0 CR, No BOM",
+                        observed=f"BOM={has_desk_bom}, CR={desk_cr}, header={has_header}",
+                        details="Invalid formatting in START_OFFGRIDUSB_LINUX.desktop",
+                    )
+                )
+
         script_targets = [
             "START_OFFGRIDUSB_LINUX.sh",
             "START_OFFGRIDUSB_MAC.command",
@@ -1206,7 +1238,19 @@ class OffGridUSBAuditor:
 
             if code == 200:
                 missing_zims = []
-                target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
+                sku_zims = None
+                sku_json_path = self.drive / "manifests" / "product_sku.json"
+                if sku_json_path.exists():
+                    try:
+                        sku_data = json.loads(sku_json_path.read_text(encoding="utf-8"))
+                        if sku_data.get("active_zim_archives"):
+                            sku_zims = set(sku_data["active_zim_archives"])
+                    except Exception:
+                        pass
+                if sku_zims is not None:
+                    target_zims = [z for z in self.zim_manifest if z.get("filename") in sku_zims]
+                else:
+                    target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
                 for z in target_zims:
                     z_id = z.get("id", "")
                     base_name = z.get("filename", "").replace(".zim", "")

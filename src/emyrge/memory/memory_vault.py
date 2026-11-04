@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import sqlite3
 import threading
@@ -72,7 +73,11 @@ class MemoryVault:
             import shutil
             import tempfile
 
-            tmp_db = Path(tempfile.gettempdir()) / "emyrge_runtime" / "vault" / "memory.sqlite"
+            tmp_base = Path(tempfile.gettempdir()) / "emyrge_runtime"
+            if tmp_base.exists() and not os.access(tmp_base, os.W_OK):
+                uid = os.getuid() if hasattr(os, "getuid") else os.getpid()
+                tmp_base = Path(tempfile.gettempdir()) / f"emyrge_runtime_{uid}"
+            tmp_db = tmp_base / "vault" / "memory.sqlite"
             try:
                 tmp_db.parent.mkdir(parents=True, exist_ok=True)
                 if self.db_path_str != ":memory:" and Path(self.db_path_str).is_file() and not tmp_db.is_file():

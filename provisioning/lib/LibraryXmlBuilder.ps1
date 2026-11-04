@@ -59,7 +59,7 @@ function Build-LibraryXml {
     $settings = New-Object System.Xml.XmlWriterSettings
     $settings.Indent = $true
     $settings.IndentChars = "  "
-    $settings.Encoding = [System.Text.Encoding]::UTF8
+    $settings.Encoding = New-Object System.Text.UTF8Encoding($false)
 
     $writer = [System.Xml.XmlWriter]::Create($OutputXmlPath, $settings)
     $xml.Save($writer)

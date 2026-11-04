@@ -96,6 +96,7 @@ function Get-WhitelistedStagingPlan {
     $rootFiles = @(
         "START_OFFGRIDUSB_WINDOWS.bat",
         "START_OFFGRIDUSB_LINUX.sh",
+        "START_OFFGRIDUSB_LINUX.desktop",
         "START_OFFGRIDUSB_MAC.command",
         "run_windows.bat",
         "run_linux.sh",
@@ -227,15 +228,18 @@ function Enforce-LfLineEndings {
         [string]$TargetRoot
     )
 
-    $shellScripts = Get-ChildItem -Path $TargetRoot -Include "*.sh", "*.command" -Recurse -File -ErrorAction SilentlyContinue
+    $shellScripts = Get-ChildItem -Path $TargetRoot -Include "*.sh", "*.command", "*.desktop" -Recurse -File -ErrorAction SilentlyContinue
     $fixedCount = 0
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
     foreach ($file in $shellScripts) {
         $raw = [System.IO.File]::ReadAllBytes($file.FullName)
-        if ($raw -contains 13) { # 0x0D carriage return found
-            $text = [System.Text.Encoding]::UTF8.GetString($raw)
+        $hasBom = ($raw.Length -ge 3 -and $raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF)
+        if (($raw -contains 13) -or $hasBom) {
+            $offset = if ($hasBom) { 3 } else { 0 }
+            $text = [System.Text.Encoding]::UTF8.GetString($raw, $offset, $raw.Length - $offset)
             $lfText = $text -replace "`r`n", "`n" -replace "`r", "`n"
-            [System.IO.File]::WriteAllBytes($file.FullName, [System.Text.Encoding]::UTF8.GetBytes($lfText))
+            [System.IO.File]::WriteAllBytes($file.FullName, $utf8NoBom.GetBytes($lfText))
             $fixedCount++
         }
     }
@@ -297,8 +301,8 @@ function Assert-CustomerUsbHygiene {
         }
     }
 
-    # 5. Assert strict LF line endings on shell scripts
-    foreach ($sh in @("START_OFFGRIDUSB_LINUX.sh", "START_OFFGRIDUSB_MAC.command", "run_linux.sh", "run_macos.command")) {
+    # 5. Assert strict LF line endings on shell scripts and Linux desktop entry
+    foreach ($sh in @("START_OFFGRIDUSB_LINUX.sh", "START_OFFGRIDUSB_LINUX.desktop", "START_OFFGRIDUSB_MAC.command", "run_linux.sh", "run_macos.command")) {
         $p = Join-Path $root $sh
         if (Test-Path $p) {
             $bytes = [System.IO.File]::ReadAllBytes($p)

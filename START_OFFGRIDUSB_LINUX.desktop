@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Start OffGridUSB
+Comment=Launch OffGridUSB Offline Knowledge & AI Command Center
+Icon=utilities-terminal
+Terminal=true
+StartupNotify=true
+Categories=Utility;Education;Science;
+Exec=/bin/sh -c 'k="$1"; k="${k#file://}"; if command -v python3 >/dev/null 2>&1 && [ -n "$k" ]; then k="$(python3 -c "import sys,urllib.parse; print(urllib.parse.unquote(sys.argv[1]))" "$k" 2>/dev/null || printf "%s" "$k")"; fi; d=""; if [ -n "$k" ] && [ -f "$(dirname "$k")/START_OFFGRIDUSB_LINUX.sh" ]; then d="$(dirname "$k")"; elif [ -f "./START_OFFGRIDUSB_LINUX.sh" ]; then d="$PWD"; else for m in "/media/${USER:-$(id -un)}"/* "/run/media/${USER:-$(id -un)}"/* /media/*/* /run/media/*/* /mnt/*; do if [ -f "$m/START_OFFGRIDUSB_LINUX.sh" ]; then d="$m"; break; fi; done; fi; if [ -z "$d" ]; then echo "[ERROR] Could not locate START_OFFGRIDUSB_LINUX.sh on mounted USB media."; read -r -p "Press Enter to close..." _; exit 1; fi; cd "$d" && exec /bin/bash ./START_OFFGRIDUSB_LINUX.sh' _ %k

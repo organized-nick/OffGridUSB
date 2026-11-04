@@ -60,6 +60,35 @@ def _find_binary_in_dir(directory: Path, prefixes: tuple[str, ...]) -> Optional[
     return None
 
 
+def _get_posix_runtime_base() -> Path:
+    """Returns a writable /tmp runtime directory (falls back per-UID if /tmp/emyrge_runtime is owned by another user)."""
+    default_base = Path(tempfile.gettempdir()) / "emyrge_runtime"
+    try:
+        if default_base.exists():
+            if os.access(default_base, os.W_OK | os.X_OK):
+                return default_base
+        else:
+            default_base.mkdir(parents=True, exist_ok=True)
+            return default_base
+    except OSError:
+        pass
+    uid = os.getuid() if hasattr(os, "getuid") else os.getpid()
+    uid_base = Path(tempfile.gettempdir()) / f"emyrge_runtime_{uid}"
+    try:
+        uid_base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return uid_base
+
+
+def _find_free_port(host: str, preferred: int, start: int, end: int) -> int:
+    """Returns `preferred` if available, otherwise scans `start..end` for an unbound port."""
+    for candidate in [preferred] + [p for p in range(start, end + 1) if p != preferred]:
+        if not _is_port_open(host, candidate, timeout=0.15):
+            return candidate
+    return preferred
+
+
 def _ensure_posix_executable(binary_path: Path) -> Path:
     """Ensures a binary has +x permission on POSIX; copies to /tmp/emyrge_runtime if USB is mounted noexec."""
     if os.name == "nt":
@@ -69,10 +98,31 @@ def _ensure_posix_executable(binary_path: Path) -> Path:
     except OSError:
         pass
     if os.access(binary_path, os.X_OK):
-        return binary_path
+        # Verify filesystem itself is not mounted `noexec` by checking /proc/mounts when available
+        noexec_mount = False
+        try:
+            resolved_str = str(binary_path.resolve())
+            if os.path.isfile("/proc/mounts"):
+                best_mp = ""
+                best_opts = ""
+                with open("/proc/mounts", "r", encoding="utf-8", errors="ignore") as mf:
+                    for line in mf:
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            mp = parts[1].replace("\\040", " ")
+                            if resolved_str == mp or resolved_str.startswith(mp.rstrip("/") + "/"):
+                                if len(mp) > len(best_mp):
+                                    best_mp = mp
+                                    best_opts = parts[3]
+                if "noexec" in best_opts.split(","):
+                    noexec_mount = True
+        except OSError:
+            pass
+        if not noexec_mount:
+            return binary_path
 
-    # USB drive is likely FAT32/exFAT mounted with noexec; stage into /tmp/emyrge_runtime
-    runtime_dir = Path(tempfile.gettempdir()) / "emyrge_runtime" / "bin_exec"
+    # USB drive is likely FAT32/exFAT mounted with noexec or fmask=0133; stage into /tmp/emyrge_runtime
+    runtime_dir = _get_posix_runtime_base() / "bin_exec"
     try:
         runtime_dir.mkdir(parents=True, exist_ok=True)
         staged = runtime_dir / binary_path.name
@@ -85,6 +135,7 @@ def _ensure_posix_executable(binary_path: Path) -> Path:
 
 
 _TAR_EXTRACT_LOCK = threading.RLock()
+_PLATFORM_PROBE_CACHE: Dict[str, tuple[float, List[Dict[str, Any]]]] = {}
 
 
 def _extract_posix_tar_runtime(archive_path: Path, slot_name: str, prefixes: tuple[str, ...]) -> Optional[Path]:
@@ -93,7 +144,7 @@ def _extract_posix_tar_runtime(archive_path: Path, slot_name: str, prefixes: tup
     """
     if os.name == "nt" or not archive_path.is_file() or archive_path.stat().st_size < 10240:
         return None
-    base_runtime = Path(tempfile.gettempdir()) / "emyrge_runtime"
+    base_runtime = _get_posix_runtime_base()
     runtime_slot = base_runtime / slot_name
     marker = runtime_slot / ".extracted_ok"
 
@@ -156,8 +207,14 @@ def _available_ram_mb() -> Optional[int]:
     return None
 
 
-def probe_usb_platforms(project_root: Path) -> List[Dict[str, Any]]:
+def probe_usb_platforms(project_root: Path, cache_ttl: float = 30.0) -> List[Dict[str, Any]]:
     """Checks all cross-platform binaries staged on the portable USB drive."""
+    cache_key = str(project_root)
+    now = time.monotonic()
+    cached = _PLATFORM_PROBE_CACHE.get(cache_key)
+    if cached is not None and (now - cached[0]) < cache_ttl:
+        return cached[1]
+
     targets = [
         {
             "id": "windows_x86_64",
@@ -279,6 +336,7 @@ def probe_usb_platforms(project_root: Path) -> List[Dict[str, Any]]:
                 "size_mb": size_mb,
             }
         )
+    _PLATFORM_PROBE_CACHE[cache_key] = (now, results)
     return results
 
 
@@ -469,10 +527,19 @@ class KiwixRunner:
                 continue
         return valid
 
+    def _is_kiwix_endpoint(self) -> bool:
+        """Checks whether the active listener on self.port is actually kiwix-serve."""
+        try:
+            req = urllib.request.Request(f"{self.base_url}/catalog/v2/entries")
+            with urllib.request.urlopen(req, timeout=0.6) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
     def is_running(self) -> bool:
         if self._proc is not None and self._proc.poll() is None:
             return True
-        return _is_port_open(self.host, self.port, timeout=0.25)
+        return _is_port_open(self.host, self.port, timeout=0.25) and self._is_kiwix_endpoint()
 
     def ensure_started(self) -> bool:
         """Starts kiwix-serve if binary + ZIMs exist (or restarts if newly downloaded ZIMs arrived)."""
@@ -482,10 +549,12 @@ class KiwixRunner:
             if not zims and not lib_xml.is_file():
                 return self.is_running()
 
-            # If already running externally and we didn't spawn it, keep using it
+            # If already running externally and it is actually Kiwix, keep using it; otherwise pick a free port
             if self._proc is None and _is_port_open(self.host, self.port, timeout=0.25):
-                self._mounted_zims = zims
-                return True
+                if self._is_kiwix_endpoint():
+                    self._mounted_zims = zims
+                    return True
+                self.port = _find_free_port(self.host, self.port, 8083, 8095)
 
             # Restart if new ZIMs finished downloading since initial start
             if self._proc is not None and self._proc.poll() is None:
@@ -758,14 +827,20 @@ class ModelRunner:
         logical = os.cpu_count() or 4
         return max(1, min(8, logical // 2 if logical >= 4 else logical))
 
-    def discover_binary(self) -> Optional[Path]:
-        """Discovers host-compatible llama-server or polyglot llamafile binary."""
+    def discover_binaries(self) -> List[Path]:
+        """Discovers all host-compatible llama-server and polyglot llamafile binaries in priority order."""
         sys_name = platform.system().lower()
         mach = platform.machine().lower()
         is_arm = mach in ("arm64", "aarch64")
 
-        candidates: List[Path] = []
+        found: List[Path] = []
+
+        def _add(p: Optional[Path]) -> None:
+            if p is not None and p not in found:
+                found.append(p)
+
         if sys_name == "windows":
+            candidates: List[Path] = []
             if is_arm:
                 candidates.append(self.project_root / "bin" / "windows_arm64" / "llama" / "llama-server.exe")
             candidates.extend(
@@ -777,7 +852,7 @@ class ModelRunner:
             )
             for c in candidates:
                 if c.is_file() and c.stat().st_size > 1024:
-                    return c
+                    _add(c)
         elif sys_name == "darwin":
             if is_arm:
                 # Prefer clean tar.gz extraction in /tmp/emyrge_runtime so .dylib symlinks work off FAT32/exFAT USB
@@ -786,25 +861,23 @@ class ModelRunner:
                     "macos_arm64_llama",
                     ("llama-server",),
                 )
-                if tar_bin:
-                    return tar_bin
+                _add(tar_bin)
                 mac_nested = _find_binary_in_dir(self.project_root / "bin" / "macos_arm64" / "llama", ("llama-server",))
                 if mac_nested:
-                    return _ensure_posix_executable(mac_nested)
+                    _add(_ensure_posix_executable(mac_nested))
             else:
                 tar_x64 = _extract_posix_tar_runtime(
                     self.project_root / "bin" / "macos_x86_64" / "llama-macos-x64.tar.gz",
                     "macos_x86_64_llama",
                     ("llama-server",),
                 )
-                if tar_x64:
-                    return tar_x64
+                _add(tar_x64)
                 mac_x64 = _find_binary_in_dir(self.project_root / "bin" / "macos_x86_64" / "llama", ("llama-server",))
                 if mac_x64:
-                    return _ensure_posix_executable(mac_x64)
+                    _add(_ensure_posix_executable(mac_x64))
             poly = self.project_root / "bin" / "polyglot" / "llamafile.exe"
             if poly.is_file() and poly.stat().st_size > 1024:
-                return poly
+                _add(_ensure_posix_executable(poly))
         else:
             if is_arm:
                 # Prefer clean tar.gz extraction in /tmp/emyrge_runtime so .so.0 symlinks work off FAT32/exFAT USB
@@ -813,28 +886,34 @@ class ModelRunner:
                     "linux_arm64_llama",
                     ("llama-server",),
                 )
-                if tar_bin:
-                    return tar_bin
+                _add(tar_bin)
                 lin_nested = _find_binary_in_dir(self.project_root / "bin" / "linux_arm64" / "llama", ("llama-server",))
                 if lin_nested:
-                    return _ensure_posix_executable(lin_nested)
+                    _add(_ensure_posix_executable(lin_nested))
             else:
                 tar_bin = _extract_posix_tar_runtime(
                     self.project_root / "bin" / "linux_x86_64" / "llama-ubuntu-x64.tar.gz",
                     "linux_x86_64_llama",
                     ("llama-server",),
                 )
-                if tar_bin:
-                    return tar_bin
+                _add(tar_bin)
                 lin_x64 = _find_binary_in_dir(self.project_root / "bin" / "linux_x86_64" / "llama", ("llama-server",))
                 if lin_x64:
-                    return _ensure_posix_executable(lin_x64)
+                    _add(_ensure_posix_executable(lin_x64))
+            # Zero-dependency Cosmopolitan APE fallback (supports both x86_64 & aarch64 Linux without libgomp.so.1)
             poly = self.project_root / "bin" / "polyglot" / "llamafile.exe"
             if poly.is_file() and poly.stat().st_size > 1024:
-                return poly
+                _add(_ensure_posix_executable(poly))
 
         which_bin = shutil.which("llama-server") or shutil.which("llama-server.exe")
-        return Path(which_bin) if which_bin else None
+        if which_bin:
+            _add(Path(which_bin))
+        return found
+
+    def discover_binary(self) -> Optional[Path]:
+        """Discovers primary host-compatible llama-server or polyglot llamafile binary."""
+        bins = self.discover_binaries()
+        return bins[0] if bins else None
 
     def discover_mmproj(self, model_path: Optional[Any] = None) -> Optional[Path]:
         """Auto-locates matching mmproj-*.gguf for this runner or a specific model."""
@@ -1022,80 +1101,89 @@ class ModelRunner:
             return self._spawn_server(target_model)
 
     def _spawn_server(self, model: Optional[Path]) -> bool:
-        """Directly launches llama-server subprocess for the given model path."""
-        binary = self.discover_binary()
-        if not binary or not model or not model.is_file():
+        """Directly launches llama-server / llamafile subprocess for the given model path with automatic binary fallback."""
+        binaries = self.discover_binaries()
+        if not binaries:
+            single = self.discover_binary()
+            binaries = [single] if single else []
+        if not binaries or not model or not model.is_file():
             return False
 
         mmproj_path = self.discover_mmproj(model)
-
         threads = self.optimal_threads()
-        is_llamafile = "llamafile" in binary.name.lower()
-        if is_llamafile:
-            llamafile_args = [
-                str(binary),
-                "--server",
-                "--nobrowser",
-                "-m",
-                str(model),
-                "--host",
-                self.host,
-                "--port",
-                str(self.port),
-                "-c",
-                str(self.context_size),
-                "--threads",
-                str(threads),
-            ]
-            if mmproj_path and mmproj_path.is_file():
-                llamafile_args.extend(["--mmproj", str(mmproj_path)])
-            cmd = llamafile_args if os.name == "nt" else ["/bin/sh"] + llamafile_args
-        else:
-            cmd = [
-                os.path.normpath(str(binary)),
-                "-m",
-                os.path.normpath(str(model)),
-                "--host",
-                self.host,
-                "--port",
-                str(self.port),
-                "-c",
-                str(self.context_size),
-                "--threads",
-                str(threads),
-            ]
-            if mmproj_path and mmproj_path.is_file():
-                cmd.extend(["--mmproj", os.path.normpath(str(mmproj_path))])
 
-        env = os.environ.copy()
-        if os.name != "nt":
-            lib_dir = str(binary.parent)
-            env["LD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
-            env["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('DYLD_LIBRARY_PATH', '')}".rstrip(":")
+        for binary in binaries:
+            is_llamafile = "llamafile" in binary.name.lower()
+            if is_llamafile:
+                llamafile_args = [
+                    str(binary),
+                    "--server",
+                    "-m",
+                    str(model),
+                    "--host",
+                    self.host,
+                    "--port",
+                    str(self.port),
+                    "-c",
+                    str(self.context_size),
+                    "--threads",
+                    str(threads),
+                ]
+                if mmproj_path and mmproj_path.is_file():
+                    llamafile_args.extend(["--mmproj", str(mmproj_path)])
+                cmd = llamafile_args if os.name == "nt" else ["/bin/sh"] + llamafile_args
+            else:
+                cmd = [
+                    os.path.normpath(str(binary)),
+                    "-m",
+                    os.path.normpath(str(model)),
+                    "--host",
+                    self.host,
+                    "--port",
+                    str(self.port),
+                    "-c",
+                    str(self.context_size),
+                    "--threads",
+                    str(threads),
+                ]
+                if mmproj_path and mmproj_path.is_file():
+                    cmd.extend(["--mmproj", os.path.normpath(str(mmproj_path))])
 
-        kwargs: Dict[str, Any] = {
-            "stdout": subprocess.DEVNULL,
-            "stderr": subprocess.DEVNULL,
-            "stdin": subprocess.DEVNULL,
-            "cwd": str(binary.parent),
-            "env": env,
-        }
-        if hasattr(subprocess, "CREATE_NO_WINDOW"):
-            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            env = os.environ.copy()
+            if os.name != "nt":
+                lib_dir = str(binary.parent)
+                env["LD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('LD_LIBRARY_PATH', '')}".rstrip(":")
+                env["DYLD_LIBRARY_PATH"] = f"{lib_dir}:{env.get('DYLD_LIBRARY_PATH', '')}".rstrip(":")
 
-        try:
-            self._proc = subprocess.Popen(cmd, **kwargs)
-            self._active_model = model
-            self._active_binary = binary
-            self._active_mmproj = mmproj_path
-            for _ in range(8):
-                if _is_port_open(self.host, self.port, timeout=0.2):
-                    break
-                time.sleep(0.25)
-            return self._proc.poll() is None
-        except OSError:
-            self._proc = None
-            return False
+            kwargs: Dict[str, Any] = {
+                "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL,
+                "stdin": subprocess.DEVNULL,
+                "cwd": str(binary.parent),
+                "env": env,
+            }
+            if hasattr(subprocess, "CREATE_NO_WINDOW"):
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+            try:
+                proc = subprocess.Popen(cmd, **kwargs)
+                for _ in range(8):
+                    if proc.poll() is not None:
+                        break
+                    if _is_port_open(self.host, self.port, timeout=0.2):
+                        break
+                    time.sleep(0.25)
+                if proc.poll() is None:
+                    self._proc = proc
+                    self._active_model = model
+                    self._active_binary = binary
+                    self._active_mmproj = mmproj_path
+                    return True
+            except OSError:
+                pass
+
+        self._proc = None
+        return False
 
     def ensure_started(self, preferred_model: Optional[str] = None) -> bool:
         """Spawns llama-server in background if binary and .gguf exist and port 8082 isn't active."""
@@ -1109,9 +1197,12 @@ class ModelRunner:
                 else:
                     return True
             if _is_port_open(self.host, self.port, timeout=0.25):
-                if self._active_model is None:
-                    self._active_model = self.discover_model(preferred_model)
-                return True
+                if self.is_healthy(timeout=0.5):
+                    if self._active_model is None:
+                        self._active_model = self.discover_model(preferred_model)
+                    return True
+                # Port is occupied by a non-llama process; dynamically select an open port
+                self.port = _find_free_port(self.host, self.port, 8084, 8099)
 
             model = (
                 self._active_model

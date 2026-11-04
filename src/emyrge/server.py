@@ -80,6 +80,17 @@ def load_product_sku(project_root: Optional[Path] = None) -> Dict[str, Any]:
         candidate = Path(__file__).resolve().parent.parent.parent
         root = candidate
 
+    resolved_root = Path(root).resolve()
+    active_drive = resolved_root.drive.upper() if resolved_root.drive else ""
+
+    def _stamp_active_mount(desc: Dict[str, Any]) -> Dict[str, Any]:
+        prov = dict(desc.get("provisioning") or {})
+        prov["active_mount_path"] = str(resolved_root)
+        if active_drive:
+            prov["target_drive_letter"] = active_drive
+        desc["provisioning"] = prov
+        return desc
+
     sku_path = Path(root) / "manifests" / "product_sku.json"
     if sku_path.is_file():
         try:
@@ -101,11 +112,11 @@ def load_product_sku(project_root: Optional[Path] = None) -> Dict[str, Any]:
                     descriptor["hidden_features"] = list(DEFAULT_PRODUCT_DESCRIPTOR["hidden_features"])
                 if "active_models" not in descriptor:
                     descriptor["active_models"] = list(DEFAULT_PRODUCT_DESCRIPTOR["active_models"])
-                return descriptor
+                return _stamp_active_mount(descriptor)
         except Exception:
             pass
 
-    return dict(DEFAULT_PRODUCT_DESCRIPTOR)
+    return _stamp_active_mount(dict(DEFAULT_PRODUCT_DESCRIPTOR))
 
 
 def create_server(config=None):

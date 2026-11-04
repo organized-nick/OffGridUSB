@@ -246,6 +246,9 @@ class EmyrgeConfig:
             import tempfile
 
             fallback_base = Path(tempfile.gettempdir()) / "emyrge_runtime" / "data"
+            if fallback_base.exists() and not os.access(fallback_base, os.W_OK):
+                uid = os.getuid() if hasattr(os, "getuid") else os.getpid()
+                fallback_base = Path(tempfile.gettempdir()) / f"emyrge_runtime_{uid}" / "data"
             self.vault_dir = fallback_base / "vault"
             self.uploads_dir = fallback_base / "uploads"
             for d in (self.vault_dir, self.uploads_dir):

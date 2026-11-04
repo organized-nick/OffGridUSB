@@ -9,7 +9,130 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "${SCRIPT_DIR}"
 
 # ==============================================================================
-# Fast Pre-Flight Storage Integrity Check (< 0.2s on Raspberry Pi / USB 2.0)
+# 0. Desktop File Manager Auto-Terminal Support
+# If double-clicked via GUI "Execute" (no TTY attached and TERM unset/dumb),
+# automatically spawn a visible desktop terminal emulator so logs populate live.
+# ==============================================================================
+WANT_HEADLESS=0
+for _arg in "$@"; do
+    case "${_arg}" in
+        --headless|--help|-h|--chromebook)
+            WANT_HEADLESS=1
+            ;;
+    esac
+done
+
+ensure_gui_display_env() {
+    local uid="${EUID:-$(id -u)}"
+    if [[ -z "${XDG_RUNTIME_DIR:-}" && -d "/run/user/${uid}" ]]; then
+        export XDG_RUNTIME_DIR="/run/user/${uid}"
+    fi
+    if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -S "/run/user/${uid}/bus" ]]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${uid}/bus"
+    fi
+    if [[ -z "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
+        for wl in "${XDG_RUNTIME_DIR}"/wayland-*; do
+            if [[ -S "${wl}" ]]; then
+                export WAYLAND_DISPLAY="$(basename "${wl}")"
+                break
+            fi
+        done
+    fi
+    if [[ -z "${DISPLAY:-}" ]]; then
+        for xs in /tmp/.X11-unix/X*; do
+            if [[ -S "${xs}" ]]; then
+                export DISPLAY=":${xs##*X}"
+                break
+            fi
+        done
+    fi
+}
+
+if [[ "${WANT_HEADLESS}" -eq 0 && ! -t 0 && ! -t 1 && -z "${OFFGRIDUSB_IN_TERMINAL:-}" && -z "${OFFGRIDUSB_NO_TERMINAL:-}" && ( -z "${TERM:-}" || "${TERM:-}" == "dumb" ) ]]; then
+    ensure_gui_display_env
+    if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+        export OFFGRIDUSB_IN_TERMINAL=1
+        export OFFGRIDUSB_LAUNCH_SCRIPT="${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh"
+        spawned_term=0
+        if command -v lxterminal >/dev/null 2>&1; then
+            lxterminal --title="OffGridUSB Command Center" -e /bin/bash -c 'exec /bin/bash "$OFFGRIDUSB_LAUNCH_SCRIPT"' >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v xfce4-terminal >/dev/null 2>&1; then
+            xfce4-terminal --title="OffGridUSB Command Center" -x /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v gnome-terminal >/dev/null 2>&1; then
+            gnome-terminal --title="OffGridUSB Command Center" -- /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v ptyxis >/dev/null 2>&1; then
+            ptyxis -- /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v kgx >/dev/null 2>&1; then
+            kgx -- /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v mate-terminal >/dev/null 2>&1; then
+            mate-terminal -x /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v konsole >/dev/null 2>&1; then
+            konsole -e /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v tilix >/dev/null 2>&1; then
+            tilix -e /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v kitty >/dev/null 2>&1; then
+            kitty /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v alacritty >/dev/null 2>&1; then
+            alacritty -e /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v x-terminal-emulator >/dev/null 2>&1; then
+            x-terminal-emulator -e /bin/bash -c 'exec /bin/bash "$OFFGRIDUSB_LAUNCH_SCRIPT"' >/dev/null 2>&1 &
+            spawned_term=1
+        elif command -v xterm >/dev/null 2>&1; then
+            xterm -T "OffGridUSB Command Center" -e /bin/bash "${SCRIPT_DIR}/START_OFFGRIDUSB_LINUX.sh" "$@" >/dev/null 2>&1 &
+            spawned_term=1
+        fi
+        if [[ "${spawned_term}" -eq 1 ]]; then
+            sleep 0.3
+            exit 0
+        fi
+    fi
+fi
+
+pause_if_interactive() {
+    if [[ -t 0 && -t 1 ]]; then
+        echo ""
+        read -r -p "  Press Enter to close this window..." _ || true
+    fi
+}
+
+# ==============================================================================
+# 1. Populate Terminal Immediately (Zero Blank Window Delay on Slow USB Ports)
+# ==============================================================================
+ARCH="$(uname -m)"
+if [[ -t 1 ]]; then
+    clear 2>/dev/null || true
+fi
+cat <<'BANNER'
+================================================================================
+    ____   __  __  _____      _     _ _    _  _____ ____      _______
+   / __ \ / _|/ _|/ ____|    (_)   | | |  | |/ ____|  _ \    |  ___  |===+
+  | |  | | |_| |_| |  __ _ __ _  __| | |  | | (___ | |_) |   | [AI+] |:::|
+  | |  | |  _|  _| | |_ | '__| |/ _` | |  | |\___ \|  _ <    | [ZIM] |:::|
+  | |__| | | | | | |__| | |  | | (_| | |__| |____) | |_) |   |_______|===+
+   \____/|_| |_|  \_____|_|  |_|\__,_|\____/|_____/|____/   OFFGRIDUSB.COM
+--------------------------------------------------------------------------------
+  Signed: @TheBlindHacker  *  @johndikeman  *  @organized-nick  *  OffGridUSB Team
+  [*] 100% Air-Gapped Offline Operation: Zero External Network Access Required
+================================================================================
+BANNER
+echo "  Linux & Raspberry Pi USB Portable Edition (${ARCH} — x86_64 & ARM64)"
+echo "  Active USB Mount     : ${SCRIPT_DIR}"
+echo "  Offline ZIM Library  : http://127.0.0.1:8081"
+echo "================================================================================"
+echo "  [1/2] Verifying flash media integrity..."
+
+# ==============================================================================
+# 2. Fast Pre-Flight Storage Integrity Check (< 0.2s on Raspberry Pi / USB 2.0)
 # ==============================================================================
 get_file_size() {
     local file="$1"
@@ -19,12 +142,10 @@ get_file_size() {
 check_integrity() {
     local target_files=()
 
-    # 1. High-LBA Canary file
     if [[ -f "${SCRIPT_DIR}/data/.integrity_canary" ]]; then
         target_files+=("${SCRIPT_DIR}/data/.integrity_canary")
     fi
 
-    # 2. Sample at most 1 ZIM and 1 GGUF so USB 2.0 startup on Raspberry Pi is instant (<0.2s)
     for f in "${SCRIPT_DIR}"/data/zim/*.zim; do
         if [[ -f "${f}" ]]; then
             target_files+=("${f}")
@@ -43,19 +164,17 @@ check_integrity() {
             continue
         fi
 
-        # Check Head (first 512 bytes)
         local non_null_head
-        non_null_head=$(head -c 512 "${f}" 2>/dev/null | tr -d '\000' | wc -c || echo 1)
+        non_null_head=$(head -c 512 "${f}" 2>/dev/null | LC_ALL=C tr -d '\000' | wc -c || echo 1)
         if [[ "${non_null_head}" -eq 0 ]]; then
             return 1
         fi
 
-        # Check Tail (last 512 bytes using tail -c so 6GB+ files never overflow 32-bit block math)
         local fsize
         fsize=$(get_file_size "${f}")
         if [[ "${fsize}" -gt 10485760 ]]; then
             local non_null_tail
-            non_null_tail=$(tail -c 512 "${f}" 2>/dev/null | tr -d '\000' | wc -c || echo 1)
+            non_null_tail=$(tail -c 512 "${f}" 2>/dev/null | LC_ALL=C tr -d '\000' | wc -c || echo 1)
             if [[ "${non_null_tail}" -eq 0 ]]; then
                 return 1
             fi
@@ -73,112 +192,36 @@ if ! check_integrity; then
     echo "Launch aborted to prevent silent data loss and runtime crashes." >&2
     echo "Please re-provision this bundle onto a genuine, verified flash drive or SSD." >&2
     echo "================================================================================" >&2
-    echo "" >&2
+    pause_if_interactive
     exit 1
 fi
 
-PORT="${EMYRGE_PORT:-8000}"
-ARCH="$(uname -m)"
-
-if [[ -t 1 ]]; then
-    clear 2>/dev/null || true
-fi
-cat <<'BANNER'
-================================================================================
-    ____   __  __  _____      _     _ _    _  _____ ____      _______
-   / __ \ / _|/ _|/ ____|    (_)   | | |  | |/ ____|  _ \    |  ___  |===+
-  | |  | | |_| |_| |  __ _ __ _  __| | |  | | (___ | |_) |   | [AI+] |:::|
-  | |  | |  _|  _| | |_ | '__| |/ _` | |  | |\___ \|  _ <    | [ZIM] |:::|
-  | |__| | | | | | |__| | |  | | (_| | |__| |____) | |_) |   |_______|===+
-   \____/|_| |_|  \_____|_|  |_|\__,_|\____/|_____/|____/   OFFGRIDUSB.COM
---------------------------------------------------------------------------------
-  Signed: @TheBlindHacker  •  @johndikeman  •  @organized-nick  •  OffGridUSB Team
-  [*] 100% Air-Gapped Offline Operation: Zero External Network Access Required
-================================================================================
-BANNER
-echo "  Linux & Raspberry Pi USB Portable Edition (${ARCH} — x86_64 & ARM64)"
-echo "  Local Command Center : http://127.0.0.1:${PORT}"
-echo "  Offline ZIM Library  : http://127.0.0.1:8081"
-echo "================================================================================"
+echo "  [2/2] Starting OffGridUSB Engine & opening web client..."
+echo "        (Keep this terminal window open while using OffGridUSB. Press Ctrl+C to stop.)"
 echo ""
-
-launch_desktop_browser() {
-    local url="$1"
-
-    # If invoked via sudo on Raspberry Pi OS / Ubuntu, resolve the desktop user's display session
-    local target_user="${SUDO_USER:-}"
-    local target_uid
-    if [[ -n "${target_user}" && "${EUID:-$(id -u)}" -eq 0 ]]; then
-        target_uid="$(id -u "${target_user}" 2>/dev/null || echo 1000)"
-    else
-        target_uid="${EUID:-$(id -u)}"
-    fi
-
-    if [[ -z "${XDG_RUNTIME_DIR:-}" && -d "/run/user/${target_uid}" ]]; then
-        export XDG_RUNTIME_DIR="/run/user/${target_uid}"
-    fi
-    if [[ -z "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]; then
-        for wl in "${XDG_RUNTIME_DIR}"/wayland-*; do
-            if [[ -S "${wl}" ]]; then
-                export WAYLAND_DISPLAY="$(basename "${wl}")"
-                break
-            fi
-        done
-    fi
-    if [[ -z "${DISPLAY:-}" && -S "/tmp/.X11-unix/X0" ]]; then
-        export DISPLAY=":0"
-    fi
-
-    if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
-        return 0
-    fi
-
-    # Helper to run browser as the non-root desktop user when script was launched under sudo
-    run_as_desktop_user() {
-        if [[ -n "${target_user}" && "${EUID:-$(id -u)}" -eq 0 ]]; then
-            sudo -u "${target_user}" \
-                DISPLAY="${DISPLAY:-:0}" \
-                WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" \
-                XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${target_uid}}" \
-                DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/${target_uid}/bus" \
-                nohup "$@" >/dev/null 2>&1 &
-        else
-            nohup "$@" >/dev/null 2>&1 &
-        fi
-    }
-
-    for b in xdg-open chromium-browser chromium firefox firefox-esr sensible-browser x-www-browser; do
-        if command -v "${b}" >/dev/null 2>&1; then
-            run_as_desktop_user "${b}" "${url}"
-            return 0
-        fi
-    done
-    if command -v python3 >/dev/null 2>&1; then
-        run_as_desktop_user python3 -m webbrowser "${url}"
-    fi
-}
-
-(
-    # Wait up to 60s for the HTTP server to actually answer HTTP 200 on /api/status or /
-    for _ in $(seq 1 120); do
-        if command -v curl >/dev/null 2>&1; then
-            if curl -sf --max-time 1 "http://127.0.0.1:${PORT}/api/status" >/dev/null 2>&1; then
-                break
-            fi
-        elif command -v python3 >/dev/null 2>&1; then
-            if python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${PORT}/api/status', timeout=1)" >/dev/null 2>&1; then
-                break
-            fi
-        fi
-        sleep 0.5
-    done
-    launch_desktop_browser "http://127.0.0.1:${PORT}"
-) &
 
 RUNNER="${SCRIPT_DIR}/run_linux.sh"
 if [[ ! -f "${RUNNER}" && -f "${SCRIPT_DIR}/bin/run_linux.sh" ]]; then
     RUNNER="${SCRIPT_DIR}/bin/run_linux.sh"
 fi
 
+if [[ ! -f "${RUNNER}" ]]; then
+    echo "[ERROR] Launcher script run_linux.sh not found in ${SCRIPT_DIR}." >&2
+    pause_if_interactive
+    exit 1
+fi
+
 chmod +x "${RUNNER}" 2>/dev/null || true
-exec bash "${RUNNER}" --host 127.0.0.1 --port "${PORT}" --headless "$@"
+set +e
+/usr/bin/env bash "${RUNNER}" "$@"
+EXIT_CODE=$?
+set -e
+
+if [[ "${EXIT_CODE}" -ne 0 && "${EXIT_CODE}" -ne 130 && "${EXIT_CODE}" -ne 143 ]]; then
+    echo "" >&2
+    echo "================================================================================" >&2
+    echo "  [WARN] OffGridUSB exited with status code ${EXIT_CODE}." >&2
+    echo "================================================================================" >&2
+    pause_if_interactive
+fi
+exit "${EXIT_CODE}"

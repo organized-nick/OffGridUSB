@@ -2,8 +2,9 @@
 # OffGridUSB Git Attributes — Cross-Platform Line Ending Enforcement
 # ==============================================================================
 
-# POSIX shell & macOS command launchers MUST retain LF endings
+# POSIX shell, Freedesktop .desktop, & macOS command launchers MUST retain LF endings
 *.sh        text eol=lf
+*.desktop   text eol=lf
 *.command   text eol=lf
 
 # Windows batch & PowerShell scripts MUST use CRLF
