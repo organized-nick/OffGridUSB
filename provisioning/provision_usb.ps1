@@ -82,7 +82,7 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("Auto", "lean", "full")]
-    [string]$Profile = "Auto",
+    [string]$Profile = "full",
 
     [Parameter(Mandatory = $false)]
     [ValidateRange(0, [int]::MaxValue)]
@@ -726,6 +726,17 @@ foreach ($item in $plan.Items) {
 
     if (Test-Path -LiteralPath $item.SourcePath) {
         $isLargeAsset = ($item.RelativePath -like "*.zim" -or $item.RelativePath -like "*.gguf")
+        if ($isLargeAsset -and (Test-Path -LiteralPath $dst)) {
+            $existingInfo = Get-Item -LiteralPath $dst -ErrorAction SilentlyContinue
+            if ($existingInfo -and $existingInfo.Length -eq $item.SizeBytes) {
+                $existingMagic = Test-AssetMagicHeader -FilePath $dst
+                if ($existingMagic.IsValid) {
+                    $sizeMB = [math]::Round($item.SizeBytes / 1MB, 1)
+                    Write-Host "  [SKIP] $($item.RelativePath) ($sizeMB MB already staged & verified)" -ForegroundColor DarkGray
+                    continue
+                }
+            }
+        }
         if ($isLargeAsset) {
             $sizeMB = [math]::Round($item.SizeBytes / 1MB, 1)
             $swAsset = [System.Diagnostics.Stopwatch]::StartNew()

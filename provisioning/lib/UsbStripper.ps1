@@ -75,7 +75,7 @@ function Get-WhitelistedStagingPlan {
         [string]$CustomCacheDir = "",
 
         [Parameter(Mandatory = $false)]
-        [string]$ProfileName = "Auto"
+        [string]$ProfileName = "full"
     )
 
     $cleanDrive = ($TargetDriveLetter.Trim().ToUpper() -replace "[:\\/\s]", "")

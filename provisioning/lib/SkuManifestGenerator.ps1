@@ -31,7 +31,7 @@ function New-ProductSkuManifest {
         [int]$ClusterSizeBytes = 131072,
 
         [Parameter(Mandatory = $false)]
-        [string]$ProfileName = "Auto",
+        [string]$ProfileName = "full",
 
         [Parameter(Mandatory = $false)]
         [string]$OutputPath = ""
@@ -67,10 +67,10 @@ function New-ProductSkuManifest {
     # Resolve profile
     $chosenProfile = $ProfileName
     if ($chosenProfile -eq "Auto") {
-        if ($matched.payload_profiles.PSObject.Properties["lean"]) {
-            $chosenProfile = "lean"
-        } else {
+        if ($matched.payload_profiles.PSObject.Properties["full"]) {
             $chosenProfile = "full"
+        } else {
+            $chosenProfile = "lean"
         }
     }
 

@@ -157,7 +157,7 @@ function Get-ProductAssetInventory {
 
         [Parameter(Mandatory = $false)]
         [ValidateSet("Auto", "lean", "full")]
-        [string]$Profile = "Auto"
+        [string]$Profile = "full"
     )
 
     if (-not $ProductsJsonPath) {
@@ -188,10 +188,10 @@ function Get-ProductAssetInventory {
     # Resolve payload profile
     $chosenProfileName = $Profile
     if ($chosenProfileName -eq "Auto") {
-        if ($matchedProduct.payload_profiles.PSObject.Properties["lean"]) {
-            $chosenProfileName = "lean"
-        } else {
+        if ($matchedProduct.payload_profiles.PSObject.Properties["full"]) {
             $chosenProfileName = "full"
+        } else {
+            $chosenProfileName = "lean"
         }
     }
 

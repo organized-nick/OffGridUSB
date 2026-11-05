@@ -28,7 +28,7 @@ param(
     [string]$CacheDir = "",  # Resolved by provision_usb.ps1: %LOCALAPPDATA%\offgridusb\cache
 
     [Parameter(Mandatory = $false)]
-    [string]$Profile = "Auto"
+    [string]$Profile = "full"
 )
 
 $engine = Join-Path $PSScriptRoot "provision_usb.ps1"
