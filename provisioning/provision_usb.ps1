@@ -213,17 +213,19 @@ function Copy-ItemWriteThroughPaced {
         [Parameter(Mandatory = $false)][int]$BufferSize = 1048576 # 1 MB default
     )
 
-    $srcInfo = Get-Item -LiteralPath $SourcePath
+    $ErrorActionPreference = "Stop"
+    $srcInfo = Get-Item -LiteralPath $SourcePath -ErrorAction Stop
     # For small files (<= 1 MB), standard copy is fast and safe
     if ($srcInfo.Length -le 1MB) {
-        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+        Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force -ErrorAction Stop
         return
     }
 
-    # Buffer sizing: 4 MB for unthrottled; 1 MB (or custom) for throttled
-    $bufSize = if ($LimitKBps -le 0) { 4 * 1024 * 1024 } else { [Math]::Min($BufferSize, 1048576) }
+    # Buffer sizing: 4 MB for unthrottled; 128 KB (exFAT cluster-aligned) or custom for throttled
+    $bufSize = if ($LimitKBps -le 0) { 4 * 1024 * 1024 } else { [Math]::Min($BufferSize, 131072) }
     $bytesPerSecond = if ($LimitKBps -gt 0) { [double]($LimitKBps * 1024) } else { 0.0 }
 
+    $completed = $false
     $srcStream = [System.IO.File]::OpenRead($SourcePath)
     try {
         $fileOptions = [System.IO.FileOptions]::WriteThrough
@@ -247,22 +249,24 @@ function Copy-ItemWriteThroughPaced {
                 # Active rate pacing if LimitKBps is specified (honoring John Dikeman's budget)
                 if ($bytesPerSecond -gt 0) {
                     $expectedMs = ($bytesWritten / $bytesPerSecond) * 1000.0
-                    $actualMs = $sw.Elapsed.TotalMilliseconds
-                    if ($actualMs -lt $expectedMs) {
-                        $sleepMs = [int][Math]::Min(250.0, ($expectedMs - $actualMs))
-                        if ($sleepMs -gt 0) {
-                            Start-Sleep -Milliseconds $sleepMs
-                        }
+                    while ($sw.Elapsed.TotalMilliseconds -lt $expectedMs) {
+                        $remainingMs = $expectedMs - $sw.Elapsed.TotalMilliseconds
+                        $sleepMs = [int][Math]::Min(200.0, [Math]::Max(1.0, $remainingMs))
+                        Start-Sleep -Milliseconds $sleepMs
                     }
                 }
             }
             # Commit all internal controller buffers directly to flash
             $dstStream.Flush($true)
+            $completed = $true
         } finally {
             $dstStream.Dispose()
         }
     } finally {
         $srcStream.Dispose()
+        if (-not $completed -and (Test-Path -LiteralPath $DestinationPath)) {
+            Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -717,7 +721,7 @@ foreach ($item in $plan.Items) {
     $dst = $item.TargetPath
     $dstDir = [System.IO.Path]::GetDirectoryName($dst)
     if ($dstDir -and -not (Test-Path $dstDir)) {
-        New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+        New-Item -ItemType Directory -Path $dstDir -Force -ErrorAction Stop | Out-Null
     }
 
     if ($item.SourcePath -eq "[Dynamically Generated]" -or $item.SourcePath -eq "[Directory Placeholder]") {

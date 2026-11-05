@@ -28,7 +28,11 @@ param(
     [string]$CacheDir = "",  # Resolved by provision_usb.ps1: %LOCALAPPDATA%\offgridusb\cache
 
     [Parameter(Mandatory = $false)]
-    [string]$Profile = "full"
+    [string]$Profile = "full",
+
+    [Parameter(Mandatory = $false)]
+    [ValidateRange(0, [int]::MaxValue)]
+    [int]$BwLimitKBps = 0
 )
 
 $engine = Join-Path $PSScriptRoot "provision_usb.ps1"
@@ -36,4 +40,4 @@ if (-not (Test-Path $engine)) {
     $engine = Join-Path (Split-Path -Parent $PSScriptRoot) "provision_usb.ps1"
 }
 
-& $engine -Product "Product2" -Drive $Drive -DryRun:$DryRun -Info:$Info -NonInteractive:$NonInteractive -FilesystemAction $FilesystemAction -CacheDir $CacheDir -Profile $Profile @args
+& $engine -Product "Product2" -Drive $Drive -DryRun:$DryRun -Info:$Info -NonInteractive:$NonInteractive -FilesystemAction $FilesystemAction -CacheDir $CacheDir -Profile $Profile -BwLimitKBps $BwLimitKBps @args
