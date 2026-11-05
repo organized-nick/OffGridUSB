@@ -287,6 +287,7 @@ echo "Host: ${HOST}  Port: ${PORT}  Arch: ${ARCH}  Mount: ${SCRIPT_DIR}"
 echo "============================================================================"
 
 if [[ -f "${SCRIPT_DIR}/src/emyrge/web/app.py" ]]; then
+    cd /tmp 2>/dev/null || true
     APP_ARGS=(--host "${HOST}" --port "${PORT}" --headless)
     if [[ -n "${TIER_OVERRIDE}" ]]; then
         APP_ARGS+=(--tier "${TIER_OVERRIDE}")

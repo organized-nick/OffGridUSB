@@ -218,6 +218,7 @@ echo Host: %HOST%  Port: %PORT%  Drive: %SCRIPT_DIR%
 echo ============================================================================
 
 if exist "%SCRIPT_DIR%src\emyrge\web\app.py" (
+    cd /d "%TEMP%" 2>nul
     set "EXTRA_ARGS="
     if "%HEADLESS%"=="1" set "EXTRA_ARGS=--headless"
     if "%EXPLICIT_PORT%"=="0" set "EXTRA_ARGS=!EXTRA_ARGS! --auto-port"

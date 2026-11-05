@@ -92,4 +92,5 @@ if [[ ! -f "${RUNNER}" && -f "${SCRIPT_DIR}/bin/run_macos.command" ]]; then
 fi
 
 chmod +x "${RUNNER}" 2>/dev/null || true
+cd /tmp 2>/dev/null || true
 exec /bin/bash "${RUNNER}" "$@"

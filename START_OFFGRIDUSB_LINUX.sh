@@ -212,6 +212,7 @@ if [[ ! -f "${RUNNER}" ]]; then
 fi
 
 chmod +x "${RUNNER}" 2>/dev/null || true
+cd /tmp 2>/dev/null || true
 set +e
 /usr/bin/env bash "${RUNNER}" "$@"
 EXIT_CODE=$?

@@ -387,6 +387,120 @@ function Find-CandidateUsbDrives {
     return $candidates
 }
 
-if ($MyInvocation.MyCommand.ModuleName) {
-    Export-ModuleMember -Function Assert-TargetDriveSafety, Assert-DriveCapacity, Get-DriveRunningProcesses, Stop-TargetDriveProcesses, Test-IsAdministrator, Get-FilesystemPlan, Find-CandidateUsbDrives -ErrorAction SilentlyContinue
+function Invoke-SafeUsbEject {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Drive = ""
+    )
+
+    # Ensure current process does not hold a CWD lock on a USB drive
+    Set-Location $env:TEMP
+    [System.IO.Directory]::SetCurrentDirectory($env:TEMP)
+
+    $clean = ($Drive.Trim().ToUpper() -replace "[:\\/\s]", "")
+    $cands = @(Find-CandidateUsbDrives)
+
+    if (-not $clean) {
+        if ($cands.Count -eq 0) {
+            Write-Host "[INFO] No mounted external USB drive found (already ejected)." -ForegroundColor Cyan
+            return [PSCustomObject]@{ DriveLetter = ""; Ejected = $true; AlreadyEjected = $true }
+        }
+        $clean = $cands[0].DriveLetter
+        Write-Host ">>> Auto-detected external USB drive on '${clean}:' ($($cands[0].FriendlyName), Label='$($cands[0].FileSystemLabel)')" -ForegroundColor Cyan
+    } else {
+        if (-not (Test-Path "${clean}:\")) {
+            Write-Host "[INFO] External USB drive ${clean}: is already dismounted." -ForegroundColor Cyan
+            return [PSCustomObject]@{ DriveLetter = $clean; Ejected = $true; AlreadyEjected = $true }
+        }
+    }
+
+    # 1. Hardware Safety Gate
+    Assert-TargetDriveSafety -Drive "${clean}:" | Out-Null
+
+    # 2. Release Open File Handles
+    Write-Host ">>> [1/4] Stopping any active processes on ${clean}:..." -ForegroundColor Cyan
+    Stop-TargetDriveProcesses -DriveLetter $clean | Out-Null
+
+    # 3. Flush OS File Cache to Physical NAND Flash
+    Write-Host ">>> [2/4] Flushing volume cache to NAND flash on ${clean}:..." -ForegroundColor Cyan
+    Write-VolumeCache -DriveLetter $clean -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+
+    # 4. Explorer Shell Eject + Win32 Kernel Volume Lock/Dismount/Eject
+    Write-Host ">>> [3/4] Dismounting and ejecting ${clean}:..." -ForegroundColor Cyan
+    try {
+        $driveEject = New-Object -ComObject Shell.Application
+        $item = $driveEject.Namespace(17).ParseName("${clean}:")
+        if ($item) {
+            $item.InvokeVerb("Eject")
+            Start-Sleep -Seconds 3
+        }
+    } catch {}
+
+    if (Test-Path "${clean}:\") {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class OffGridSafeUsbEjector {
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    public static extern SafeFileHandle CreateFile(string lpFileName, uint dwDesiredAccess, uint dwShareMode, IntPtr lpSecurityAttributes, uint dwCreationDisposition, uint dwFlagsAndAttributes, IntPtr hTemplateFile);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool DeviceIoControl(SafeFileHandle hDevice, uint dwIoControlCode, IntPtr lpInBuffer, uint nInBufferSize, IntPtr lpOutBuffer, uint nOutBufferSize, out uint lpBytesReturned, IntPtr lpOverlapped);
+    public static bool Eject(string letter) {
+        uint GENERIC_READ = 0x80000000;
+        uint GENERIC_WRITE = 0x40000000;
+        uint FILE_SHARE_READ = 0x1;
+        uint FILE_SHARE_WRITE = 0x2;
+        uint OPEN_EXISTING = 3;
+        uint FSCTL_LOCK_VOLUME = 0x00090018;
+        uint FSCTL_DISMOUNT_VOLUME = 0x00090020;
+        uint IOCTL_STORAGE_MEDIA_REMOVAL = 0x002D4804;
+        uint IOCTL_STORAGE_EJECT_MEDIA = 0x002D4808;
+        using (var h = CreateFile("\\\\.\\" + letter + ":", GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero)) {
+            if (h.IsInvalid) {
+                using (var h2 = CreateFile("\\\\.\\" + letter + ":", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero)) {
+                    if (h2.IsInvalid) return false;
+                    uint br2;
+                    return DeviceIoControl(h2, IOCTL_STORAGE_EJECT_MEDIA, IntPtr.Zero, 0, IntPtr.Zero, 0, out br2, IntPtr.Zero);
+                }
+            }
+            uint br;
+            DeviceIoControl(h, FSCTL_LOCK_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out br, IntPtr.Zero);
+            DeviceIoControl(h, FSCTL_DISMOUNT_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out br, IntPtr.Zero);
+            IntPtr pmr = Marshal.AllocHGlobal(1);
+            Marshal.WriteByte(pmr, 0);
+            DeviceIoControl(h, IOCTL_STORAGE_MEDIA_REMOVAL, pmr, 1, IntPtr.Zero, 0, out br, IntPtr.Zero);
+            Marshal.FreeHGlobal(pmr);
+            return DeviceIoControl(h, IOCTL_STORAGE_EJECT_MEDIA, IntPtr.Zero, 0, IntPtr.Zero, 0, out br, IntPtr.Zero);
+        }
+    }
 }
+"@
+        $ok = [OffGridSafeUsbEjector]::Eject($clean)
+        Start-Sleep -Seconds 2
+        Write-Host "  Win32 IOCTL_STORAGE_EJECT_MEDIA result: $ok" -ForegroundColor Gray
+    }
+
+    # 5. Post-Eject Verification
+    $stillMounted = Test-Path "${clean}:\"
+    Write-Host ">>> [4/4] Mounted after eject check (${clean}:\): $stillMounted" -ForegroundColor Cyan
+    if ($stillMounted) {
+        throw "Drive ${clean}: is still mounted after eject attempt."
+    }
+
+    Write-Host "[SAFE TO REMOVE] External USB drive ${clean}: has been cleanly flushed, dismounted, and ejected." -ForegroundColor Green
+    return [PSCustomObject]@{
+        DriveLetter    = $clean
+        Ejected        = $true
+        AlreadyEjected = $false
+    }
+}
+
+Set-Alias -Name Safe-EjectUsbDrive -Value Invoke-SafeUsbEject -ErrorAction SilentlyContinue
+
+if ($MyInvocation.MyCommand.ModuleName) {
+    Export-ModuleMember -Function Assert-TargetDriveSafety, Assert-DriveCapacity, Get-DriveRunningProcesses, Stop-TargetDriveProcesses, Test-IsAdministrator, Get-FilesystemPlan, Find-CandidateUsbDrives, Invoke-SafeUsbEject -Alias Safe-EjectUsbDrive -ErrorAction SilentlyContinue
+}
+

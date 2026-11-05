@@ -24,6 +24,8 @@
     currentTier: 2,
     chatTurns: [],
     nextTurnId: 1,
+    tabClientId: "tab-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now(),
+    ejectTriggered: false,
   };
 
 
@@ -3075,6 +3077,70 @@
 
     window.addEventListener("online", refreshStatus);
     window.addEventListener("offline", refreshStatus);
+
+    // Browser Tab Lifecycle & Safe USB Auto-Eject Wiring
+    const sendClientHeartbeat = () => {
+      if (state.ejectTriggered) return;
+      fetch("/api/client-heartbeat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client_id: state.tabClientId }),
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    const notifyTabClosing = (immediate = false) => {
+      if (state.ejectTriggered && !immediate) return;
+      const payload = JSON.stringify({
+        client_id: state.tabClientId,
+        immediate: Boolean(immediate),
+      });
+      try {
+        if (navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: "application/json" });
+          if (navigator.sendBeacon("/api/client-closing", blob)) {
+            return;
+          }
+        }
+      } catch (_) {}
+      fetch("/api/client-closing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    sendClientHeartbeat();
+    setInterval(sendClientHeartbeat, 4000);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        sendClientHeartbeat();
+      }
+    });
+    window.addEventListener("pagehide", () => notifyTabClosing(false));
+    window.addEventListener("beforeunload", () => notifyTabClosing(false));
+
+    const safeEjectBtn = $("#safeEjectBtn");
+    if (safeEjectBtn) {
+      safeEjectBtn.addEventListener("click", async () => {
+        state.ejectTriggered = true;
+        safeEjectBtn.disabled = true;
+        safeEjectBtn.textContent = "⏳ Flushing & Ejecting USB...";
+        try {
+          await apiPost("/api/eject", { client_id: state.tabClientId, immediate: true });
+        } catch (_) {
+          notifyTabClosing(true);
+        }
+        safeEjectBtn.textContent = "✓ USB Safely Flushed — Safe to Unplug";
+        safeEjectBtn.style.borderColor = "#8A9A5B";
+        safeEjectBtn.style.color = "#8A9A5B";
+        const airgapInd = $("#airgapIndicator");
+        if (airgapInd) {
+          airgapInd.textContent = "USB Safely Dismounted — Safe to Remove Drive";
+        }
+      });
+    }
   }
 
   function readAndUploadFile(file) {

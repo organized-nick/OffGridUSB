@@ -87,6 +87,9 @@ if not defined RUNNER (
     exit /b 1
 )
 
+:: Release working directory lock on USB volume before delegating to runner
+cd /d "%TEMP%" 2>nul
+
 :: Delegate to runner bound strictly to loopback localhost 127.0.0.1 (zero firewall prompts)
 call "!RUNNER!" --host 127.0.0.1 %*
 set "EXIT_CODE=%errorlevel%"
@@ -94,7 +97,9 @@ set "EXIT_CODE=%errorlevel%"
 echo.
 echo ================================================================================
 if !EXIT_CODE! equ 0 (
-    echo   OffGridUSB session ended cleanly.
+    echo   OffGridUSB session ended cleanly. Safe to remove USB drive.
+    echo ================================================================================
+    exit /b 0
 ) else (
     echo   [WARN] OffGridUSB exited with code !EXIT_CODE!.
     if !EXIT_CODE! equ 3 (

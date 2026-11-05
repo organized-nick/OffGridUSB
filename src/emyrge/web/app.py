@@ -21,10 +21,11 @@ import platform
 import re
 import socket
 import sys
+import tempfile
 import threading
 import time
 import traceback
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -37,6 +38,7 @@ from emyrge.calculators.source_audit import CalculatorRouter, SourceAudit
 from emyrge.calculators.water_purification import WaterCalculator
 from emyrge.core.config import EmyrgeConfig, HardwareTier
 from emyrge.core.hardware_probe import HardwareProbe
+from emyrge.core.usb_eject import spawn_detached_safe_eject
 from emyrge.knowledge.grounding_harness import (
     Citation,
     CitationType,
@@ -296,6 +298,113 @@ class EmyrgeRuntime:
             source_audit=SourceAudit,
             memory_db=self.memory_vault.conn,
         )
+
+        # Browser tab lifecycle & safe USB auto-eject tracking
+        self._client_tabs: Dict[str, float] = {}
+        self._pending_close_timer: Optional[threading.Timer] = None
+        self._shutting_down: bool = False
+        self._shutdown_callback: Optional[Callable[[], None]] = None
+
+    def cancel_pending_close(self) -> None:
+        with self._lock:
+            if self._pending_close_timer is not None:
+                self._pending_close_timer.cancel()
+                self._pending_close_timer = None
+
+    def register_client_heartbeat(self, client_id: str) -> Dict[str, Any]:
+        cid = (client_id or "default").strip() or "default"
+        now = time.monotonic()
+        with self._lock:
+            if self._pending_close_timer is not None:
+                self._pending_close_timer.cancel()
+                self._pending_close_timer = None
+            self._client_tabs[cid] = now
+            stale = [k for k, ts in self._client_tabs.items() if (now - ts) > 25.0]
+            for k in stale:
+                self._client_tabs.pop(k, None)
+            active_count = len(self._client_tabs)
+        return {"ok": True, "active_tabs": active_count}
+
+    def handle_client_closing(self, client_id: str = "", immediate: bool = False) -> Dict[str, Any]:
+        cid = (client_id or "").strip()
+        now = time.monotonic()
+        with self._lock:
+            if cid:
+                self._client_tabs.pop(cid, None)
+            else:
+                self._client_tabs.clear()
+            stale = [k for k, ts in self._client_tabs.items() if (now - ts) > 12.0]
+            for k in stale:
+                self._client_tabs.pop(k, None)
+            remaining = len(self._client_tabs)
+
+            if immediate:
+                if self._pending_close_timer is not None:
+                    self._pending_close_timer.cancel()
+                    self._pending_close_timer = None
+                threading.Thread(
+                    target=self.trigger_safe_shutdown_and_eject,
+                    kwargs={"delay_sec": 0.25},
+                    daemon=True,
+                ).start()
+                return {"ok": True, "ejecting": True, "remaining_tabs": 0}
+
+            if not self.config.headless and remaining == 0:
+                if self._pending_close_timer is not None:
+                    self._pending_close_timer.cancel()
+                timer = threading.Timer(3.5, self._on_tab_close_grace_expired)
+                timer.daemon = True
+                self._pending_close_timer = timer
+                timer.start()
+                return {"ok": True, "scheduled_eject": True, "grace_seconds": 3.5, "remaining_tabs": 0}
+
+        return {"ok": True, "scheduled_eject": False, "remaining_tabs": remaining}
+
+    def _on_tab_close_grace_expired(self) -> None:
+        with self._lock:
+            self._pending_close_timer = None
+            now = time.monotonic()
+            stale = [k for k, ts in self._client_tabs.items() if (now - ts) > 12.0]
+            for k in stale:
+                self._client_tabs.pop(k, None)
+            if len(self._client_tabs) > 0 or self._shutting_down:
+                return
+        self.trigger_safe_shutdown_and_eject(delay_sec=0.1)
+
+    def trigger_safe_shutdown_and_eject(self, delay_sec: float = 0.1) -> Dict[str, Any]:
+        with self._lock:
+            if self._shutting_down:
+                return {"ok": True, "already_shutting_down": True}
+            self._shutting_down = True
+
+        if delay_sec > 0:
+            time.sleep(delay_sec)
+
+        print("\n[OffGridUSB] Command Center tab closed -> flushing & safely ejecting USB drive...")
+        sys.stdout.flush()
+
+        # 1. Stop child engines and release SQLite file handles on USB drive
+        for runner_stop in (
+            self.model_runner.stop,
+            self.kiwix_runner.stop,
+            self.swarm_inference_stop,
+            self.swarm_stop_node,
+            self.swarm_watchdog_stop,
+            self.memory_vault.close,
+        ):
+            try:
+                runner_stop()
+            except Exception:
+                pass
+
+        # 2. Spawn detached host-resident safe-eject script in %TEMP% / /tmp
+        eject_res = spawn_detached_safe_eject(self.config.project_root, delay_ms=1500)
+
+        # 3. Shut down HTTP server cleanly so Python & launcher exit
+        if self._shutdown_callback is not None:
+            threading.Thread(target=self._shutdown_callback, daemon=True).start()
+
+        return eject_res
 
     def _background_warmup(self) -> None:
         try:
@@ -1529,7 +1638,9 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         # Quiet clean single-line logging; suppress noisy polling logs
-        if args and isinstance(args[0], str) and "/api/status" in args[0]:
+        if args and isinstance(args[0], str) and (
+            "/api/status" in args[0] or "/api/client-heartbeat" in args[0]
+        ):
             return
         try:
             if sys.stderr is not None:
@@ -1560,7 +1671,10 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(min(length, 25 * 1024 * 1024))
         if not raw:
             return {}
-        return json.loads(raw.decode("utf-8", errors="ignore"))
+        text = raw.decode("utf-8", errors="ignore").strip()
+        if not text:
+            return {}
+        return json.loads(text)
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -1573,6 +1687,9 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         try:
+            if path in ("/", "/index.html", "/api/status", "/api/health", "/api/telemetry", "/api/ping"):
+                self.runtime.cancel_pending_close()
+
             if path in ("/api/ping", "/healthz"):
                 self._send_json(
                     200,
@@ -1675,6 +1792,22 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
             return
 
         try:
+            if path == "/api/client-heartbeat":
+                cid = str(body.get("client_id", "default"))
+                self._send_json(200, self.runtime.register_client_heartbeat(cid))
+                return
+
+            if path == "/api/client-closing":
+                cid = str(body.get("client_id", ""))
+                imm = bool(body.get("immediate", False))
+                self._send_json(200, self.runtime.handle_client_closing(cid, immediate=imm))
+                return
+
+            if path in ("/api/eject", "/api/shutdown"):
+                cid = str(body.get("client_id", ""))
+                self._send_json(200, self.runtime.handle_client_closing(cid, immediate=True))
+                return
+
             if path == "/api/simulate-hardware":
                 prof = str(body.get("profile", body.get("preset", body.get("hardware", "auto"))))
                 status_payload = self.runtime.set_simulated_hardware(prof)
@@ -1914,6 +2047,7 @@ def create_server(config: Optional[EmyrgeConfig] = None) -> Tuple[ReusableThread
 
     BoundHandler.runtime = runtime
     server = ReusableThreadingHTTPServer((cfg.host, cfg.port), BoundHandler)
+    runtime._shutdown_callback = server.shutdown
     return server, runtime
 
 
@@ -1993,6 +2127,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
+    # Release working directory lock on removable USB drives so safe eject never hits EBUSY
+    try:
+        os.chdir(tempfile.gettempdir())
+    except Exception:
+        pass
+
     hw = runtime.get_active_hardware()
     print(f"[OffGridUSB] Air-Gapped Backend Ready -> http://{base_cfg.host}:{base_cfg.port}")
     print(f"[OffGridUSB] Detected Hardware: {hw['cpu_model']} | RAM: {hw['ram_total_mb']} MB | {hw['tier_name']}")
@@ -2012,6 +2152,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         server.server_close()
         runtime.model_runner.stop()
         runtime.kiwix_runner.stop()
+        runtime.memory_vault.close()
     return 0
 
 
