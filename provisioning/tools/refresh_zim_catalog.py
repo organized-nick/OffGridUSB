@@ -6,7 +6,9 @@ selection of archives, pulls per-file sha256 from the official .zim.sha256
 sidecars, and appends new entries to the manifest (existing entries untouched).
 
 Per product direction (2026-11-04): all content is available to ALL tiers —
-new entries are tier 0 with required_for_skus covering every SKU. The
+new entries are tier 0 with required_for_skus covering every SKU (the payload
+planner, plan_tier_payloads.py, re-normalizes tiers and SKU membership from its
+priority fill on the next --apply pass). The
 differentiator between tiers is the LLM + swarm capability, not content.
 
 Usage:
@@ -158,7 +160,9 @@ SELECTION = [
      "Offline Unix manual pages for the rebuild-the-software-stack angle."),
 ]
 
-ALL_SKUS = ["Product1", "Product2", "Product3", "Tier3", "Tier4"]
+# every purchasable SKU including the per-drive-size variants (john 2026-11-06:
+# 32GB = tier 0 only; tier 1 & tier 2 get a variant per drive size)
+ALL_SKUS = ["Product1", "Product2", "Product2-256", "Product3", "Product3-256", "Tier3", "Tier4"]
 
 
 def fetch(url: str) -> bytes:

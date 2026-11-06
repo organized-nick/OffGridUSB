@@ -16,7 +16,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -37,7 +39,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -58,7 +62,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -79,7 +85,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -98,7 +106,13 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1_full"
+        "Product1",
+        "Product2",
+        "Product2-256",
+        "Product3",
+        "Product3-256",
+        "Tier3",
+        "Tier4"
       ],
       "url": "https://download.kiwix.org/zim/other/zimgit-food-preparation_en_2025-04.zim",
       "description": "Emergency food storage, dehydrating, canning, root cellaring, and off-grid nutrition preservation."
@@ -115,7 +129,13 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1_full"
+        "Product1",
+        "Product2",
+        "Product2-256",
+        "Product3",
+        "Product3-256",
+        "Tier3",
+        "Tier4"
       ],
       "url": "https://download.kiwix.org/zim/other/mdwiki_en_all_2024-06.zim",
       "description": "Offline medical encyclopedia curated by physicians covering diagnostics, surgical emergencies, and drugs."
@@ -132,7 +152,13 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1_full"
+        "Product1",
+        "Product2",
+        "Product2-256",
+        "Product3",
+        "Product3-256",
+        "Tier3",
+        "Tier4"
       ],
       "url": "https://download.kiwix.org/zim/wikipedia/wikipedia_en-simple_all_nopic_2026-09.zim",
       "description": "Full Simple English Wikipedia explaining scientific, historical, and technical concepts in accessible language."
@@ -149,8 +175,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product2_full",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -161,7 +187,7 @@
       "id": "wikipedia-medicine-maxi",
       "name": "WikiMed Full Illustrated Medical Encyclopedia",
       "filename": "wikipedia_en_medicine_maxi_2026-10.zim",
-      "tier": 1,
+      "tier": 0,
       "category": "clinical_medicine",
       "size_bytes": 1864210320,
       "size_mb": 1843.2,
@@ -169,8 +195,11 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product2_full",
+        "Product1",
+        "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -181,7 +210,7 @@
       "id": "zimgit-post-disaster",
       "name": "ZimGit Post-Disaster Infrastructure & Reconstruction",
       "filename": "zimgit-post-disaster_en_2024-05.zim",
-      "tier": 1,
+      "tier": 0,
       "category": "survival_engineering",
       "size_bytes": 644665513,
       "size_mb": 45.0,
@@ -189,8 +218,11 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product2_full",
+        "Product1",
+        "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -201,7 +233,7 @@
       "id": "wikipedia-en-all-nopic",
       "name": "Full English Wikipedia (No Pictures Compact Edition)",
       "filename": "wikipedia_en_all_nopic_2026-06.zim",
-      "tier": 2,
+      "tier": 1,
       "category": "complete_wikipedia",
       "size_bytes": 52690706555,
       "size_mb": 51406.3,
@@ -209,7 +241,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -237,7 +270,7 @@
       "id": "armypubs-en-all",
       "name": "US Army Publishing Directorate Field Manuals",
       "filename": "armypubs_en_all_2024-12.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "military_manuals",
       "size_bytes": 8232397824,
       "size_mb": 7851.0,
@@ -245,9 +278,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -258,7 +290,7 @@
       "id": "cd3wd-en-all",
       "name": "CD3WD Core Data for Development",
       "filename": "cd3wdproject.org_en_all_2025-11.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "appropriate_technology",
       "size_bytes": 581166080,
       "size_mb": 554.2,
@@ -266,9 +298,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -279,7 +311,7 @@
       "id": "appropedia-en-maxi",
       "name": "Appropedia (Maxi)",
       "filename": "appropedia_en_all_maxi_2026-02.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "appropriate_technology",
       "size_bytes": 581642240,
       "size_mb": 554.7,
@@ -287,9 +319,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -300,7 +332,7 @@
       "id": "energypedia-en-nopic",
       "name": "energypedia (No-Pic)",
       "filename": "energypedia_en_all_nopic_2026-06.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "appropriate_technology",
       "size_bytes": 722590720,
       "size_mb": 689.1,
@@ -308,9 +340,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -331,7 +363,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -352,7 +386,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -373,7 +409,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -394,7 +432,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -415,7 +455,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -436,7 +478,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -457,7 +501,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -478,7 +524,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -499,7 +547,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -520,7 +570,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -529,7 +581,7 @@
     },
     {
       "id": "canadian-prepper-bugoutroll-en",
-      "name": "Canadian Prepper — Bug-Out Roll",
+      "name": "Canadian Prepper \u2014 Bug-Out Roll",
       "filename": "canadian-prepper_en_bugoutroll_2026-10.zim",
       "tier": 0,
       "category": "prepper_community",
@@ -541,7 +593,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -552,7 +606,7 @@
       "id": "lrnselfreliance-en-all",
       "name": "Learning Self-Reliance",
       "filename": "lrnselfreliance_en_all_2026-09.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "prepper_community",
       "size_bytes": 3974044672,
       "size_mb": 3789.9,
@@ -560,9 +614,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -571,9 +626,9 @@
     },
     {
       "id": "s2underground-en-all",
-      "name": "S2 Underground — Grid-Down Intelligence",
+      "name": "S2 Underground \u2014 Grid-Down Intelligence",
       "filename": "s2underground_en_all_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "prepper_community",
       "size_bytes": 5492854784,
       "size_mb": 5238.4,
@@ -581,9 +636,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -604,7 +660,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -615,7 +673,7 @@
       "id": "100r-co-en-all",
       "name": "Hundred Rabbits (100r.co)",
       "filename": "100r.co_en_all_2026-08.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "offgrid_living",
       "size_bytes": 177187840,
       "size_mb": 169.0,
@@ -623,9 +681,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -636,7 +695,7 @@
       "id": "lowtech-solar-en",
       "name": "Low-tech Magazine (Solar Edition)",
       "filename": "solar.lowtechmagazine.com_mul_all_2025-01.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "offgrid_living",
       "size_bytes": 700556288,
       "size_mb": 668.1,
@@ -644,9 +703,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -657,7 +716,7 @@
       "id": "restarters-en-maxi",
       "name": "Restarters Repair Wiki (Maxi)",
       "filename": "restarters_en_all_maxi_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "repair",
       "size_bytes": 17045504,
       "size_mb": 16.3,
@@ -665,9 +724,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -678,7 +738,7 @@
       "id": "ifixit-en-all",
       "name": "iFixit Repair Manuals (English)",
       "filename": "ifixit_en_all_2025-12.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "repair",
       "size_bytes": 3570696192,
       "size_mb": 3405.3,
@@ -686,9 +746,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -699,7 +760,7 @@
       "id": "osm-wiki-en-nopic",
       "name": "OpenStreetMap Wiki (No-Pic)",
       "filename": "openstreetmap-wiki_en_all_nopic_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "maps",
       "size_bytes": 534241280,
       "size_mb": 509.5,
@@ -707,9 +768,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -720,7 +781,7 @@
       "id": "maps-usa-en",
       "name": "OSM Map: United States",
       "filename": "maps_en_united-states-of-america_2026-06.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "maps",
       "size_bytes": 16601606144,
       "size_mb": 15832.5,
@@ -728,9 +789,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -741,7 +801,7 @@
       "id": "maps-canada-en",
       "name": "OSM Map: Canada",
       "filename": "maps_en_canada_2026-06.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "maps",
       "size_bytes": 11159405568,
       "size_mb": 10642.4,
@@ -749,9 +809,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -762,7 +821,7 @@
       "id": "se-diy-en-all",
       "name": "Home Improvement Q&A",
       "filename": "diy.stackexchange.com_en_all_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "stackexchange",
       "size_bytes": 2086025216,
       "size_mb": 1989.4,
@@ -770,9 +829,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -783,7 +843,7 @@
       "id": "se-electronics-en-all",
       "name": "Electronics Q&A",
       "filename": "electronics.stackexchange.com_en_all_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "stackexchange",
       "size_bytes": 4261398528,
       "size_mb": 4064.0,
@@ -791,9 +851,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -814,7 +875,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -835,7 +898,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -856,7 +921,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -877,7 +944,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -888,7 +957,7 @@
       "id": "se-arduino-en-all",
       "name": "Arduino Q&A",
       "filename": "arduino.stackexchange.com_en_all_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "stackexchange",
       "size_bytes": 259577856,
       "size_mb": 247.6,
@@ -896,9 +965,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -909,7 +979,7 @@
       "id": "se-3dprinting-en-all",
       "name": "3D Printing Q&A",
       "filename": "3dprinting.stackexchange.com_en_all_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "stackexchange",
       "size_bytes": 120338432,
       "size_mb": 114.8,
@@ -917,9 +987,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -930,7 +1001,7 @@
       "id": "se-gis-en-all",
       "name": "Geographic Information Systems Q&A",
       "filename": "gis.stackexchange.com_en_all_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "stackexchange",
       "size_bytes": 2135327744,
       "size_mb": 2036.4,
@@ -938,9 +1009,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -951,7 +1023,7 @@
       "id": "phet-en-all",
       "name": "PhET Interactive Science Simulations",
       "filename": "phet_en_all_2026-08.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 108981248,
       "size_mb": 103.9,
@@ -959,9 +1031,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -972,7 +1045,7 @@
       "id": "wikiversity-en-nopic",
       "name": "Wikiversity (No-Pic)",
       "filename": "wikiversity_en_all_nopic_2026-11.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 1614819328,
       "size_mb": 1540.0,
@@ -980,9 +1053,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -993,7 +1065,7 @@
       "id": "libretexts-chem-en",
       "name": "Chemistry LibreTexts",
       "filename": "libretexts.org_en_chem_2025-01.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 2182917120,
       "size_mb": 2081.8,
@@ -1001,9 +1073,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -1014,7 +1085,7 @@
       "id": "libretexts-phys-en",
       "name": "Physics LibreTexts",
       "filename": "libretexts.org_en_phys_2026-01.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 559554560,
       "size_mb": 533.6,
@@ -1022,9 +1093,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -1035,7 +1106,7 @@
       "id": "libretexts-bio-en",
       "name": "Biology LibreTexts",
       "filename": "libretexts.org_en_bio_2025-01.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 2240947200,
       "size_mb": 2137.1,
@@ -1043,9 +1114,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -1056,7 +1126,7 @@
       "id": "libretexts-med-en",
       "name": "Medicine LibreTexts",
       "filename": "libretexts.org_en_med_2025-01.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 1192567808,
       "size_mb": 1137.3,
@@ -1064,9 +1134,8 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
-        "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -1077,7 +1146,7 @@
       "id": "libretexts-k12-en",
       "name": "K-12 Education LibreTexts",
       "filename": "libretexts.org_en_k12_2026-01.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "education_stem",
       "size_bytes": 369809408,
       "size_mb": 352.7,
@@ -1085,9 +1154,9 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
-        "Product3",
+        "Product2-256",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -1098,7 +1167,7 @@
       "id": "devdocs-man-en",
       "name": "Linux man Pages",
       "filename": "devdocs_en_man_2026-10.zim",
-      "tier": 0,
+      "tier": 1,
       "category": "software_docs",
       "size_bytes": 29591552,
       "size_mb": 28.2,
@@ -1106,9 +1175,10 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],

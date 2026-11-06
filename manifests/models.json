@@ -20,7 +20,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -45,7 +47,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -71,7 +75,9 @@
       "required_for_skus": [
         "Product1",
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -101,8 +107,8 @@
       "multimodal": true,
       "verified_local": true,
       "required_for_skus": [
-        "Product2",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -127,7 +133,9 @@
       "verified_local": true,
       "required_for_skus": [
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -151,7 +159,9 @@
       "verified_local": true,
       "required_for_skus": [
         "Product2",
+        "Product2-256",
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -175,7 +185,7 @@
       "magic_header": "47475546",
       "verified_local": true,
       "required_for_skus": [
-        "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -199,7 +209,7 @@
       "magic_header": "47475546",
       "verified_local": true,
       "required_for_skus": [
-        "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
@@ -223,6 +233,7 @@
       "verified_local": false,
       "required_for_skus": [
         "Product3",
+        "Product3-256",
         "Tier3",
         "Tier4"
       ],
