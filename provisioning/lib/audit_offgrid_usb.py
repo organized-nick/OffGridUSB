@@ -1182,7 +1182,7 @@ class OffGridUSBAuditor:
             )
 
     def _check_kiwix_server(self) -> None:
-        url = "http://127.0.0.1:8081/catalog/v2/entries"
+        url = "http://127.0.0.1:8081/catalog/v2/entries?count=-1"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "OffGridUSB-Auditor/1.0"})
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -1191,7 +1191,19 @@ class OffGridUSBAuditor:
 
             if code == 200:
                 missing_zims = []
-                target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
+                sku_zims = None
+                sku_json_path = self.drive / "manifests" / "product_sku.json"
+                if sku_json_path.exists():
+                    try:
+                        sku_data = json.loads(sku_json_path.read_text(encoding="utf-8"))
+                        if sku_data.get("active_zim_archives"):
+                            sku_zims = set(sku_data["active_zim_archives"])
+                    except Exception:
+                        pass
+                if sku_zims is not None:
+                    target_zims = [z for z in self.zim_manifest if z.get("filename") in sku_zims]
+                else:
+                    target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
                 for z in target_zims:
                     z_id = z.get("id", "")
                     base_name = z.get("filename", "").replace(".zim", "")

@@ -2665,18 +2665,36 @@
   // 9. Event Wiring & Boot Initialization
   // --------------------------------------------------------------------------
   function initEvents() {
-    // Theme Toggle (Tactical Charcoal/Olive Dark vs OffGridUSB.com Bone Light)
-    const themeToggleBtn = $("#themeToggleBtn");
-    const savedTheme = localStorage.getItem("offgrid_theme");
-    if (savedTheme === "bone") {
-      document.body.classList.add("theme-bone");
-      if (themeToggleBtn) themeToggleBtn.textContent = "🌙 Tactical Dark Theme";
-    }
-    if (themeToggleBtn) {
-      themeToggleBtn.addEventListener("click", () => {
-        const isBone = document.body.classList.toggle("theme-bone");
-        localStorage.setItem("offgrid_theme", isBone ? "bone" : "tactical");
-        themeToggleBtn.textContent = isBone ? "🌙 Tactical Dark Theme" : "☀ Bone Light Theme";
+    // Theme Switcher (Tactical Dark | Matrix CRT Phosphor | Bone Light Field Manual)
+    const VALID_THEMES = new Set(["tactical", "matrix", "bone"]);
+    const applyTheme = (themeName) => {
+      const next = VALID_THEMES.has(themeName) ? themeName : "tactical";
+      document.body.classList.remove("theme-bone", "theme-matrix");
+      if (next === "bone") {
+        document.body.classList.add("theme-bone");
+      } else if (next === "matrix") {
+        document.body.classList.add("theme-matrix");
+      }
+      $$(".theme-btn").forEach((btn) => {
+        const isActive = btn.dataset.theme === next;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+      localStorage.setItem("offgrid_theme", next);
+    };
+
+    const savedTheme = localStorage.getItem("offgrid_theme") || "tactical";
+    applyTheme(savedTheme);
+    $$(".theme-btn").forEach((btn) => {
+      btn.addEventListener("click", () => applyTheme(btn.dataset.theme));
+    });
+    const legacyThemeBtn = $("#themeToggleBtn");
+    if (legacyThemeBtn) {
+      legacyThemeBtn.addEventListener("click", () => {
+        const cur = localStorage.getItem("offgrid_theme") || "tactical";
+        const order = ["tactical", "matrix", "bone"];
+        const next = order[(order.indexOf(cur) + 1) % order.length];
+        applyTheme(next);
       });
     }
 

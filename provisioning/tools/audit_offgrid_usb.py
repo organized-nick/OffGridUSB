@@ -1229,7 +1229,7 @@ class OffGridUSBAuditor:
             )
 
     def _check_kiwix_server(self) -> None:
-        url = "http://127.0.0.1:8081/catalog/v2/entries"
+        url = "http://127.0.0.1:8081/catalog/v2/entries?count=-1"
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "OffGridUSB-Auditor/1.0"})
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:

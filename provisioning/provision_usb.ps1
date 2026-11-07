@@ -48,7 +48,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("Product1", "Product2", "Product3", "PocketSurvival", "FieldReady", "CivilizationArk", "Tier0", "Tier1", "Tier2", "Tier3", "Tier4")]
+    [ValidateSet("Product1", "Product2", "Product2-256", "Product3", "Product3-256", "PocketSurvival", "FieldReady", "CivilizationArk", "Tier0", "Tier1", "Tier2", "Tier3", "Tier4")]
     [string]$Product,
 
     [Parameter(Mandatory = $false)]
@@ -555,11 +555,12 @@ if (-not $preInv.AllRequiredAvailable) {
     }
 
     Write-Host ""
-    Write-Host ">>> Fetching missing assets (tier <= $assetTier)..." -ForegroundColor Cyan
+    $effProfile = if ($Profile -eq "lean") { "lean" } else { "full" }
+    Write-Host ">>> Fetching missing assets for $ResolvedSku ($effProfile)..." -ForegroundColor Cyan
     $fetchScript = Join-Path $SourceRoot "provisioning\tools\fetch_assets.py"
     if (-not (Test-Path $fetchScript)) { throw "fetch_assets.py not found at: $fetchScript" }
 
-    & python $fetchScript --tier $assetTier --dest-root $CacheDir
+    & python $fetchScript --sku $ResolvedSku --profile $effProfile --workers 4 --dest-root $CacheDir
     if ($LASTEXITCODE -ne 0) {
         throw "Asset download failed (offline or source unreachable?). Partial files are preserved in $CacheDir and will resume on next run."
     }
@@ -709,6 +710,27 @@ if ($fsPlan.ResolvedAction -eq "FormatExFAT") {
         }
     }
     Write-Host "  [OK] Volume clean wiped." -ForegroundColor Green
+} elseif ($fsPlan.ResolvedAction -eq "KeepExisting") {
+    # Prune any .zim or .gguf files on target USB that do not belong to the active SKU plan
+    $allowedRel = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($it in $plan.Items) {
+        if ($it.RelativePath) {
+            [void]$allowedRel.Add(($it.RelativePath -replace "/", "\"))
+        }
+    }
+    foreach ($subDir in @("data\zim", "data\models")) {
+        $fullSub = Join-Path $targetRoot $subDir
+        if (Test-Path -LiteralPath $fullSub) {
+            foreach ($existingFile in @(Get-ChildItem -LiteralPath $fullSub -File -ErrorAction SilentlyContinue)) {
+                $relCandidate = "$subDir\$($existingFile.Name)"
+                if (-not $allowedRel.Contains($relCandidate)) {
+                    $rmMB = [math]::Round($existingFile.Length / 1MB, 1)
+                    Write-Host "  [PRUNE] Removing non-SKU asset $relCandidate ($rmMB MB)..." -ForegroundColor Yellow
+                    Remove-Item -LiteralPath $existingFile.FullName -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    }
 }
 
 # ------------------------------------------------------------------------------

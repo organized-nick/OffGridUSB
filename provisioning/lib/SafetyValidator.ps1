@@ -13,33 +13,37 @@
 [CmdletBinding()]
 param()
 
-# SKU Minimum Required Volume Capacity in Bytes
+# SKU Minimum Required Volume Capacity in Bytes (32 / 64 / 256 / 512 GB SKU Ladder)
 $script:SkuMinCapacityBytes = @{
-    "Product1"        = 7000000000L   # 7.0 GB for 8 GB USB (payload <= 6.5 GB)
-    "PocketSurvival"  = 7000000000L
-    "Tier0"           = 7000000000L
-    "Product2"        = 28000000000L  # 28.0 GB for 32 GB USB (~16-20 GB payload)
-    "FieldReady"      = 28000000000L
-    "Tier1"           = 28000000000L
-    "Product3"        = 110000000000L # 110.0 GB for 128 GB USB (~65-72 GB payload; rejects 64 GB)
-    "CivilizationArk" = 110000000000L
-    "Tier2"           = 110000000000L
-    "Tier3"           = 220000000000L # 220.0 GB for 256 GB SSD (~88 GB payload)
+    "Product1"        = 28000000000L  # 32 GB USB (~28.99 GB full payload)
+    "PocketSurvival"  = 28000000000L
+    "Tier0"           = 28000000000L
+    "Product2"        = 60000000000L  # 64 GB USB (~58.58 GB full payload)
+    "FieldReady"      = 60000000000L
+    "Tier1"           = 60000000000L
+    "Product2-256"    = 220000000000L # 256 GB USB/SSD (~160 GB full payload)
+    "Product3"        = 60000000000L  # 64 GB USB (~58.8 GB Wikipedia-first payload)
+    "CivilizationArk" = 60000000000L
+    "Tier2"           = 60000000000L
+    "Product3-256"    = 220000000000L # 256 GB USB/SSD (~175 GB full payload)
+    "Tier3"           = 220000000000L # 256 GB SSD (~195 GB Swarm payload)
     "SwarmCluster"    = 220000000000L
-    "Tier4"           = 450000000000L # 450.0 GB for 512 GB NVMe (~210+ GB payload)
+    "Tier4"           = 450000000000L # 512 GB NVMe (~357 GB SettlementHub payload)
     "SettlementHub"   = 450000000000L
 }
 
 $script:SkuTargetUsbLabel = @{
-    "Product1"        = "8 GB USB Flash Drive"
-    "PocketSurvival"  = "8 GB USB Flash Drive"
-    "Tier0"           = "8 GB USB Flash Drive"
-    "Product2"        = "32 GB USB Flash Drive"
-    "FieldReady"      = "32 GB USB Flash Drive"
-    "Tier1"           = "32 GB USB Flash Drive"
-    "Product3"        = "128 GB USB Flash Drive or SSD (Note: 64 GB USB is insufficient)"
-    "CivilizationArk" = "128 GB USB Flash Drive or SSD (Note: 64 GB USB is insufficient)"
-    "Tier2"           = "128 GB USB Flash Drive or SSD"
+    "Product1"        = "32 GB USB Flash Drive"
+    "PocketSurvival"  = "32 GB USB Flash Drive"
+    "Tier0"           = "32 GB USB Flash Drive"
+    "Product2"        = "64 GB USB Flash Drive"
+    "FieldReady"      = "64 GB USB Flash Drive"
+    "Tier1"           = "64 GB USB Flash Drive"
+    "Product2-256"    = "256 GB USB Flash Drive or SSD"
+    "Product3"        = "64 GB USB Flash Drive"
+    "CivilizationArk" = "64 GB USB Flash Drive"
+    "Tier2"           = "64 GB USB Flash Drive"
+    "Product3-256"    = "256 GB USB Flash Drive or SSD"
     "Tier3"           = "256 GB Portable SSD"
     "SwarmCluster"    = "256 GB Portable SSD"
     "Tier4"           = "512 GB Portable NVMe"

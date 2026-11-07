@@ -417,6 +417,72 @@
             font-weight: 700;
             color: var(--accent-cyan);
         }
+
+        /* Matrix Dark Theme (CRT Phosphor Green) & Bone Light Theme */
+        body.theme-matrix {
+            --bg-base: #030804;
+            --bg-surface: #061109;
+            --bg-elevated: #092612;
+            --border-dim: rgba(0, 255, 65, 0.28);
+            --border-bright: #00FF41;
+            --text-main: #D8FFE2;
+            --text-muted: #2AD85B;
+            --accent-cyan: #00FF41;
+            --accent-green: #7CFF9B;
+            --accent-amber: #00FF41;
+            --accent-red: #FF4D4D;
+            font-family: var(--font-mono);
+        }
+
+        body.theme-matrix .message.user {
+            background-color: rgba(0, 255, 65, 0.14);
+            color: #D8FFE2;
+            border-color: #00FF41;
+        }
+
+        body.theme-matrix .btn {
+            background-color: rgba(0, 255, 65, 0.18);
+            color: #00FF41;
+            border: 1px solid #00FF41;
+            text-shadow: 0 0 8px rgba(0, 255, 65, 0.45);
+        }
+
+        body.theme-bone {
+            --bg-base: #F4EFE4;
+            --bg-surface: #EBE4D5;
+            --bg-elevated: #DFD6C3;
+            --border-dim: #C2B69C;
+            --border-bright: #5E5542;
+            --text-main: #1F211C;
+            --text-muted: #5E5542;
+            --accent-cyan: #C84D1B;
+            --accent-green: #3D5A2A;
+            --accent-amber: #8A5A19;
+        }
+
+        .wasm-theme-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-right: 12px;
+        }
+
+        .wasm-theme-btn {
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+            border: 1px solid var(--border-dim);
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-family: var(--font-mono);
+            cursor: pointer;
+        }
+
+        .wasm-theme-btn.active {
+            color: var(--accent-cyan);
+            border-color: var(--border-bright);
+            font-weight: 700;
+        }
     </style>
 </head>
 <body>
@@ -425,11 +491,18 @@
         <div class="brand">
             <h1>OffGridUSB</h1>
             <span class="tier-badge">OffGridUSB • Tier 0: Pure Browser Wasm</span>
-            <span class="tier-badge" style="color: var(--accent-emerald); border-color: rgba(52, 211, 153, 0.45);">★ 100% Air-Gapped Offline System</span>
+            <span class="tier-badge" style="color: var(--accent-green); border-color: rgba(52, 211, 153, 0.45);">★ 100% Air-Gapped Offline System</span>
         </div>
-        <div class="airgap-indicator">
-            <span class="airgap-dot"></span>
-            100% Air-Gapped (Zero Outbound CDN)
+        <div style="display: flex; align-items: center;">
+            <div class="wasm-theme-group" role="group" aria-label="Color theme">
+                <button type="button" class="wasm-theme-btn" data-theme="tactical" onclick="setWasmTheme('tactical')">🌙 Tactical</button>
+                <button type="button" class="wasm-theme-btn" data-theme="matrix" onclick="setWasmTheme('matrix')">🟩 Matrix</button>
+                <button type="button" class="wasm-theme-btn" data-theme="bone" onclick="setWasmTheme('bone')">☀ Bone</button>
+            </div>
+            <div class="airgap-indicator">
+                <span class="airgap-dot"></span>
+                100% Air-Gapped (Zero Outbound CDN)
+            </div>
         </div>
     </header>
 
@@ -950,6 +1023,28 @@
             const mem = runner.getMemoryTelemetry();
             document.getElementById('telemetry-mem').innerText = mem.usedHeapMb > 0 ? `${mem.usedHeapMb} MB / 500 MB` : 'Nominal (<100 MB)';
         }
+
+        function setWasmTheme(theme) {
+            const normalized = ['tactical', 'matrix', 'bone'].includes(theme) ? theme : 'tactical';
+            document.body.classList.toggle('theme-matrix', normalized === 'matrix');
+            document.body.classList.toggle('theme-bone', normalized === 'bone');
+            try {
+                localStorage.setItem('offgrid_theme', normalized);
+            } catch (_) {}
+            document.querySelectorAll('.wasm-theme-btn').forEach(btn => {
+                const active = btn.dataset.theme === normalized;
+                btn.classList.toggle('active', active);
+                btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
+        }
+
+        (function initWasmTheme() {
+            let saved = 'tactical';
+            try {
+                saved = localStorage.getItem('offgrid_theme') || 'tactical';
+            } catch (_) {}
+            setWasmTheme(saved);
+        })();
     </script>
 </body>
 </html>

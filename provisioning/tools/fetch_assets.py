@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 from pathlib import Path
@@ -23,6 +24,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import threading
 import time
 from typing import Any, Dict, List, Optional
 import urllib.error
@@ -41,12 +43,15 @@ def load_manifests(project_root: Optional[Path] = None) -> Dict[str, Any]:
     root = project_root or _default_root()
     models_path = root / "manifests" / "models.json"
     zim_path = root / "manifests" / "zim.json"
+    products_path = root / "manifests" / "products.json"
 
     models_data = json.loads(models_path.read_text(encoding="utf-8")) if models_path.is_file() else {"models": []}
     zim_data = json.loads(zim_path.read_text(encoding="utf-8")) if zim_path.is_file() else {"archives": []}
+    products_data = json.loads(products_path.read_text(encoding="utf-8")) if products_path.is_file() else {"products": []}
     return {
         "models": models_data.get("models", []),
         "archives": zim_data.get("archives", []),
+        "products": products_data.get("products", []),
     }
 
 
@@ -118,7 +123,7 @@ def _sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _stream_download(url: str, dest: Path) -> None:
+def _stream_download(url: str, dest: Path, quiet_curl: bool = False) -> None:
     """Streams a remote file to `dest.part` with progress logging and renames atomically."""
     part_path = dest.with_suffix(dest.suffix + ".part")
     existing_bytes = part_path.stat().st_size if part_path.is_file() else 0
@@ -135,6 +140,8 @@ def _stream_download(url: str, dest: Path) -> None:
             "--connect-timeout", "30",
             "-A", USER_AGENT,
         ]
+        if quiet_curl:
+            curl_cmd.extend(["-s", "-S"])
         if existing_bytes > 0:
             curl_cmd.extend(["-C", "-"])
         curl_cmd.extend(["-o", str(part_path), url])
@@ -153,9 +160,10 @@ def _stream_download(url: str, dest: Path) -> None:
                     "--retry-delay", "2",
                     "--connect-timeout", "30",
                     "-A", USER_AGENT,
-                    "-o", str(part_path),
-                    url,
                 ]
+                if quiet_curl:
+                    clean_cmd.extend(["-s", "-S"])
+                clean_cmd.extend(["-o", str(part_path), url])
                 proc = subprocess.run(clean_cmd)
             if proc.returncode != 0:
                 raise RuntimeError(
@@ -235,6 +243,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print planned downloads without fetching")
     parser.add_argument("--verify", action="store_true", help="Verify staged models and ZIM files on disk")
     parser.add_argument("--tier", type=int, default=0, help="Maximum hardware tier assets to fetch (0 to 4, default: 0)")
+    parser.add_argument("--sku", type=str, default=None, help="Specific Product SKU (e.g. Product1, Product2, Product2-256, Product3, Product3-256, Tier3, Tier4)")
+    parser.add_argument("--profile", type=str, default="full", choices=["lean", "full"], help="SKU payload profile when --sku is specified (default: full)")
+    parser.add_argument("--workers", type=int, default=4, help="Parallel download worker threads (default: 4)")
     parser.add_argument("--zim-only", action="store_true", help="Download only Internet-in-a-Box (.zim) archives")
     parser.add_argument("--models-only", action="store_true", help="Download only GGUF (.gguf) AI models")
     parser.add_argument("--id", dest="asset_ids", action="append", default=[], help="Download specific asset ID(s) by manifest id")
@@ -261,6 +272,32 @@ def main(argv: Optional[List[str]] = None) -> int:
     if requested_ids:
         selected_models = [m for m in manifests["models"] if m.get("id") in requested_ids]
         selected_zims = [z for z in manifests["archives"] if z.get("id") in requested_ids]
+    elif args.sku:
+        sku_entry = next(
+            (p for p in manifests.get("products", []) if p.get("sku", "").lower() == args.sku.strip().lower()),
+            None,
+        )
+        if not sku_entry:
+            print(f"[ERROR] Unknown SKU '{args.sku}' in manifests/products.json", file=sys.stderr)
+            return 2
+        prof = sku_entry.get("payload_profiles", {}).get(args.profile) or sku_entry.get("payload_profiles", {}).get("full", {})
+        want_models = set(prof.get("models", []))
+        want_zims = set(prof.get("zim_archives", []))
+
+        selected_models = []
+        if not args.zim_only:
+            for m in manifests["models"]:
+                if m["filename"] in want_models:
+                    selected_models.append(m)
+                if m.get("mmproj") and m["mmproj"] in want_models and m.get("mmproj_url"):
+                    selected_models.append({
+                        "id": f"{m['id']}-mmproj",
+                        "name": f"{m['name']} (mmproj)",
+                        "filename": m["mmproj"],
+                        "url": m["mmproj_url"],
+                        "size_bytes": m.get("mmproj_size_bytes", 0),
+                    })
+        selected_zims = [] if args.models_only else [z for z in manifests["archives"] if z["filename"] in want_zims]
     else:
         selected_models = [] if args.zim_only else [m for m in manifests["models"] if int(m.get("tier", 0)) <= args.tier]
         selected_zims = [] if args.models_only else [z for z in manifests["archives"] if int(z.get("tier", 0)) <= args.tier]
@@ -270,6 +307,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             json.dumps(
                 {
                     "dry_run": True,
+                    "sku": args.sku,
+                    "profile": args.profile if args.sku else None,
                     "max_tier": args.tier,
                     "planned_models": selected_models,
                     "planned_zims": selected_zims,
@@ -288,29 +327,44 @@ def main(argv: Optional[List[str]] = None) -> int:
     models_dir.mkdir(parents=True, exist_ok=True)
     zim_dir.mkdir(parents=True, exist_ok=True)
 
-    for item in selected_models:
-        dest = models_dir / item["filename"]
-        if dest.exists() and dest.stat().st_size > 1024 * 1024 and _check_magic_header(dest):
-            print(f"[SKIP] Model already staged & valid: {dest.name}")
-            continue
-        print(f"[FETCH] Downloading AI Model: {item['name']} -> {dest}")
-        _stream_download(item["url"], dest)
-        if not _check_magic_header(dest):
-            print(f"[WARN] Downloaded file {dest.name} did not pass GGUF magic-byte check.", file=sys.stderr)
-        else:
-            print(f"[OK] Verified GGUF header: {dest.name} ({dest.stat().st_size / (1024 * 1024):.1f} MB)")
+    print_lock = threading.Lock()
+    workers = max(1, int(args.workers))
+    quiet_curl = workers > 1
 
-    for item in selected_zims:
-        dest = zim_dir / item["filename"]
-        if dest.exists() and dest.stat().st_size > 1024 and _check_magic_header(dest):
-            print(f"[SKIP] ZIM archive already staged & valid: {dest.name}")
-            continue
-        print(f"[FETCH] Downloading Internet-in-a-Box ZIM: {item['name']} -> {dest}")
-        _stream_download(item["url"], dest)
+    def _fetch_one(item: Dict[str, Any], target_dir: Path, kind: str) -> None:
+        dest = target_dir / item["filename"]
+        min_sz = 1024 * 1024 if kind == "model" else 1024
+        if dest.exists() and dest.stat().st_size > min_sz and _check_magic_header(dest):
+            with print_lock:
+                print(f"[SKIP] {kind.upper()} already staged & valid: {dest.name}", flush=True)
+            return
+        sz_mb = item.get("size_mb") or round(item.get("size_bytes", 0) / (1024 * 1024), 1)
+        with print_lock:
+            print(f"[FETCH] Downloading {kind.upper()} ({sz_mb} MB): {item['name']} -> {dest.name}", flush=True)
+        _stream_download(item["url"], dest, quiet_curl=quiet_curl)
         if not _check_magic_header(dest):
-            print(f"[WARN] Downloaded file {dest.name} did not pass OpenZIM magic-byte check.", file=sys.stderr)
-        else:
-            print(f"[OK] Verified OpenZIM header: {dest.name} ({dest.stat().st_size / (1024 * 1024):.1f} MB)")
+            raise RuntimeError(f"Downloaded file {dest.name} failed magic-byte check.")
+        with print_lock:
+            print(f"[OK] Verified {kind.upper()} header: {dest.name} ({dest.stat().st_size / (1024 * 1024):.1f} MB)", flush=True)
+
+    tasks = [(m, models_dir, "model") for m in selected_models] + [(z, zim_dir, "zim") for z in selected_zims]
+    if workers == 1 or len(tasks) <= 1:
+        for item, tdir, kind in tasks:
+            _fetch_one(item, tdir, kind)
+    else:
+        errors: List[str] = []
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futs = {pool.submit(_fetch_one, item, tdir, kind): item["filename"] for item, tdir, kind in tasks}
+            for fut in as_completed(futs):
+                fname = futs[fut]
+                try:
+                    fut.result()
+                except Exception as exc:
+                    with print_lock:
+                        print(f"[ERROR] Failed fetching {fname}: {exc}", file=sys.stderr, flush=True)
+                    errors.append(f"{fname}: {exc}")
+        if errors:
+            raise RuntimeError(f"{len(errors)} asset download(s) failed: {'; '.join(errors[:3])}")
 
     return 0
 
