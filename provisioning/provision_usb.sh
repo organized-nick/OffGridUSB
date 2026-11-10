@@ -90,8 +90,10 @@ normalize_sku() {
             PocketSurvival|Tier0) echo "Product1" ;;
             FieldReady|Tier1)     echo "Product2" ;;
             CivilizationArk|Tier2)echo "Product3" ;;
-            SwarmCluster)         echo "Tier3" ;;
-            SettlementHub)        echo "Tier4" ;;
+            Product2-256)          echo "Product2-256" ;;
+            Product3-256)          echo "Product3-256" ;;
+            SwarmCluster|Tier3)    echo "Tier3" ;;
+            SettlementHub|Tier4)   echo "Tier4" ;;
             *)                    echo "$p" ;;
         esac
         return
@@ -123,6 +125,8 @@ if [[ "${INFO_MODE}" == true ]]; then
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product1" "PocketSurvival"  "Tier 0"    "8 GB"   "<= 6.5 GB"  "Offline Kiwix (:8081), Grounded AI Professor (:8082), CDC Calculators."
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product2" "FieldReady"      "0 + 1"     "32 GB"  "~16-20 GB"  "All Product 1 + SQLite Memory Vault, Photo OCR Vault, STEM Tutor."
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product3" "CivilizationArk" "0 + 1 + 2" "128 GB" "~65-72 GB"  "All Product 2 + 50.2 GB Wikipedia No-Pic. (64 GB USB rejected)."
+    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product2-256" "FieldReady XL"   "0 + 1"     "256 GB" "~160 GB"    "All Product 2 + extended data vault on 256 GB USB/SSD."
+    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product3-256" "CivilizationArk XL" "0 + 1 + 2" "256 GB" "~175 GB" "All Product 3 + extended payload on 256 GB USB/SSD."
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Tier3"    "SwarmCluster"    "0 - 3"     "256 GB" "~88 GB"     "All Product 3 + Qwen 32B (18.9 GB) + exo LAN Swarm Clustering."
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Tier4"    "SettlementHub"   "0 - 4"     "512 GB" "~210+ GB"   "All Tier 3 + Wikipedia Maxi (110 GB) + Llama 70B (40.5 GB)."
     echo ""
@@ -130,6 +134,8 @@ if [[ "${INFO_MODE}" == true ]]; then
     echo "  * Product 1 (PocketSurvival): [100% READY] (Lean payload: 1.39 GB, verified <= 6.5 GB ceiling)"
     echo "  * Product 2 (FieldReady):     [100% READY] (Lean payload: 4.69 GB, verified for 32 GB drive)"
     echo "  * Product 3 (CivilizationArk): [REQUIRES CACHE DOWNLOAD] (Requires 50.2 GB Wikipedia ZIM; 128 GB USB required)"
+    echo "  * Product 2-256 (FieldReady XL): [REQUIRES CACHE DOWNLOAD] (Requires ~160 GB payload on 256 GB USB/SSD)"
+    echo "  * Product 3-256 (CivilizationArk XL): [REQUIRES CACHE DOWNLOAD] (Requires ~175 GB payload on 256 GB USB/SSD)"
     echo "================================================================================"
     exit 0
 fi
@@ -172,8 +178,14 @@ fi
 
 # Safety & Capacity Checks
 source "${LIB_DIR}/SafetyValidator.sh"
-assert_target_drive_safety "${TARGET_DRIVE}"
-assert_drive_capacity "${TARGET_DRIVE}" "${RESOLVED_SKU}"
+if [[ "${DRY_RUN}" == true ]]; then
+    # Dry-run performs no writes; tolerate simulated/fake target paths that
+    # cannot be validated against real devices.
+    echo "[NOTE] Dry-run mode: live device safety & capacity validation skipped."
+else
+    assert_target_drive_safety "${TARGET_DRIVE}"
+    assert_drive_capacity "${TARGET_DRIVE}" "${RESOLVED_SKU}"
+fi
 
 # -----------------------------------------------------------------------------
 # Portable Engine Readiness Audit (parity with EngineStager.ps1). Engines live
@@ -324,56 +336,34 @@ stage_payload_assets() {
     done
 }
 
-ensure_payload_assets "${RESOLVED_SKU}"
+fetch_engines
 
 # -----------------------------------------------------------------------------
-# Portable Engine Staging: fetch cross-platform runtime engines (portable
-# Python, kiwix-serve, llama.cpp, llamafile) into bin/ so the whitelist staging
-# plan copies them onto the drive and the resulting USB boots on every
-# supported host OS (Windows/macOS/Linux/Raspberry Pi). Engines are
-# tier-independent; missing boot-critical ones abort live runs.
+# Parallel acquisition: payload-asset acquisition and portable-engine fetching
+# are network-bound and independent of each other, so run them concurrently.
+# Safety/capacity checks and dry-run mode have already passed by this point.
 # -----------------------------------------------------------------------------
-echo ""
-echo ">>> Staging portable runtime engines (bin/) for ${RESOLVED_SKU}..."
+ensure_payload_assets "${RESOLVED_SKU}" &
+PAYLOAD_PID=$!
+fetch_engines &
+ENGINE_PID=$!
 
-if [[ ${#missing_engines[@]} -eq 0 ]]; then
-    echo "  [OK] All portable engines staged and verified in bin/."
-    ENGINES_READY=1
-elif [[ "${NO_DOWNLOAD}" == true ]]; then
-    critical_missing=()
-    for e in "${missing_engines[@]}"; do
-        if is_boot_critical_engine "${e}"; then critical_missing+=("${e}"); fi
-    done
-    if [[ ${#critical_missing[@]} -gt 0 ]]; then
-        echo "[ERROR] Boot-critical Windows engines missing from bin/ and --no-download was set." >&2
-        echo "        Re-run without --no-download, or run:" >&2
-        echo "          provisioning/tools/download_internet_in_a_box.sh --engines-only" >&2
-        printf '  Missing: %s\n' "${critical_missing[@]}" >&2
-        exit 1
-    fi
-    echo "  [WARN] ${#missing_engines[@]} non-critical engine payload(s) missing (cross-OS support reduced); --no-download set so skipping fetch." >&2
-    printf '  [MISSING] %s\n' "${missing_engines[@]}" >&2
-    ENGINES_READY=0
-else
-    echo "  Fetching missing engines for all platforms (universal boot support)..."
-    dl_rc=0
-    if [[ -x "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" ]]; then
-        "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" --engines-only || dl_rc=$?
-    else
-        bash "${SCRIPT_DIR}/tools/download_internet_in_a_box.sh" --engines-only || dl_rc=$?
-    fi
-    if [[ ${dl_rc} -ne 0 ]]; then
-        echo "[ERROR] Engine download failed (exit code ${dl_rc}). Partial files are preserved and will resume on next run." >&2
-        exit 1
-    fi
-    audit_engines
-    if [[ ${#missing_engines[@]} -gt 0 ]]; then
-        echo "[ERROR] Engine staging incomplete: ${#missing_engines[@]} payload(s) still missing after download." >&2
-        printf '  %s\n' "${missing_engines[@]}" >&2
-        exit 1
-    fi
-    echo "  [OK] All portable engines staged and verified in bin/."
-    ENGINES_READY=1
+# Kill background jobs on Ctrl-C / interrupt.
+trap 'kill "${PAYLOAD_PID}" "${ENGINE_PID}" 2>/dev/null; echo "[ABORT] Interrupted; killing pending downloads." >&2; exit 130' INT TERM
+
+payload_rc=0
+engine_rc=0
+wait "${PAYLOAD_PID}" || payload_rc=$?
+wait "${ENGINE_PID}" || engine_rc=$?
+
+if [[ ${payload_rc} -ne 0 ]]; then
+    echo "[ERROR] Payload asset acquisition failed (exit code ${payload_rc})." >&2
+    [[ ${engine_rc} -ne 0 ]] && echo "[ERROR] Engine staging also failed (exit code ${engine_rc})." >&2
+    exit 1
+fi
+if [[ ${engine_rc} -ne 0 ]]; then
+    echo "[ERROR] Engine staging failed (exit code ${engine_rc})." >&2
+    exit 1
 fi
 
 # Live Staging Execution
