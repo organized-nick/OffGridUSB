@@ -18,6 +18,14 @@
 .PARAMETER Drive
     Target USB drive letter (e.g. 'D' or 'D:').
 
+.PARAMETER Drives
+    Parallel multi-drive mode (USB hub): CSV of drive letters or
+    "<Letter>:<SKU>" per-drive SKU overrides, e.g. -Drives "D,E,F" or
+    "D:Product1,E:Product2". Provisions all drives concurrently (one child
+    engine per drive, per-drive logs in provisioning/logs/, per-drive
+    bandwidth budget, summary table, safe eject of succeeded drives).
+    Omit for single-drive behavior (unchanged).
+
 .PARAMETER DryRun
     Simulates safety validation, capacity check, asset availability, and staging plan with 0 writes.
 
@@ -57,6 +65,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$Drive,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Drives,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun,
@@ -309,6 +320,121 @@ function Normalize-SkuName {
 }
 
 $ResolvedSku = Normalize-SkuName -InputSku $Product -InputTier $Tier
+
+# ------------------------------------------------------------------------------
+# 1.5 Handler: Parallel Multi-Drive Mode (-Drives). The top-level process
+#     becomes the orchestrator: sequential per-drive safety gate (fail fast,
+#     per-drive abort), then one background child engine per gated drive,
+#     exit-code aggregation, summary table, and safe eject of succeeded drives.
+#     Each child gets its own bandwidth budget (per-drive cap is what keeps
+#     shared-hub flash controllers alive; default 2048 KB/s per drive).
+# ------------------------------------------------------------------------------
+if ($Drives -and -not $Info) {
+    $LogDir = Join-Path $ScriptDir "logs"
+    $null = New-Item -ItemType Directory -Path $LogDir -Force
+    $timeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $perDriveBw = if ($BwLimitKBps -gt 0) { $BwLimitKBps } else { 2048 }
+
+    # Parse "<Letter>" or "<Letter>:<SKU>" specs against the default SKU.
+    function Parse-DriveSpec {
+        param([string]$Spec, [string]$DefaultSku)
+        if ($Spec -match "^([A-Za-z])(?::([A-Za-z0-9-]+))?$") {
+            @{ Drive = $Matches[1].ToUpper(); Sku = if ($Matches[2]) { Normalize-SkuName -InputSku $Matches[2] -InputTier -1 } else { $DefaultSku } }
+        } else {
+            throw "Invalid -Drives spec '$Spec'. Expected a drive letter like 'D' or 'D:Product2'."
+        }
+    }
+
+    Write-Host ""
+    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host "  >>> PARALLEL PROVISIONING: $((($Drives -split ',') | Where-Object { $_.Trim() }).Count) drives (default SKU: $ResolvedSku)" -ForegroundColor Cyan
+    Write-Host "================================================================================" -ForegroundColor Cyan
+
+    $results = @()
+    foreach ($spec in ($Drives -split ',') | Where-Object { $_.Trim() }) {
+        $parsed = Parse-DriveSpec -Spec $_.Trim() -DefaultSku $ResolvedSku
+        $d = $parsed.Drive; $sku = $parsed.Sku
+        Write-Host "  [GATE] ${d}: ($sku)..." -ForegroundColor White
+        $gateOk = $true
+        try {
+            $safety = Assert-TargetDriveSafety -DriveLetter $d
+            $cap = Assert-DriveCapacity -DriveLetter $d -ProductSku $sku
+            if ($DryRun) {
+                Write-Host "  [DRY-RUN] Gate simulated PASSED for ${d}:" -ForegroundColor Yellow
+            } else {
+                Write-Host "  [PASS] ${d}: safety + capacity ok." -ForegroundColor Green
+            }
+        } catch {
+            if ($DryRun) {
+                Write-Host "  [DRY-RUN] Gate simulated for ${d}: ($($_.Exception.Message))" -ForegroundColor Yellow
+            } else {
+                Write-Host "  [FAIL] ${d}: $($_.Exception.Message)" -ForegroundColor Red
+                $gateOk = $false
+            }
+        }
+        $results += [PSCustomObject]@{ Drive = $d; Sku = $sku; Status = "PENDING"; ExitCode = "-"; Log = ""; GateOk = $gateOk }
+    }
+
+    foreach ($r in ($results | Where-Object { -not $_.GateOk })) { $r.Status = "FAIL (gate)" }
+
+    # Spawn one child engine per gated drive.
+    foreach ($r in ($results | Where-Object { $_.GateOk })) {
+        $logFile = Join-Path $LogDir "${timeStamp}_$($r.Sku)_$($r.Drive).log"
+        $r.Log = $logFile
+        Write-Host "  [SPAWN] $($r.Sku) -> $($r.Drive): (log: $logFile)" -ForegroundColor Cyan
+        $childArgs = @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath,
+            "-Product", $r.Sku, "-Drive", $r.Drive, "-BwLimitKBps", $perDriveBw,
+            "-FilesystemAction", $FilesystemAction, "-NonInteractive"
+        )
+        if ($CacheDir) { $childArgs += @("-CacheDir", $CacheDir) }
+        if ($Profile -ne "full") { $childArgs += @("-Profile", $Profile) }
+        if ($NoDownload) { $childArgs += "-NoDownload" }
+        if ($DryRun) { $childArgs += "-DryRun" }
+        $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $childArgs `
+            -RedirectStandardOutput $logFile -RedirectStandardError "${logFile}.err" `
+            -PassThru -NoNewWindow
+        Add-Member -InputObject $r -NotePropertyName "Process" -NotePropertyValue $proc -Force
+    }
+
+    # Wait and collect exit codes.
+    foreach ($r in ($results | Where-Object { $_.GateOk })) {
+        $r.Process.WaitForExit()
+        $r.ExitCode = $r.Process.ExitCode
+        $r.Status = if ($r.Process.ExitCode -eq 0) { "SUCCESS" } else { "FAIL (exit $($r.Process.ExitCode))" }
+    }
+
+    # Safe eject for succeeded drives (skip in dry-run mode).
+    if (-not $DryRun) {
+        # Source the library (NOT eject_usb.ps1 - dot-sourcing that script would
+        # execute its main body, which ejects and exits).
+        . (Join-Path $ScriptDir "lib\SafetyValidator.ps1")
+        foreach ($r in ($results | Where-Object { $_.Status -eq "SUCCESS" })) {
+            try { Invoke-SafeUsbEject -Drive $r.Drive | Out-Null }
+            catch { Write-Host "  [WARN] Eject failed for $($r.Drive): $($_.Exception.Message)" -ForegroundColor Yellow }
+        }
+    }
+
+    # Summary table.
+    Write-Host ""
+    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host "  >>> PARALLEL PROVISIONING SUMMARY" -ForegroundColor Cyan
+    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host ("{0,-12} {1,-14} {2,-18} {3}" -f "Drive", "SKU", "Status", "Log") -ForegroundColor White
+    foreach ($r in $results) {
+        $color = if ($r.Status -eq "SUCCESS") { "Green" } elseif ($r.Status -eq "PENDING") { "Gray" } else { "Red" }
+        Write-Host ("{0,-12} {1,-14} {2,-18} {3}" -f "$($r.Drive):", $r.Sku, $r.Status, $r.Log) -ForegroundColor $color
+    }
+    Write-Host "================================================================================" -ForegroundColor Cyan
+
+    $failed = @($results | Where-Object { $_.Status -ne "SUCCESS" }).Count
+    if ($failed -eq 0) {
+        Write-Host "  All $($results.Count) drives provisioned successfully." -ForegroundColor Green
+        exit 0
+    }
+    Write-Host "  $failed/$($results.Count) drive(s) failed; see logs above." -ForegroundColor Red
+    exit 1
+}
 
 # ------------------------------------------------------------------------------
 # 2. Handler: -Info Mode
