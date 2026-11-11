@@ -104,6 +104,26 @@ powershell -ExecutionPolicy Bypass -File provisioning/provision_usb.ps1 -Product
 ./provisioning/provision_usb.sh --product Product2 --dry-run --drive /media/$USER/OFFGRIDUSB
 ```
 
+### Parallel Multi-Drive Provisioning (USB hub)
+Provision several USB drives on one hub concurrently. One child engine runs per
+drive (own bandwidth budget — default 2048 KB/s each, which is what keeps
+shared-hub flash controllers alive), its own log under `provisioning/logs/`, a
+sequential safety gate before any staging, a summary table at the end, and safe
+eject of succeeded drives. A failed drive never aborts the others.
+
+```powershell
+# Windows: same SKU on 3 drives (per-drive SKU override: "D:Product1,E:Product2")
+powershell -ExecutionPolicy Bypass -File provisioning/provision_usb.ps1 -Product Product1 -Drives "D,E,F"
+
+# Linux / macOS: mount paths with optional per-drive SKU override (path:SKU)
+./provisioning/provision_usb.sh --product Product1 --drive /media/usb/d1 --drive /media/usb/d2:Product2
+```
+
+Without `-Drives` / `--drive` lists, both engines behave exactly as before
+(single drive). `--dry-run` works in parallel mode with fake drive paths, so
+the whole flow is testable without live hardware. `--bwlimit` applies per
+drive in parallel mode (not divided across drives).
+
 ### 1-Click Provisioning Execution
 ```powershell
 # Windows PowerShell
