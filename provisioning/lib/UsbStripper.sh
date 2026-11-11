@@ -115,6 +115,73 @@ enforce_lf_line_endings() {
     done < <(find "${target_root}" -type f \( -name "*.sh" -o -name "*.command" \) -print0 2>/dev/null)
 }
 
+import_legacy_cache_assets() {
+    local new_cache="$1"
+    local src_root="${SOURCE_ROOT:-$(pwd)}"
+    local legacy=("$HOME/Desktop/offgridusb/cache" "$src_root/cache" "$src_root/data" "$src_root/models_staging" "$src_root/zim_Builds")
+    local moved=0
+    mkdir -p "${new_cache}/zim" "${new_cache}/models"
+
+    local new_real src_real
+    new_real=$(realpath "${new_cache}" 2>/dev/null || echo "")
+    for src in "${legacy[@]}"; do
+        [[ -d "${src}" ]] || continue
+        src_real=$(realpath "${src}" 2>/dev/null || echo "")
+        [[ "${src_real}" == "${new_real}" ]] && continue
+        for sub in zim models; do
+            if [[ -d "${src}/${sub}" ]]; then
+                for f in "${src}/${sub}"/*.zim "${src}/${sub}"/*.gguf; do
+                    [[ -f "${f}" ]] || continue
+                    base=$(basename "${f}")
+                    dst="${new_cache}/${sub}/${base}"
+                    if [[ -f "${dst}" ]]; then
+                        echo "  [SKIP] Already in new cache: ${sub}/${base}"
+                        continue
+                    fi
+                    echo "  [MIGRATE] ${base} <- ${src}/${sub}"
+                    mv "${f}" "${dst}"
+                    moved=$((moved + 1))
+                done
+            fi
+        done
+        # Loose files sitting directly in the legacy cache root
+        for f in "${src}"/*.zim "${src}"/*.gguf; do
+            [[ -f "${f}" ]] || continue
+            base=$(basename "${f}")
+            dst_sub="zim"
+            [[ "${base}" == *.gguf ]] && dst_sub="models"
+            dst="${new_cache}/${dst_sub}/${base}"
+            if [[ -f "${dst}" ]]; then
+                echo "  [SKIP] Already in new cache: ${dst_sub}/${base}"
+                continue
+            fi
+            echo "  [MIGRATE] ${base} <- ${src}"
+            mv "${f}" "${dst}"
+            moved=$((moved + 1))
+        done
+    done
+    echo "${moved}"
+}
+
+safe_eject_drive() {
+    local target="$1"
+    if [[ -z "${target}" ]]; then
+        echo "[ERROR] safe_eject_drive: no target given" >&2
+        return 1
+    fi
+    local dev_node
+    dev_node=$(df "${target}" 2>/dev/null | tail -n 1 | awk '{print $1}')
+    sync
+    if command -v umount >/dev/null 2>&1; then
+        umount "${target}" 2>/dev/null || true
+    fi
+    if command -v eject >/dev/null 2>&1 && [[ -n "${dev_node}" && "${dev_node}" == "/dev/"* ]]; then
+        eject "${dev_node}" 2>/dev/null || true
+    fi
+    echo "[OK] Safe eject completed for ${target}."
+    return 0
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     if [[ "$#" -lt 1 ]]; then
         echo "Usage: $0 <target_mount_point>"
