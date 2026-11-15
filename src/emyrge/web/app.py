@@ -591,7 +591,10 @@ class EmyrgeRuntime:
         print("\n[OffGridUSB] Command Center tab closed -> flushing & safely ejecting USB drive...")
         sys.stdout.flush()
 
-        # 1. Stop child engines and release SQLite file handles on USB drive
+        # 1. Spawn detached host-resident safe-eject script in %TEMP% / /tmp FIRST
+        eject_res = spawn_detached_safe_eject(self.config.project_root, delay_ms=900)
+
+        # 2. Stop child engines and release SQLite file handles on USB drive
         for runner_stop in (
             self.model_runner.stop,
             self.kiwix_runner.stop,
@@ -604,9 +607,6 @@ class EmyrgeRuntime:
                 runner_stop()
             except Exception:
                 pass
-
-        # 2. Spawn detached host-resident safe-eject script in %TEMP% / /tmp
-        eject_res = spawn_detached_safe_eject(self.config.project_root, delay_ms=1500)
 
         # 3. Shut down HTTP server cleanly so Python & launcher exit
         if self._shutdown_callback is not None:

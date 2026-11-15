@@ -55,12 +55,20 @@ try {
     exit 1
 }
 
-# 2. Terminate any remaining processes executing from <Drive>:\
+# 2. Terminate any remaining processes executing from <Drive>:\ or holding <Drive>:\ paths
+Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.ProcessId -ne $PID -and (
+        ($_.ExecutablePath -and $_.ExecutablePath.ToUpper().StartsWith("${clean}:\")) -or
+        ($_.CommandLine -and $_.CommandLine.ToUpper().Contains("${clean}:\"))
+    )
+} | ForEach-Object {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+}
 Get-Process -ErrorAction SilentlyContinue | Where-Object {
     $_.Id -ne $PID -and $_.Path -and $_.Path.ToUpper().StartsWith("${clean}:\")
 } | Stop-Process -Force -ErrorAction SilentlyContinue
 
-Start-Sleep -Milliseconds 400
+Start-Sleep -Milliseconds 600
 
 # 3. Flush OS file cache to physical NAND flash
 try {
@@ -75,14 +83,15 @@ try {
     $item = $shell.Namespace(17).ParseName("${clean}:")
     if ($item) {
         $item.InvokeVerb("Eject")
-        Start-Sleep -Seconds 2
+        Start-Sleep -Milliseconds 1500
     }
 } catch {}
 
-# 4b. Win32 Kernel Volume Lock -> Dismount -> Eject fallback
+# 4b. Win32 Kernel Volume Lock -> Dismount -> Eject with retry loop
 if (Test-Path "${clean}:\") {
     Add-Type -TypeDefinition @"
 using System;
+using System.Threading;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 public static class OffGridUsbEjector {
@@ -109,7 +118,10 @@ public static class OffGridUsbEjector {
                 }
             }
             uint br;
-            DeviceIoControl(h, FSCTL_LOCK_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out br, IntPtr.Zero);
+            for (int i = 0; i < 6; i++) {
+                if (DeviceIoControl(h, FSCTL_LOCK_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out br, IntPtr.Zero)) break;
+                Thread.Sleep(300);
+            }
             DeviceIoControl(h, FSCTL_DISMOUNT_VOLUME, IntPtr.Zero, 0, IntPtr.Zero, 0, out br, IntPtr.Zero);
             IntPtr pmr = Marshal.AllocHGlobal(1);
             Marshal.WriteByte(pmr, 0);
@@ -120,7 +132,11 @@ public static class OffGridUsbEjector {
     }
 }
 "@
-    [void][OffGridUsbEjector]::Eject($clean)
+    for ($attempt = 0; $attempt -lt 3; $attempt++) {
+        if (-not (Test-Path "${clean}:\")) { break }
+        [void][OffGridUsbEjector]::Eject($clean)
+        Start-Sleep -Milliseconds 500
+    }
 }
 exit 0
 """

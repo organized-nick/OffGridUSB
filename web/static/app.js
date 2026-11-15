@@ -3948,19 +3948,40 @@
     if (safeEjectBtn) {
       safeEjectBtn.addEventListener("click", async () => {
         state.ejectTriggered = true;
+        if (swarmPollTimer) {
+          clearInterval(swarmPollTimer);
+          swarmPollTimer = null;
+        }
+        const kiwixIframe = $("#kiwixIframe");
+        if (kiwixIframe) {
+          kiwixIframe.src = "about:blank";
+        }
         safeEjectBtn.disabled = true;
         safeEjectBtn.textContent = "⏳ Flushing & Ejecting USB...";
+        const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+        const timerId = setTimeout(() => {
+          if (ctrl) ctrl.abort();
+        }, 2500);
         try {
-          await apiPost("/api/eject", { client_id: state.tabClientId, immediate: true });
+          await fetch("/api/eject", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ client_id: state.tabClientId, immediate: true }),
+            signal: ctrl ? ctrl.signal : undefined,
+            keepalive: true,
+          });
         } catch (_) {
           notifyTabClosing(true);
+        } finally {
+          clearTimeout(timerId);
         }
         safeEjectBtn.textContent = "✓ USB Safely Flushed — Safe to Unplug";
+        safeEjectBtn.style.background = "#3F4A2C";
         safeEjectBtn.style.borderColor = "#8A9A5B";
-        safeEjectBtn.style.color = "#8A9A5B";
+        safeEjectBtn.style.color = "#EDE6D6";
         const airgapInd = $("#airgapIndicator");
         if (airgapInd) {
-          airgapInd.textContent = "USB Safely Dismounted — Safe to Remove Drive";
+          airgapInd.textContent = "✓ USB Safely Dismounted — Safe to Remove Drive";
         }
       });
     }
