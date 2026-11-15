@@ -22,7 +22,7 @@ DEFAULT_PRODUCT_DESCRIPTOR: Dict[str, Any] = {
     "sku": "Product2",
     "product_id": "fieldready",
     "name": "OffGridUSB — FieldReady",
-    "tagline": "Tactical Field Survival & Offline AI",
+    "tagline": "Offline Command Center",
     "tiers": [0, 1],
     "target_drive_size_gb": 32,
     "min_drive_capacity_bytes": 31450000000,
