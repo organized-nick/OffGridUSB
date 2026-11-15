@@ -48,11 +48,12 @@ OffGridUSB scales dynamically across hardware tiers and commercial product editi
 
 | SKU / Tier | Edition Name | Target USB | Usable Payload | Included Offline Knowledge (.zim) | Local Neural Models (.gguf) | Active Command Center Features |
 | :--- | :--- | :---: | :---: | :--- | :--- | :--- |
-| **Product 1**<br>(Tier 0) | **PocketSurvival** | **8 GB** | **<= 6.5 GB** | Safe Water, Food Prep, Wilderness First Aid, Clinical WikiMed Mini, Top Articles Mini (~570 MB) | SmolLM2-135M (~101 MB)<br>Qwen2.5-0.5B (~469 MB) | Offline Kiwix Reader (:8081)<br>Grounded AI Professor (:8082)<br>CDC Water Chlorination Calc<br>WHO Oral Rehydration Calc<br>Solar & Battery Sizing Calc |
-| **Product 2**<br>(Tiers 0+1) | **FieldReady** | **32 GB** | **~16–20 GB** | *All Tier 0 content PLUS:*<br>Wikibooks STEM & Textbooks (~5.8 GB)<br>Full Illustrated WikiMed (~1.8 GB) | *All Tier 0 models PLUS:*<br>Qwen2.5-1.5B (1.06 GB)<br>Phi-3.5-mini / Llama-3.2-3B (~2 GB) | *All Product 1 features PLUS:*<br>SQLite Semantic Memory Vault<br>Offline Photo OCR & EXIF Vault<br>Interactive STEM Practice Tutor |
-| **Product 3**<br>(Tiers 0+1+2) | **CivilizationArk** | **128 GB** | **~65–72 GB** | *All Tier 0+1 content PLUS:*<br>Full English Wikipedia No-Pic (~50.2 GB, 6.8M articles) | Dual 3B/3.8B models<br>(Llama-3.2-3B + Phi-3.5-mini) | Full 6.8M Article RAG Retrieval<br>Hardware Auto-Selector<br>Multi-model fallback routing |
-| **Tier 3** | **SwarmCluster** | **256 GB SSD** | **~88 GB** | All Tiers 0–2 knowledge | Qwen2.5-32B-Instruct (18.9 GB) | Heterogeneous LAN clustering via `exo`/`llama.cpp` RPC layer splitting |
-| **Tier 4** | **SettlementHub** | **512 GB NVMe** | **~210+ GB** | All Tiers 0–3 + Full Illustrated English Wikipedia Maxi (~110 GB) | Llama-3.3-70B-Instruct (40.5 GB) | Multi-GPU Settlement Hub<br>Distillation-on-Dock<br>LoRa / Meshtastic query gateway |
+| **Product 1**<br>(Tier 0) | **PocketSurvival** | **64 GB** | **~54.0 GB** | Full survival / medical / prepper / practical-STEM ZIM catalog (46 archives, priority-ordered) | *(none — AI-free edition)* | Offline Kiwix Reader (:8081)<br>Offline maps |
+| **Product 2**<br>(Tiers 0+1) | **FieldReady** | **64 GB** | **~54.5 GB** | *All Tier 0 content* | SmolLM2-135M, Qwen2.5-0.5B (+Q8_0), Qwen2.5-1.5B, Phi-3.5-mini | *All Product 1 features PLUS:*<br>Grounded AI Professor (:8082)<br>SQLite Semantic Memory Vault<br>Offline Photo OCR & EXIF Vault |
+| **Product 3**<br>(Tiers 0+1+2) | **CivilizationArk** | **64 GB** | **~54.8 GB** | *All Product 2 content, Wikipedia-weighted* | *All Product 2 models PLUS:*<br>Llama-3.2-3B + Qwen2-VL-2B (multimodal) | *All Product 2 features PLUS:*<br>Wikipedia RAG retrieval<br>Hardware Auto-Selector |
+| **Product 2-256 / 3-256** | **FieldReady / CivilizationArk 256** | **256 GB SSD** | **~150–163 GB** | Full ZIM catalog | Same per-tier lineups, Product3-256 adds Qwen2.5-7B + Gemma-2-9B | Same per-tier features on the 256 GB ladder |
+| **Tier 3** | **SwarmCluster** | **256 GB SSD** | **~182 GB** | Full catalog | *All Product 3-256 models PLUS:*<br>Qwen2.5-32B-Instruct (18.9 GB) | Heterogeneous LAN clustering via `exo`/`llama.cpp` RPC layer splitting |
+| **Tier 4** | **SettlementHub** | **512 GB NVMe** | **~332 GB** | Full catalog incl. Wikipedia Maxi | Llama-3.3-70B-Instruct (40.5 GB) | Full Tier 3 stack at 70B scale |
 
 ---
 
@@ -68,15 +69,15 @@ Double-click `provisioning\PROVISION_OFFGRID_USB.bat` or run:
 The wizard inspects attached removable storage, prevents targeting OS drive `C:`, displays available SKUs, verifies drive capacity, formats exFAT @ 128 KB cluster size, and stages only the chosen product assets.
 
 ### 2. One-Click Product Shortcuts
-- **Provision Product 1 (PocketSurvival, 8 GB):**
+- **Provision Product 1 (PocketSurvival, 64 GB, AI-free):**
   ```powershell
   .\provisioning\wrappers\provision_product1_pocketsurvival.ps1 -Drive D:
   ```
-- **Provision Product 2 (FieldReady, 32 GB):**
+- **Provision Product 2 (FieldReady, 64 GB):**
   ```powershell
   .\provisioning\wrappers\provision_product2_fieldready.ps1 -Drive D:
   ```
-- **Provision Product 3 (CivilizationArk, 128 GB):**
+- **Provision Product 3 (CivilizationArk, 64 GB):**
   ```powershell
   .\provisioning\wrappers\provision_product3_civilizationark.ps1 -Drive D:
   ```
@@ -119,7 +120,7 @@ When active, OffGridUSB runs three isolated, zero-dependency background daemons 
 
 | Port | Service | Process Path | Function |
 | :---: | :--- | :--- | :--- |
-| **`8000`** | **Command Center** | `bin/windows_x86_64/python/python.exe` (or system `python3`) | Pure Python stdlib HTTP server serving UI, RAG citations, OCR, and calculators |
+| **`8000`** | **Command Center** | `bin/windows_x86_64/python/python.exe` (or system `python3`) | Pure Python stdlib HTTP server serving UI, RAG citations, and OCR |
 | **`8081`** | **Kiwix Knowledge Server** | `bin/*/kiwix-serve` | Fast full-text search and article rendering from indexed `.zim` archives |
 | **`8082`** | **Local LLM Engine** | `bin/*/llama-server` | Native OpenAI-compatible HTTP inference for active `.gguf` neural models |
 

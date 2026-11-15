@@ -87,15 +87,16 @@ def test_new_entries_present_hashed_and_claimed_by_at_least_one_sku():
 
 
 def test_variant_skus_exist_and_profiles_fit_drive_budgets():
-    """Drive-size separation (john 2026-11-06): 32GB = tier 0 only,
-    tier 1 & tier 2 get a variant per drive size."""
+    """Drive ladder per AGENTS.md 2026-11-15 (john): 64 GB AI-free Product1,
+    no 32 GB tiers anymore; tier 1 & tier 2 get a variant per drive size."""
     products = {p["sku"]: p for p in
                 json.loads(PRODUCTS_MANIFEST.read_text())["products"]}
     for sku in ALL_SKUS:
         assert sku in products, f"missing SKU {sku}"
     p1 = products["Product1"]
-    assert p1["target_drive_size_gb"] == 32
-    assert p1["tiers"] == [0], "32 GB drive can only be tier 0"
+    assert p1["target_drive_size_gb"] == 64
+    assert p1["tiers"] == [0]
+    assert p1["payload_profiles"]["full"]["models"] == [], "Product1 is AI-free"
     for sku in ("Product2", "Product3"):
         assert products[sku]["target_drive_size_gb"] == 64
         assert products[f"{sku}-256"]["target_drive_size_gb"] == 256

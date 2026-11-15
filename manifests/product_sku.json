@@ -8,8 +8,8 @@
     0,
     1
   ],
-  "target_drive_size_gb": 32,
-  "min_drive_capacity_bytes": 31450000000,
+  "target_drive_size_gb": 64,
+  "min_drive_capacity_bytes": 61000000000,
   "features": [
     "kiwix_reader",
     "grounded_ai_professor",

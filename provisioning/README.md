@@ -9,17 +9,20 @@
 
 ## 1. Overview & Commercial Product Line
 
-The Factory Provisioning Suite productizes **OffGridUSB** into three commercial SKUs across technical Tiers 0 through 4:
+The Factory Provisioning Suite productizes **OffGridUSB** into seven commercial SKUs across technical Tiers 0 through 4:
 
 | Commercial SKU | SKU ID | Technical Tiers | Target Media | Formatted Min Size | Max Allowed Payload | Lean Local Payload | Target Features |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **PocketSurvival** | `Product1` | Tier 0 | 8 GB USB | **7.0 GB** | **<= 6.5 GB** | ~1.39 GB | Kiwix (:8081), Grounded AI Professor (:8082), CDC Calculators |
-| **FieldReady** | `Product2` | Tiers 0 & 1 | 32 GB USB (e.g. `D:`) | **28.0 GB** | **~16–20 GB** | ~4.69 GB | All Product 1 + SQLite Memory Vault, Photo OCR Vault, STEM Tutor |
-| **CivilizationArk** | `Product3` | Tiers 0, 1 & 2 | 128 GB USB / SSD | **110.0 GB** | **~65–72 GB** | N/A (50.2 GB ZIM) | All Product 2 + 50.2 GB Wikipedia, Hardware Auto-Selector |
-| **SwarmCluster** | `Tier3` | Tiers 0–3 | 256 GB Portable SSD | **220.0 GB** | **~88 GB** | N/A (18.9 GB GGUF)| All Product 3 + Qwen 32B + exo LAN RPC Coordinator |
-| **SettlementHub** | `Tier4` | Tiers 0–4 | 512 GB Portable NVMe | **450.0 GB** | **~210+ GB** | N/A (110 GB ZIM) | All Tier 3 + Wikipedia Maxi (110 GB) + Llama 70B (40.5 GB) |
+| **PocketSurvival** | `Product1` | Tier 0 | 64 GB USB | **59.0 GB** | **~54.0 GB** | ~1.39 GB | AI-free: Offline Kiwix (:8081) + ZIM knowledge. No models. |
+| **FieldReady** | `Product2` | Tiers 0 & 1 | 64 GB USB (e.g. `D:`) | **59.0 GB** | **~54.5 GB** | ~4.69 GB | All Product 1 + Memory Vault, Photo OCR Vault, STEM Tutor, local AI (:8082) |
+| **CivilizationArk** | `Product3` | Tiers 0, 1 & 2 | 64 GB USB / SSD | **59.0 GB** | **~54.8 GB** | N/A | All Product 2 + Wikipedia No-Pic + Hardware Auto-Selector |
+| **FieldReady 256** | `Product2-256` | Tiers 0 & 1 | 256 GB Portable SSD | **214.2 GB** | **~149.6 GB** | ~4.69 GB | Same features as Product2, full 145.5 GB ZIM catalog |
+| **CivilizationArk 256** | `Product3-256` | Tiers 0, 1 & 2 | 256 GB Portable SSD | **214.2 GB** | **~163.4 GB** | N/A | Same features as Product3, full catalog + 7B/9B models |
+| **SwarmCluster** | `Tier3` | Tiers 0–3 | 256 GB Portable SSD | **214.2 GB** | **~182 GB** | N/A | All Product 3 + Qwen 32B + exo LAN RPC Coordinator |
+| **SettlementHub** | `Tier4` | Tiers 0–4 | 512 GB NVMe | **428.4 GB** | **~332 GB** | N/A | All Tier 3 + Wikipedia Maxi + Llama 70B |
 
-*(Note: Commercial 64 GB USB drives only offer ~57.6 GiB usable space, which cannot fit the ~65–72 GB CivilizationArk payload. Product 3 strictly requires a 128 GB drive).*
+
+*(Note: drive ladder per AGENTS.md — 64 GB AI-free Product1, 64 GB Product2/Product3, 256 GB variants + Tier3, 512 GB Tier4. No 32 GB tiers anymore.)*
 
 ---
 

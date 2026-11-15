@@ -61,11 +61,8 @@ TIER2_HEAD_START = ["wikipedia-en-all-nopic"]
 # SKU -> (drive label, max_payload_bytes, tier, [model filenames])
 # Model ladder: micro -> micro+1.5B/Phi -> +3B/VL -> +7B/9B -> +32B -> +70B.
 SKUS = {
-    "Product1":    ("32GB USB 3.2 Flash Drive", 29_000_000_000, 0, [
-        "smollm2-135m-instruct-q4_k_m.gguf",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
-    ]),
+    # Product1 = AI-free edition per AGENTS.md: no models, no AI features, 64 GB drive.
+    "Product1":    ("64GB USB 3.2 Flash Drive", 59_000_000_000, 0, []),
     "Product2":    ("64GB USB 3.2 Flash Drive", 59_000_000_000, 1, [
         "smollm2-135m-instruct-q4_k_m.gguf",
         "qwen2.5-0.5b-instruct-q4_k_m.gguf",
@@ -142,7 +139,7 @@ VARIANT_PARENTS = {
 # per-SKU drive geometry: (min_drive_capacity_bytes, max_payload_bytes,
 # target_drive_size_gb). Budgets in SKUS must match max_payload_bytes here.
 DRIVE_GEOMETRY = {
-    "Product1":     (30_500_000_000, 29_000_000_000, 32),
+    "Product1":     (61_000_000_000, 59_000_000_000, 64),  # 64 GB drive, AI-free per AGENTS.md
     "Product2":     (61_000_000_000, 59_000_000_000, 64),
     "Product2-256": (245_000_000_000, 230_000_000_000, 256),
     "Product3":     (61_000_000_000, 59_000_000_000, 64),

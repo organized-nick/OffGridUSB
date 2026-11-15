@@ -71,3 +71,33 @@ verdict codes: 🔴 divergent / 🟡 out-of-sync (known flag confirmed) / 🟢 a
    in one alignment commit (prose-only; planner untouched).
 3. regenerate product_sku.json at next factory run to clear the stale descriptor.
 4. collapse the dual app.js / ui-source duplication.
+
+---
+
+## RESOLUTION PASS — 2026-11-15 (same PR, self-contained)
+
+john's ruling: AGENTS.md is #1 source of truth. Product1 = 64 GB, **no 32 GB tiers
+anymore**. Resolved in this PR:
+
+- planner: `SKUS["Product1"]` → 64 GB drive, tier 0, **empty model list** (AI-free per
+  AGENTS.md); `DRIVE_GEOMETRY["Product1"]` → (61 GB min, 59 GB budget, 64).
+- `manifests/products.json` regenerated via `plan_tier_payloads.py --apply` (full
+  profiles recomputed); Product1 top-level metadata updated (64 GB / 61 GB min /
+  active_features minus grounded_ai_professor / lean profile now ZIM-only).
+- `manifests/zim.json` + `manifests/models.json` required_for_skus re-synced by planner.
+- Product1 provisioning: `provision_product1_pocketsurvival.ps1` header,
+  `provision_usb.ps1` SKU inventory/menu strings, `provision_usb.sh` sku table/menu,
+  `lib/SafetyValidator.ps1` Product1 capacity + labels + 29→59 GiB clamp comments.
+- `manifests/product_sku.json` refreshed to Product2 @ 64 GB (61 GB min).
+- README tier table rewritten against planner output (64/64/64/256/512 + -256 variants,
+  no calculators / distillation-on-dock / LoRa claims in active feature columns).
+- provisioning/README.md SKU table rewritten (7 SKUs incl. -256 variants).
+- PRD: Appendix A feature register added — maps F-04…F-41 docstring IDs to code
+  anchors; F-19..F-24 / F-37..F-40 flagged as no-code-anchor PRD-era IDs.
+- AGENTS.md updated per standing orders: product list gains Product3 + -256 variants +
+  "no 32 GB tiers" rule; out-of-sync flags section marked resolved with pointers to
+  what stays open (task 3 UI gating).
+- tests: `test_zim_catalog_expansion.py` drive-ladder assertions updated to the new
+  ladder + new assertion that Product1 full profile ships zero models. suite green:
+  352 passed, same 16 pre-existing opaque-e2e/environment failures as main baseline
+  (zero regressions introduced).

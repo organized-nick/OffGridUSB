@@ -453,7 +453,7 @@ if ($Info) {
     Write-Host ("{0,-13} {1,-22} {2,-9} {3,-9} {4,-12} {5}" -f "------------", "----------------------", "-------", "-------", "-----------", "------------------------------------------") -ForegroundColor DarkGray
 
     $skuRows = @(
-        [PSCustomObject]@{ Sku="Product1";     Name="PocketSurvival";        Tiers="Tier 0";    MinUsb="32 GB";  Payload="~29.0 GB";  Desc="30 ZIMs + 2 GGUFs: Survival, Medical, Kiwix (:8081), AI (:8082), CDC Calc." }
+        [PSCustomObject]@{ Sku="Product1";     Name="PocketSurvival";        Tiers="Tier 0";    MinUsb="64 GB";  Payload="~54.0 GB";  Desc="AI-free: ZIM survival/medical knowledge + Offline Kiwix (:8081). No models." }
         [PSCustomObject]@{ Sku="Product2";     Name="FieldReady (64GB)";     Tiers="0 + 1";     MinUsb="64 GB";  Payload="~58.9 GB";  Desc="44 ZIMs + 5 GGUFs: SQLite Memory Vault, OCR Vault, STEM & Coding." }
         [PSCustomObject]@{ Sku="Product2-256"; Name="FieldReady (256GB)";    Tiers="0 + 1";     MinUsb="256 GB"; Payload="~160.7 GB"; Desc="52 ZIMs + 5 GGUFs: Adds Wikipedia No-Pic (50 GB) + StackOverflow + Gutenberg." }
         [PSCustomObject]@{ Sku="Product3";     Name="CivilizationArk (64G)"; Tiers="0 + 1 + 2"; MinUsb="64 GB";  Payload="~58.9 GB";  Desc="17 ZIMs + 3 GGUFs: Full English Wikipedia No-Pic (50.2 GB) + Survival Core." }
@@ -516,7 +516,7 @@ if ($Info) {
     $inv2 = Get-ProductAssetInventory -ProductSku "Product2" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
     $inv3 = Get-ProductAssetInventory -ProductSku "Product3" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
     Write-Host "[CURRENT FACTORY READINESS STATUS ($Profile profile)]" -ForegroundColor Yellow
-    Write-Host ("  * Product 1 (PocketSurvival, 32 GB):   {0} ({1}/{2} assets cached)" -f $(if ($inv1.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv1.MissingCount)]" }), ($inv1.Assets.Count - $inv1.MissingCount), $inv1.Assets.Count) -ForegroundColor $(if ($inv1.AllRequiredAvailable) { "Green" } else { "Yellow" })
+    Write-Host ("  * Product 1 (PocketSurvival, 64 GB):   {0} ({1}/{2} assets cached)" -f $(if ($inv1.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv1.MissingCount)]" }), ($inv1.Assets.Count - $inv1.MissingCount), $inv1.Assets.Count) -ForegroundColor $(if ($inv1.AllRequiredAvailable) { "Green" } else { "Yellow" })
     Write-Host ("  * Product 2 (FieldReady, 64 GB):       {0} ({1}/{2} assets cached)" -f $(if ($inv2.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv2.MissingCount)]" }), ($inv2.Assets.Count - $inv2.MissingCount), $inv2.Assets.Count) -ForegroundColor $(if ($inv2.AllRequiredAvailable) { "Green" } else { "Yellow" })
     Write-Host ("  * Product 3 (CivilizationArk, 64 GB):  {0} ({1}/{2} assets cached)" -f $(if ($inv3.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv3.MissingCount)]" }), ($inv3.Assets.Count - $inv3.MissingCount), $inv3.Assets.Count) -ForegroundColor $(if ($inv3.AllRequiredAvailable) { "Green" } else { "Cyan" })
     Write-Host "================================================================================" -ForegroundColor Cyan
@@ -548,7 +548,7 @@ if (-not $ResolvedSku -or -not $Drive) {
     Write-Host "  OFFGRIDUSB -- FACTORY PROVISIONING SUITE (HOST ONLY)" -ForegroundColor Cyan
     Write-Host "  Universal Air-Gapped Offline Survival, Knowledge & Local AI Drives" -ForegroundColor White
     Write-Host "================================================================================" -ForegroundColor Cyan
-    Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    32 GB USB,  ~29.0 GB full / 1.4 GB lean)"
+    Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    64 GB USB,  ~54.0 GB full / 1.4 GB lean)"
     Write-Host "  [2] Provision Product 2: FieldReady      (Tiers 0-1, 64 GB USB,  ~58.9 GB full / 4.7 GB lean)"
     Write-Host "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 64 GB USB,  ~58.9 GB Wikipedia-first)"
     Write-Host "  ----------------------------------------------------------------------------" -ForegroundColor DarkGray
@@ -794,7 +794,7 @@ if ($DryRun) {
     Write-Host "  Product SKU        : $ResolvedSku"
     Write-Host "  Target Drive       : ${Drive}:"
     Write-Host "  Drive Safety Check : PASSED (Disk 0 Protected, Host NVMe Guarded)"
-    Write-Host "  Capacity Validation: $(if ($capPassed) { "PASSED ($($cap.ActualGB) GB >= $($cap.RequiredGB) GB)" } else { "INSUFFICIENT (Target drive cannot fit $ResolvedSku; 128 GB required)" })" -ForegroundColor $(if ($capPassed) { "Green" } else { "Yellow" })
+    Write-Host "  Capacity Validation: $(if ($capPassed) { "PASSED ($($cap.ActualGB) GB >= $($cap.RequiredGB) GB)" } else { "INSUFFICIENT (Target drive cannot fit $ResolvedSku; 64 GB required)" })" -ForegroundColor $(if ($capPassed) { "Green" } else { "Yellow" })
     Write-Host "  Lock Resolution    : PASSED ($($runningProcs.Count) process(es) audited)"
     Write-Host "  Filesystem Plan    : $($fsPlan.ResolvedAction) ($($fsPlan.Description))"
     Write-Host "  Asset Magic Headers: $(if ($sourceMagicFailures.Count -eq 0) { "100% PASSED" } else { "$($sourceMagicFailures.Count) Corrupted" })"
