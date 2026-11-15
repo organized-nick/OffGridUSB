@@ -35,11 +35,18 @@ function Write-EjectLog([string]$msg) {
     } catch {}
 }
 
-Set-Content -Path $logFile -Value "$([DateTime]::UtcNow.ToString('o')) Starting safe eject for drive '$DriveLetter' (DelayMs=$DelayMs)" -ErrorAction SilentlyContinue
-
 $clean = ($DriveLetter.Trim().ToUpper() -replace "[:\\/\s]", "")
 $sysLetter = ($env:SystemDrive -replace "[:\\/\s]", "").ToUpper()
 if (-not $sysLetter) { $sysLetter = "C" }
+
+# 0. Single-instance named mutex so redundant detached launchers (Popen + WScript COM) don't collide
+$createdNew = $false
+$mutex = New-Object System.Threading.Mutex($true, "Local\OffGridUsbSafeEject_${clean}", [ref]$createdNew)
+if (-not $createdNew) {
+    exit 0
+}
+
+Write-EjectLog "[PS1] Starting safe eject for drive '$DriveLetter' (DelayMs=$DelayMs, PID=$PID)"
 
 # 1. Hardware Safety Gate: never touch C: or Disk 0 / Boot / System
 if ($clean.Length -ne 1 -or $clean -eq "C" -or $clean -eq $sysLetter) {
@@ -263,10 +270,38 @@ def spawn_detached_safe_eject(project_root: Path, delay_ms: int = 1500) -> Dict[
                 "-DelayMs",
                 str(delay_ms),
             ]
-            # CREATE_NO_WINDOW (0x08000000) | CREATE_NEW_PROCESS_GROUP (0x00000200).
+            # Method 0 (Fastest, 10ms cold start, zero console window): Native Win32 GUI helper offgridusb_safe_eject.exe
+            base_flags = 0x08000000 | 0x00000200
+            exe_candidates = [
+                Path(project_root) / "bin" / "windows_x86_64" / "offgridusb_safe_eject.exe",
+                Path(__file__).resolve().parents[3] / "bin" / "windows_x86_64" / "offgridusb_safe_eject.exe",
+            ]
+            staged_exe = tmp_dir / "offgridusb_safe_eject.exe"
+            for cand in exe_candidates:
+                try:
+                    if cand.is_file() and cand.stat().st_size > 1024:
+                        staged_exe.write_bytes(cand.read_bytes())
+                        break
+                except Exception:
+                    pass
+
+            if staged_exe.is_file():
+                try:
+                    subprocess.Popen(
+                        [str(staged_exe), target, str(delay_ms)],
+                        cwd=str(tmp_dir),
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        creationflags=base_flags,
+                        close_fds=True,
+                    )
+                except Exception:
+                    pass
+
+            # Method A: Direct subprocess.Popen with CREATE_NO_WINDOW (0x08000000) | CREATE_NEW_PROCESS_GROUP (0x00000200).
             # Never combine CREATE_NO_WINDOW with DETACHED_PROCESS (0x00000008) or -WindowStyle Hidden,
             # as Win32 CreateProcessW ignores CREATE_NO_WINDOW and PowerShell aborts when hiding a missing console.
-            base_flags = 0x08000000 | 0x00000200
             try:
                 subprocess.Popen(
                     cmd,
@@ -287,6 +322,31 @@ def spawn_detached_safe_eject(project_root: Path, delay_ms: int = 1500) -> Dict[
                     creationflags=base_flags,
                     close_fds=True,
                 )
+
+            # Method C: Redundant out-of-tree WScript.Shell COM invisible launcher (0 = SW_HIDE, False = async).
+            try:
+                vbs_path = tmp_dir / "offgridusb_safe_eject.vbs"
+                ps_cmd_str = (
+                    f'powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass '
+                    f'-File ""{script_path}"" -DriveLetter {target} -DelayMs {delay_ms}'
+                )
+                vbs_lines = [f'CreateObject("WScript.Shell").Run "{ps_cmd_str}", 0, False']
+                if staged_exe.is_file():
+                    exe_cmd_str = f'""{staged_exe}"" {target} {delay_ms}'
+                    vbs_lines.insert(0, f'CreateObject("WScript.Shell").Run "{exe_cmd_str}", 0, False')
+                vbs_path.write_bytes(("\r\n".join(vbs_lines) + "\r\n").encode("utf-8"))
+                subprocess.Popen(
+                    ["wscript.exe", "//B", "//NoLogo", str(vbs_path)],
+                    cwd=str(tmp_dir),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=base_flags,
+                    close_fds=True,
+                )
+            except Exception:
+                pass
+
             return {
                 "ok": True,
                 "ejected": True,

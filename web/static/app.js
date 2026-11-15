@@ -27,6 +27,7 @@
     tabClientId: "tab-" + Math.random().toString(36).slice(2, 10) + "-" + Date.now(),
     ejectTriggered: false,
   };
+  window.__offgridTabClientId = state.tabClientId;
 
 
   // --------------------------------------------------------------------------
@@ -1902,7 +1903,7 @@
           states: { type: "geojson", data: "/maps/states_lines.geojson" },
           lakes: { type: "geojson", data: "/maps/lakes.geojson" },
           rivers: { type: "geojson", data: "/maps/rivers.geojson" },
-          roads: { type: "geojson", data: "/maps/roads.geojson" },
+          roads: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
           cities: { type: "geojson", data: "/maps/cities.geojson" },
           airports: { type: "geojson", data: "/maps/airports.geojson" },
           peaks: { type: "geojson", data: "/maps/peaks.geojson" },
@@ -2090,12 +2091,20 @@
       },
     });
 
+    window.__offlineMap = offlineMap;
     offlineMap.addControl(new window.maplibregl.NavigationControl({ showCompass: true }), "top-right");
     offlineMap.addControl(new window.maplibregl.ScaleControl({ maxWidth: 140, unit: "metric" }), "bottom-left");
 
     offlineMap.on("load", () => {
       offlineMapLoaded = true;
       syncOfflineMapPhotos();
+      setTimeout(() => {
+        if (state.ejectTriggered || window.__offgridEjectTriggered || !offlineMap) return;
+        try {
+          const roadSrc = offlineMap.getSource("roads");
+          if (roadSrc) roadSrc.setData("/maps/roads.geojson");
+        } catch (_) {}
+      }, 250);
     });
 
     offlineMap.on("mousemove", (e) => {
@@ -3082,6 +3091,7 @@
   }
 
   async function loadSwarmStatus() {
+    if (state.ejectTriggered || window.__offgridEjectTriggered) return;
     try {
       const res = await apiGet("/api/swarm/status");
       renderSwarmStatus(res);
@@ -3887,7 +3897,13 @@
       apiPost("/api/swarm/options", { auto_reform: reformChk.checked }).catch(() => {});
     });
     if (startBtn || stopBtn || scanBtn) {
-      swarmPollTimer = setInterval(loadSwarmStatus, 5000);
+      swarmPollTimer = setInterval(() => {
+        if (state.ejectTriggered || window.__offgridEjectTriggered) return;
+        const swarmPanel = $("#tab-swarm");
+        if (swarmPanel && swarmPanel.classList.contains("active")) {
+          loadSwarmStatus();
+        }
+      }, 5000);
     }
     // distributed inference controls
     const infLaunch = $("#swarmInfLaunchBtn");
@@ -3903,7 +3919,7 @@
 
     // Browser Tab Lifecycle & Safe USB Auto-Eject Wiring
     const sendClientHeartbeat = () => {
-      if (state.ejectTriggered) return;
+      if (state.ejectTriggered || window.__offgridEjectTriggered) return;
       fetch("/api/client-heartbeat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3913,7 +3929,7 @@
     };
 
     const notifyTabClosing = (immediate = false) => {
-      if (state.ejectTriggered && !immediate) return;
+      if ((state.ejectTriggered || window.__offgridEjectTriggered) && !immediate) return;
       const payload = JSON.stringify({
         client_id: state.tabClientId,
         immediate: Boolean(immediate),
@@ -3947,68 +3963,14 @@
     const safeEjectBtn = $("#safeEjectBtn");
     if (safeEjectBtn) {
       safeEjectBtn.addEventListener("click", () => {
-        if (state.ejectTriggered) return;
         state.ejectTriggered = true;
         if (swarmPollTimer) {
           clearInterval(swarmPollTimer);
           swarmPollTimer = null;
         }
-        const kiwixIframe = $("#kiwixIframe");
-        if (kiwixIframe) {
-          kiwixIframe.src = "about:blank";
+        if (typeof window.__offgridSafeEject === "function") {
+          window.__offgridSafeEject(safeEjectBtn);
         }
-        safeEjectBtn.disabled = true;
-        safeEjectBtn.textContent = "⏳ Flushing & Ejecting USB...";
-
-        const payload = JSON.stringify({ client_id: state.tabClientId, immediate: true });
-        try {
-          if (navigator.sendBeacon) {
-            const blob = new Blob([payload], { type: "application/json" });
-            navigator.sendBeacon("/api/eject", blob);
-          }
-        } catch (_) {}
-        fetch("/api/eject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: payload,
-          keepalive: true,
-        }).catch(() => {});
-
-        const markEjectedUI = () => {
-          safeEjectBtn.textContent = "✓ Safe to Unplug USB";
-          safeEjectBtn.style.background = "#3F4A2C";
-          safeEjectBtn.style.borderColor = "#8A9A5B";
-          safeEjectBtn.style.color = "#EDE6D6";
-          const airgapInd = $("#airgapIndicator");
-          if (airgapInd) {
-            airgapInd.textContent = "✓ USB Safely Dismounted — Safe to Remove Drive";
-          }
-          const pillLlm = $("#pillLlm");
-          const valLlm = $("#valLlm");
-          if (pillLlm) pillLlm.className = "tele-pill status-warn";
-          if (valLlm) valLlm.textContent = "STOPPED (SAFE EJECT)";
-          const pillKiwix = $("#pillKiwix");
-          const valKiwix = $("#valKiwix");
-          if (pillKiwix) pillKiwix.className = "tele-pill status-warn";
-          if (valKiwix) valKiwix.textContent = "DISMOUNTED";
-
-          let banner = document.getElementById("safeEjectBanner");
-          if (!banner) {
-            banner = document.createElement("div");
-            banner.id = "safeEjectBanner";
-            banner.setAttribute("role", "status");
-            banner.style.cssText =
-              "background:#1E2618;border:2px solid #8A9A5B;color:#EDE6D6;padding:14px 20px;margin:12px 24px 0;border-radius:8px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 6px 20px rgba(0,0,0,0.45);";
-            banner.innerHTML =
-              '<span>✓ <strong>USB Safely Flushed &amp; Dismounted:</strong> Local AI (:8082), Kiwix Library (:8081), and Command Center (:8000) have stopped and caches are flushed. <strong>It is now 100% safe to unplug your OffGridUSB drive.</strong></span>';
-            const mainEl = document.querySelector("main.cmd-grid") || document.body;
-            if (mainEl && mainEl.parentNode) {
-              mainEl.parentNode.insertBefore(banner, mainEl);
-            }
-          }
-        };
-
-        setTimeout(markEjectedUI, 600);
       });
     }
   }

@@ -584,6 +584,8 @@ class EmyrgeRuntime:
             if self._shutting_down:
                 return {"ok": True, "already_shutting_down": True}
             self._shutting_down = True
+            self.model_runner._stopped = True
+            self.kiwix_runner._stopped = True
 
         if delay_sec > 0:
             time.sleep(delay_sec)
@@ -1869,12 +1871,15 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
     def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(status_code)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(raw)))
-        self._send_cors_headers()
-        self.end_headers()
-        self.wfile.write(raw)
+        try:
+            self.send_response(status_code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self._send_cors_headers()
+            self.end_headers()
+            self.wfile.write(raw)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
 
     def _read_json_body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length") or 0)
@@ -1899,6 +1904,11 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         try:
+            if path in ("/api/eject", "/api/shutdown"):
+                cid = (qs.get("client_id") or [""])[0]
+                self._send_json(200, self.runtime.handle_client_closing(cid, immediate=True))
+                return
+
             if path in ("/", "/index.html", "/api/status", "/api/health", "/api/telemetry", "/api/ping"):
                 self.runtime.cancel_pending_close()
 
@@ -2000,6 +2010,8 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
             # Static File & Uploaded Asset Serving
             self._serve_static(path)
 
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
         except Exception as exc:
             self._send_json(500, {"ok": False, "error": str(exc), "trace": traceback.format_exc()[-400:]})
 
@@ -2204,12 +2216,17 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
             self._send_json(404, {"ok": False, "error": f"Unknown POST endpoint: {path}"})
 
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
         except Exception as exc:
             self._send_json(500, {"ok": False, "error": str(exc), "trace": traceback.format_exc()[-400:]})
 
     def do_HEAD(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
-        self._serve_static(parsed.path, head_only=True)
+        try:
+            self._serve_static(parsed.path, head_only=True)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
 
     def _serve_static(self, req_path: str, head_only: bool = False) -> None:
         static_root = self.runtime.config.static_dir.resolve()
@@ -2307,24 +2324,28 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
-        self.send_response(200)
-        self.send_header("Content-Type", mime)
-        self.send_header("Accept-Ranges", "bytes")
-        self.send_header("Content-Length", str(file_size))
-        self._send_cors_headers()
-        self.end_headers()
-        if not head_only:
-            with open(file_path, "rb") as f:
-                while True:
-                    chunk = f.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", mime)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Length", str(file_size))
+            self._send_cors_headers()
+            self.end_headers()
+            if not head_only:
+                with open(file_path, "rb") as f:
+                    while True:
+                        chunk = f.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            pass
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
-    allow_reuse_address = True
+    allow_reuse_address = os.name != "nt"
     daemon_threads = True
+    request_queue_size = 64
 
 
 def create_server(config: Optional[EmyrgeConfig] = None) -> Tuple[ReusableThreadingHTTPServer, EmyrgeRuntime]:

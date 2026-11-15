@@ -183,6 +183,9 @@ def _extract_posix_tar_runtime(archive_path: Path, slot_name: str, prefixes: tup
     return None
 
 
+_AVAILABLE_RAM_CACHE: Optional[tuple[float, Optional[int]]] = None
+
+
 def _available_ram_mb() -> Optional[int]:
     """Best-effort available physical RAM in MB (None if undetectable).
 
@@ -190,21 +193,42 @@ def _available_ram_mb() -> Optional[int]:
     what the machine can actually hold right now (wedged the windows box
     when the 32B tier-3 model was staged on the USB stick).
     """
+    global _AVAILABLE_RAM_CACHE
+    now = time.monotonic()
+    if _AVAILABLE_RAM_CACHE is not None and (now - _AVAILABLE_RAM_CACHE[0]) < 15.0:
+        return _AVAILABLE_RAM_CACHE[1]
+    val: Optional[int] = None
     try:
         if os.name == "nt":
-            out = subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 "[int](Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory / 1KB"],
-                capture_output=True, text=True, timeout=10,
-            ).stdout.strip()
-            return int(float(out)) if out else None
-        with open("/proc/meminfo", "r", encoding="utf-8") as fh:
-            for line in fh:
-                if line.startswith("MemAvailable:"):
-                    return int(line.split()[1]) // 1024
+            import ctypes
+
+            class _MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = _MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(_MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                val = int(stat.ullAvailPhys // (1024 * 1024))
+        else:
+            with open("/proc/meminfo", "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if line.startswith("MemAvailable:"):
+                        val = int(line.split()[1]) // 1024
+                        break
     except Exception:
         pass
-    return None
+    _AVAILABLE_RAM_CACHE = (now, val)
+    return val
 
 
 def probe_usb_platforms(project_root: Path, cache_ttl: float = 30.0) -> List[Dict[str, Any]]:
@@ -423,6 +447,8 @@ class KiwixRunner:
         self.port = port
         self._proc: Optional[subprocess.Popen] = None
         self._mounted_zims: List[Path] = []
+        self._zim_cache: Optional[tuple[float, List[Path], List[Dict[str, Any]]]] = None
+        self._stopped: bool = False
         self._lock = threading.RLock()
         atexit.register(self.stop)
 
@@ -509,13 +535,19 @@ class KiwixRunner:
         return Path(which_bin) if which_bin else None
 
     def discover_zim_files(self) -> List[Path]:
-        """Finds all valid, completely-written .zim files in data/zim/."""
+        """Finds all valid, completely-written .zim files in data/zim/ (cached 30s to avoid USB flash wear)."""
         if not self.zim_dir.is_dir():
             return []
+        now = time.monotonic()
+        cached = self._zim_cache
+        if cached is not None and (now - cached[0]) < 30.0:
+            return list(cached[1])
         valid: List[Path] = []
+        meta: List[Dict[str, Any]] = []
         for p in sorted(self.zim_dir.glob("*.zim")):
             try:
-                if p.stat().st_size < 1024:
+                sz = p.stat().st_size
+                if sz < 1024:
                     continue
                 with open(p, "rb") as f:
                     hdr = f.read(4)
@@ -523,8 +555,10 @@ class KiwixRunner:
                         magic = struct.unpack("<I", hdr)[0]
                         if magic in (self.ZIM_MAGIC, 0x5A494D04):
                             valid.append(p)
+                            meta.append({"name": p.name, "size_mb": round(sz / (1024 * 1024), 2)})
             except OSError:
                 continue
+        self._zim_cache = (now, valid, meta)
         return valid
 
     def _is_kiwix_endpoint(self) -> bool:
@@ -537,6 +571,8 @@ class KiwixRunner:
             return False
 
     def is_running(self) -> bool:
+        if self._stopped:
+            return False
         if self._proc is not None and self._proc.poll() is None:
             return True
         return _is_port_open(self.host, self.port, timeout=0.25) and self._is_kiwix_endpoint()
@@ -544,6 +580,8 @@ class KiwixRunner:
     def ensure_started(self) -> bool:
         """Starts kiwix-serve if binary + ZIMs exist (or restarts if newly downloaded ZIMs arrived)."""
         with self._lock:
+            if self._stopped:
+                return False
             zims = self.discover_zim_files()
             lib_xml = self.project_root / "data" / "library.xml"
             if not zims and not lib_xml.is_file():
@@ -692,31 +730,45 @@ class KiwixRunner:
         return enriched
 
     def get_status(self) -> Dict[str, Any]:
+        if self._stopped:
+            return {
+                "kiwix_running": False,
+                "kiwix_port": self.port,
+                "kiwix_url": self.base_url,
+                "kiwix_binary": "",
+                "zim_files": list(self._zim_cache[2]) if self._zim_cache else [],
+            }
         zims = self.discover_zim_files()
         lib_xml = self.project_root / "data" / "library.xml"
         running = self.is_running()
-        if not running and (zims or lib_xml.is_file()):
+        if not running and not self._stopped and (zims or lib_xml.is_file()):
             if self._lock.acquire(blocking=False):
                 try:
                     running = self.ensure_started()
                 finally:
                     self._lock.release()
-        return {
-            "kiwix_running": running,
-            "kiwix_port": self.port,
-            "kiwix_url": self.base_url,
-            "kiwix_binary": str(self.discover_binary() or "") if running else "",
-            "zim_files": [
+        zim_meta = (
+            list(self._zim_cache[2])
+            if self._zim_cache is not None
+            else [
                 {
                     "name": z.name,
                     "size_mb": round(z.stat().st_size / (1024 * 1024), 2),
                 }
                 for z in zims
-            ],
+            ]
+        )
+        return {
+            "kiwix_running": running,
+            "kiwix_port": self.port,
+            "kiwix_url": self.base_url,
+            "kiwix_binary": str(self.discover_binary() or "") if running else "",
+            "zim_files": zim_meta,
         }
 
     def stop(self) -> None:
         with self._lock:
+            self._stopped = True
             if self._proc is not None:
                 try:
                     if self._proc.poll() is None:
@@ -815,6 +867,8 @@ class ModelRunner:
         self._active_model: Optional[Path] = None
         self._active_binary: Optional[Path] = None
         self._active_mmproj: Optional[Path] = None
+        self._gguf_cache: Optional[tuple[float, List[Path]]] = None
+        self._stopped: bool = False
         self._lock = threading.RLock()
         atexit.register(self.stop)
 
@@ -930,20 +984,25 @@ class ModelRunner:
         env overrides are still honored (the operator asked for it)."""
         if not self.models_dir.is_dir():
             return None
-        ggufs: List[Path] = []
-        for p in sorted(self.models_dir.glob("*.gguf")):
-            try:
-                # Skip mmproj vision projector files from being selected as the base LLM
-                if p.name.lower().startswith("mmproj") or "-mmproj" in p.name.lower():
+        now = time.monotonic()
+        if self._gguf_cache is not None and (now - self._gguf_cache[0]) < 30.0:
+            ggufs = list(self._gguf_cache[1])
+        else:
+            ggufs = []
+            for p in sorted(self.models_dir.glob("*.gguf")):
+                try:
+                    # Skip mmproj vision projector files from being selected as the base LLM
+                    if p.name.lower().startswith("mmproj") or "-mmproj" in p.name.lower():
+                        continue
+                    # GGUF magic check ('GGUF') + minimum complete header/weights threshold
+                    if p.stat().st_size < 5 * 1024 * 1024:
+                        continue
+                    with open(p, "rb") as f:
+                        if f.read(4) == b"GGUF":
+                            ggufs.append(p)
+                except OSError:
                     continue
-                # GGUF magic check ('GGUF') + minimum complete header/weights threshold
-                if p.stat().st_size < 5 * 1024 * 1024:
-                    continue
-                with open(p, "rb") as f:
-                    if f.read(4) == b"GGUF":
-                        ggufs.append(p)
-            except OSError:
-                continue
+            self._gguf_cache = (now, ggufs)
 
         if not ggufs:
             return None
@@ -1188,6 +1247,8 @@ class ModelRunner:
     def ensure_started(self, preferred_model: Optional[str] = None) -> bool:
         """Spawns llama-server in background if binary and .gguf exist and port 8082 isn't active."""
         with self._lock:
+            if self._stopped:
+                return False
             if self._proc is not None and self._proc.poll() is None:
                 if preferred_model:
                     pref_low = str(preferred_model).lower()
@@ -1359,10 +1420,20 @@ class ModelRunner:
         return "No matching verified passage was found in the local offline archive for this query."
 
     def get_status(self) -> Dict[str, Any]:
+        if self._stopped:
+            return {
+                "llm_running": False,
+                "llm_ready": False,
+                "llm_port": self.port,
+                "llm_model": "stopped (safe eject)",
+                "llm_engine": "stopped",
+                "llm_mmproj": None,
+                "platforms_ready": [],
+            }
         model = self._active_model or self.discover_model()
         binary = self._active_binary
         running = self.is_healthy(timeout=0.25)
-        if not running and model is not None:
+        if not running and not self._stopped and model is not None:
             if self._lock.acquire(blocking=False):
                 try:
                     binary = self._active_binary or self.discover_binary()
@@ -1386,6 +1457,7 @@ class ModelRunner:
 
     def stop(self) -> None:
         with self._lock:
+            self._stopped = True
             if self._proc is not None:
                 try:
                     if self._proc.poll() is None:

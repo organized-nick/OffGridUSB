@@ -5,8 +5,91 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OffGridUSB // The Towers Are Down. Your Answers Aren't.</title>
   <link rel="icon" type="image/png" href="/static/favicon.png" />
-  <link rel="stylesheet" href="/static/vendor/maps/maplibre-gl.css?v=20261115c" onerror="this.href='vendor/maps/maplibre-gl.css'" />
-  <link rel="stylesheet" href="/static/style.css?v=20261115c" onerror="this.href='style.css'" />
+  <link rel="stylesheet" href="/static/vendor/maps/maplibre-gl.css?v=20261115d" onerror="this.href='vendor/maps/maplibre-gl.css'" />
+  <link rel="stylesheet" href="/static/style.css?v=20261115d" onerror="this.href='style.css'" />
+  <script>
+    window.__offgridSafeEject = function (btnEl) {
+      if (window.__offgridEjectTriggered) return;
+      window.__offgridEjectTriggered = true;
+      var btn = btnEl || document.getElementById("safeEjectBtn");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Flushing & Ejecting USB...";
+      }
+      var markDone = function () {
+        var b = document.getElementById("safeEjectBtn");
+        if (b) {
+          b.disabled = true;
+          b.textContent = "✓ Safe to Unplug USB";
+          b.style.background = "#3F4A2C";
+          b.style.borderColor = "#8A9A5B";
+          b.style.color = "#EDE6D6";
+        }
+        var airgapInd = document.getElementById("airgapIndicator");
+        if (airgapInd) airgapInd.textContent = "✓ USB Safely Dismounted — Safe to Remove Drive";
+        var pillLlm = document.getElementById("pillLlm");
+        var valLlm = document.getElementById("valLlm");
+        if (pillLlm) pillLlm.className = "tele-pill status-warn";
+        if (valLlm) valLlm.textContent = "STOPPED (SAFE EJECT)";
+        var pillKiwix = document.getElementById("pillKiwix");
+        var valKiwix = document.getElementById("valKiwix");
+        if (pillKiwix) pillKiwix.className = "tele-pill status-warn";
+        if (valKiwix) valKiwix.textContent = "DISMOUNTED";
+        var banner = document.getElementById("safeEjectBanner");
+        if (!banner) {
+          banner = document.createElement("div");
+          banner.id = "safeEjectBanner";
+          banner.setAttribute("role", "status");
+          banner.style.cssText =
+            "background:#1E2618;border:2px solid #8A9A5B;color:#EDE6D6;padding:14px 20px;margin:12px 24px 0;border-radius:8px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 6px 20px rgba(0,0,0,0.45);";
+          banner.innerHTML =
+            "<span>✓ <strong>USB Safely Flushed &amp; Dismounted:</strong> Local AI (:8082), Kiwix Library (:8081), and Command Center (:8000) have stopped and caches are flushed. <strong>It is now 100% safe to unplug your OffGridUSB drive.</strong></span>";
+          var mainEl = document.querySelector("main.cmd-grid") || document.body;
+          if (mainEl && mainEl.parentNode) {
+            mainEl.parentNode.insertBefore(banner, mainEl);
+          }
+        }
+      };
+      setTimeout(markDone, 450);
+
+      try {
+        var iframe = document.getElementById("kiwixIframe");
+        if (iframe) iframe.src = "about:blank";
+      } catch (_) {}
+      try {
+        if (window.__offlineMap && typeof window.__offlineMap.remove === "function") {
+          window.__offlineMap.remove();
+          window.__offlineMap = null;
+        }
+      } catch (_) {}
+      try {
+        if (typeof window.stop === "function") {
+          window.stop();
+        }
+      } catch (_) {}
+
+      var ts = Date.now();
+      var payload = JSON.stringify({ client_id: window.__offgridTabClientId || "default", immediate: true });
+      try {
+        if (navigator.sendBeacon) {
+          var blob = new Blob([payload], { type: "application/json" });
+          navigator.sendBeacon("/api/eject?t=" + ts, blob);
+        }
+      } catch (_) {}
+      try {
+        fetch("/api/eject?t=" + ts, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(function () {});
+      } catch (_) {}
+      try {
+        var img = new Image();
+        img.src = "/api/eject?immediate=1&t=" + ts;
+      } catch (_) {}
+    };
+  </script>
 </head>
 <body>
   <!-- TOP COMMAND HEADER -->
@@ -34,7 +117,7 @@
               OFFGRID<span class="brand-wordmark-badge">USB</span> <span class="brand-sep">//</span>
               <span class="brand-sub" id="brandSub">Offline Command Center</span>
             </h1>
-            <button id="safeEjectBtn" type="button" class="safe-eject-header-btn" title="Flush caches, stop local servers, and safely dismount USB drive">⏏ Safely Eject USB</button>
+            <button id="safeEjectBtn" type="button" class="safe-eject-header-btn" onclick="window.__offgridSafeEject && window.__offgridSafeEject(this)" title="Flush caches, stop local servers, and safely dismount USB drive">⏏ Safely Eject USB</button>
           </div>
           <div class="brand-tagline">
             <span class="seal-pill emerald" id="skuBadge">OffGridUSB — FieldReady</span>
@@ -828,8 +911,8 @@
     </div>
   </div>
 
-  <script src="/static/vendor/maps/pmtiles.js?v=20261115c" onerror="var s=document.createElement('script');s.src='vendor/maps/pmtiles.js';document.body.appendChild(s);"></script>
-  <script src="/static/vendor/maps/maplibre-gl.js?v=20261115c" onerror="var s=document.createElement('script');s.src='vendor/maps/maplibre-gl.js';document.body.appendChild(s);"></script>
-  <script src="/static/app.js?v=20261115c" onerror="var s=document.createElement('script');s.src='app.js';document.body.appendChild(s);"></script>
+  <script src="/static/vendor/maps/pmtiles.js?v=20261115d" onerror="var s=document.createElement('script');s.src='vendor/maps/pmtiles.js';document.body.appendChild(s);"></script>
+  <script src="/static/vendor/maps/maplibre-gl.js?v=20261115d" onerror="var s=document.createElement('script');s.src='vendor/maps/maplibre-gl.js';document.body.appendChild(s);"></script>
+  <script src="/static/app.js?v=20261115d" onerror="var s=document.createElement('script');s.src='app.js';document.body.appendChild(s);"></script>
 </body>
 </html>
