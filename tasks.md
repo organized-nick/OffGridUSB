@@ -1,28 +1,51 @@
-1. read the AGENTS.md file, it contains the latest direction of the project. audit the project for places where diverges from the AGENTS file, especially the product list + provisioning parts, the UI, and the README.
-1.1. handle any TODOs in AGENTS.md
-2. check inot the anti-counterfeit integrity canary, document what it does and make an argument to keep or get rid of it
-3. ditch these half-baked features, nuke them from repo:
-                                                                                                                                     
+# OffGridUSB — Task List
 
- - Settlement hub (settlement_hub) — no dedicated module. Tier4 sells it, product_sku.json lists it as a hidden feature, but it      
+## 1. Audit the project against AGENTS.md
 
-   appears to be an umbrella over existing pieces (multi-GPU + distillation + LoRa gateway) rather than its own code. Treat as       
+Read `AGENTS.md` — it contains the latest direction of the project. Audit the repo for
+places where the code diverges from it, especially:
 
-   roadmap/aspirational.
+- a. the **product list + provisioning** parts (drive ladder, SKU set, payload profiles)
+- b. the **UI** (`web/static/`, Command Center tabs/feature gating)
+- c. the **README** (tier table, drive sizes, feature claims)
+- d. the PRD
 
-    - Interactive STEM practice tutor — the Khan curriculum engine provides structured lessons; "interactive practice" depth beyond     
+also rebase the parallel provisioning branch with the updated AGENTS.md file etc to ensure these changes are included.
 
-   that isn't evidenced.                             (get rid of itneractive lession part, content should still be viewable)            
+## 2. Anti-counterfeit integrity canary
 
+Investigate the integrity canary (`data/.integrity_canary` +
+`provisioning/tools/check_integrity.*`, launcher pre-flight checks):
 
-    - ESP32/LoRa thin-client mesh (lora_mesh_agent, mesh protocol) — partially implemented. mesh/esp32_protocol.py (414 lines) defines  
+- a. document exactly what it does (what it probes, how corruption is detected)
+- b. make an explicit argument to keep it or get rid of it
 
-   serial/HTTP protocol contracts; packet_chunker.py is a 26-line stub; calculators expose format_mesh_summary() for ≤200B packets;  
+## 3. Remove half-baked features (nuke from repo)
 
-   handle_mesh_command() exists in the server. No ESP32 hardware path is exercised by tests — best described as protocol-complete,   
+- a. **Settlement hub** (`settlement_hub`) — no dedicated module; umbrella concept over
+  multi-GPU + distillation + LoRa gateway only. Remove references (catalog hidden
+  features, docs).
+- b. **Interactive STEM practice tutor** — remove the interactive-lesson portion; the
+  Khan curriculum *content* must remain viewable (keep `knowledge/khan_curriculum.py`
+  lesson data/serving).
+- c. **ESP32/LoRa thin-client mesh** (`lora_mesh_agent`, mesh protocol) — protocol-
+  complete but hardware-untested (`mesh/esp32_protocol.py`, `mesh/packet_chunker.py`
+  stub, `handle_mesh_command()`, `format_mesh_summary()`). Remove from repo.
+- d. **Survival calculators** (`survival_calculators`) — fully implemented but being
+  cut from the product: remove `src/emyrge/calculators/` (water purification,
+  solar/battery, medical rehydration, electrical formulas, source audit), the
+  `run_calculator()` path in `web/app.py`, related UI, and their test suites.
 
-   hardware-untested.
+## 4. Validate Wikipedia RAG at full scale
 
-    - Survival calculators (survival_calculators) — implemented. Four calculators (water purification, solar/battery, medical           
+(from AGENTS.md TODO) The grounding harness is validated mainly on mini ZIMs; test
+retrieval performance against the full large-Wikipedia ZIMs before claiming
+`wikipedia_rag` support in prose docs.
 
-   rehydration, electrical formulas) + calculators/source_audit.py auto-router, exposed via run_calculator().
+## 5. Reframe distillation-on-dock as session history
+
+(from AGENTS.md TODO) Drop the "docking" concept. Rebuild the feature as: viewing
+session history with pinning. `run_distillation_on_dock()` /
+`needs_distillation=1` mechanics in `memory/memory_vault.py` become an internal
+upgrade path, not a user-facing concept.
+
