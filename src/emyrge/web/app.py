@@ -552,7 +552,7 @@ class EmyrgeRuntime:
                     self._pending_close_timer = None
                 threading.Thread(
                     target=self.trigger_safe_shutdown_and_eject,
-                    kwargs={"delay_sec": 0.25},
+                    kwargs={"delay_sec": 0.6},
                     daemon=True,
                 ).start()
                 return {"ok": True, "ejecting": True, "remaining_tabs": 0}
@@ -592,7 +592,7 @@ class EmyrgeRuntime:
         sys.stdout.flush()
 
         # 1. Spawn detached host-resident safe-eject script in %TEMP% / /tmp FIRST
-        eject_res = spawn_detached_safe_eject(self.config.project_root, delay_ms=900)
+        eject_res = spawn_detached_safe_eject(self.config.project_root, delay_ms=1400)
 
         # 2. Stop child engines and release SQLite file handles on USB drive
         for runner_stop in (

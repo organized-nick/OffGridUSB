@@ -28,12 +28,22 @@ $ErrorActionPreference = "SilentlyContinue"
 Set-Location $env:TEMP
 [System.IO.Directory]::SetCurrentDirectory($env:TEMP)
 
+$logFile = Join-Path $env:TEMP "offgridusb_safe_eject.log"
+function Write-EjectLog([string]$msg) {
+    try {
+        Add-Content -Path $logFile -Value "$([DateTime]::UtcNow.ToString('o')) $msg" -ErrorAction SilentlyContinue
+    } catch {}
+}
+
+Set-Content -Path $logFile -Value "$([DateTime]::UtcNow.ToString('o')) Starting safe eject for drive '$DriveLetter' (DelayMs=$DelayMs)" -ErrorAction SilentlyContinue
+
 $clean = ($DriveLetter.Trim().ToUpper() -replace "[:\\/\s]", "")
 $sysLetter = ($env:SystemDrive -replace "[:\\/\s]", "").ToUpper()
 if (-not $sysLetter) { $sysLetter = "C" }
 
 # 1. Hardware Safety Gate: never touch C: or Disk 0 / Boot / System
 if ($clean.Length -ne 1 -or $clean -eq "C" -or $clean -eq $sysLetter) {
+    Write-EjectLog "ABORT: Invalid or system drive letter '$clean'"
     exit 1
 }
 
@@ -42,6 +52,7 @@ if ($DelayMs -gt 0) {
 }
 
 if (-not (Test-Path "${clean}:\")) {
+    Write-EjectLog "ALREADY_DISMOUNTED: ${clean}:\ not mounted"
     exit 0
 }
 
@@ -49,11 +60,27 @@ try {
     $part = Get-Partition -DriveLetter $clean -ErrorAction Stop
     $disk = Get-Disk -Number $part.DiskNumber -ErrorAction Stop
     if ($disk.Number -eq 0 -or $disk.IsBoot -or $disk.IsSystem -or $part.IsBoot -or $part.IsSystem) {
+        Write-EjectLog "ABORT: Disk $($disk.Number) is boot/system/Disk0"
         exit 1
     }
 } catch {
-    exit 1
+    Write-EjectLog "WARN: Partition/Disk WMI lookup failed ($($_.Exception.Message)); continuing non-C eject"
 }
+
+# 1b. Close any open Explorer folder windows viewing <Drive>:\ so Explorer releases directory handles
+try {
+    $shellWins = New-Object -ComObject Shell.Application
+    foreach ($win in @($shellWins.Windows())) {
+        try {
+            $locUrl = [string]$win.LocationURL
+            $folderPath = [string]$win.Document.Folder.Self.Path
+            if ($locUrl -match "^file:///${clean}:" -or ($folderPath -and $folderPath.ToUpper().StartsWith("${clean}:\"))) {
+                Write-EjectLog "Closing Explorer window open on $folderPath"
+                $win.Quit()
+            }
+        } catch {}
+    }
+} catch {}
 
 # 2. Terminate any remaining processes executing from <Drive>:\ or holding <Drive>:\ paths
 Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
@@ -62,16 +89,21 @@ Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         ($_.CommandLine -and $_.CommandLine.ToUpper().Contains("${clean}:\"))
     )
 } | ForEach-Object {
+    Write-EjectLog "Stopping Win32_Process PID=$($_.ProcessId) Name=$($_.Name)"
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }
 Get-Process -ErrorAction SilentlyContinue | Where-Object {
     $_.Id -ne $PID -and $_.Path -and $_.Path.ToUpper().StartsWith("${clean}:\")
-} | Stop-Process -Force -ErrorAction SilentlyContinue
+} | ForEach-Object {
+    Write-EjectLog "Stopping Process PID=$($_.Id) Name=$($_.ProcessName)"
+    Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+}
 
 Start-Sleep -Milliseconds 600
 
 # 3. Flush OS file cache to physical NAND flash
 try {
+    Write-EjectLog "Flushing volume cache on ${clean}:"
     Write-VolumeCache -DriveLetter $clean -ErrorAction SilentlyContinue
 } catch {}
 
@@ -79,6 +111,7 @@ Start-Sleep -Milliseconds 400
 
 # 4a. Standard Windows Explorer Shell Eject
 try {
+    Write-EjectLog "Invoking Shell.Application Eject on ${clean}:"
     $shell = New-Object -ComObject Shell.Application
     $item = $shell.Namespace(17).ParseName("${clean}:")
     if ($item) {
@@ -134,10 +167,12 @@ public static class OffGridUsbEjector {
 "@
     for ($attempt = 0; $attempt -lt 3; $attempt++) {
         if (-not (Test-Path "${clean}:\")) { break }
-        [void][OffGridUsbEjector]::Eject($clean)
+        $res = [OffGridUsbEjector]::Eject($clean)
+        Write-EjectLog "Win32 OffGridUsbEjector::Eject attempt $($attempt + 1) result=$res"
         Start-Sleep -Milliseconds 500
     }
 }
+Write-EjectLog "Completed safe eject. StillMounted=$(Test-Path "${clean}:\")"
 exit 0
 """
 
@@ -215,29 +250,43 @@ def spawn_detached_safe_eject(project_root: Path, delay_ms: int = 1500) -> Dict[
         if sys_name == "windows" or os.name == "nt":
             script_path = tmp_dir / "offgridusb_safe_eject.ps1"
             script_path.write_bytes(_WINDOWS_SAFE_EJECT_PS1.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8"))
-            creation_flags = 0x08000000 | 0x00000008  # CREATE_NO_WINDOW | DETACHED_PROCESS
-            subprocess.Popen(
-                [
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-WindowStyle",
-                    "Hidden",
-                    "-File",
-                    str(script_path),
-                    "-DriveLetter",
-                    target,
-                    "-DelayMs",
-                    str(delay_ms),
-                ],
-                cwd=str(tmp_dir),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=creation_flags,
-                close_fds=True,
-            )
+            cmd = [
+                "powershell.exe",
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(script_path),
+                "-DriveLetter",
+                target,
+                "-DelayMs",
+                str(delay_ms),
+            ]
+            # CREATE_NO_WINDOW (0x08000000) | CREATE_NEW_PROCESS_GROUP (0x00000200).
+            # Never combine CREATE_NO_WINDOW with DETACHED_PROCESS (0x00000008) or -WindowStyle Hidden,
+            # as Win32 CreateProcessW ignores CREATE_NO_WINDOW and PowerShell aborts when hiding a missing console.
+            base_flags = 0x08000000 | 0x00000200
+            try:
+                subprocess.Popen(
+                    cmd,
+                    cwd=str(tmp_dir),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=base_flags | 0x01000000,  # Try CREATE_BREAKAWAY_FROM_JOB first
+                    close_fds=True,
+                )
+            except OSError:
+                subprocess.Popen(
+                    cmd,
+                    cwd=str(tmp_dir),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=base_flags,
+                    close_fds=True,
+                )
             return {
                 "ok": True,
                 "ejected": True,

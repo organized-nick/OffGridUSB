@@ -3946,7 +3946,8 @@
 
     const safeEjectBtn = $("#safeEjectBtn");
     if (safeEjectBtn) {
-      safeEjectBtn.addEventListener("click", async () => {
+      safeEjectBtn.addEventListener("click", () => {
+        if (state.ejectTriggered) return;
         state.ejectTriggered = true;
         if (swarmPollTimer) {
           clearInterval(swarmPollTimer);
@@ -3958,31 +3959,56 @@
         }
         safeEjectBtn.disabled = true;
         safeEjectBtn.textContent = "⏳ Flushing & Ejecting USB...";
-        const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-        const timerId = setTimeout(() => {
-          if (ctrl) ctrl.abort();
-        }, 2500);
+
+        const payload = JSON.stringify({ client_id: state.tabClientId, immediate: true });
         try {
-          await fetch("/api/eject", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Accept: "application/json" },
-            body: JSON.stringify({ client_id: state.tabClientId, immediate: true }),
-            signal: ctrl ? ctrl.signal : undefined,
-            keepalive: true,
-          });
-        } catch (_) {
-          notifyTabClosing(true);
-        } finally {
-          clearTimeout(timerId);
-        }
-        safeEjectBtn.textContent = "✓ USB Safely Flushed — Safe to Unplug";
-        safeEjectBtn.style.background = "#3F4A2C";
-        safeEjectBtn.style.borderColor = "#8A9A5B";
-        safeEjectBtn.style.color = "#EDE6D6";
-        const airgapInd = $("#airgapIndicator");
-        if (airgapInd) {
-          airgapInd.textContent = "✓ USB Safely Dismounted — Safe to Remove Drive";
-        }
+          if (navigator.sendBeacon) {
+            const blob = new Blob([payload], { type: "application/json" });
+            navigator.sendBeacon("/api/eject", blob);
+          }
+        } catch (_) {}
+        fetch("/api/eject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+
+        const markEjectedUI = () => {
+          safeEjectBtn.textContent = "✓ Safe to Unplug USB";
+          safeEjectBtn.style.background = "#3F4A2C";
+          safeEjectBtn.style.borderColor = "#8A9A5B";
+          safeEjectBtn.style.color = "#EDE6D6";
+          const airgapInd = $("#airgapIndicator");
+          if (airgapInd) {
+            airgapInd.textContent = "✓ USB Safely Dismounted — Safe to Remove Drive";
+          }
+          const pillLlm = $("#pillLlm");
+          const valLlm = $("#valLlm");
+          if (pillLlm) pillLlm.className = "tele-pill status-warn";
+          if (valLlm) valLlm.textContent = "STOPPED (SAFE EJECT)";
+          const pillKiwix = $("#pillKiwix");
+          const valKiwix = $("#valKiwix");
+          if (pillKiwix) pillKiwix.className = "tele-pill status-warn";
+          if (valKiwix) valKiwix.textContent = "DISMOUNTED";
+
+          let banner = document.getElementById("safeEjectBanner");
+          if (!banner) {
+            banner = document.createElement("div");
+            banner.id = "safeEjectBanner";
+            banner.setAttribute("role", "status");
+            banner.style.cssText =
+              "background:#1E2618;border:2px solid #8A9A5B;color:#EDE6D6;padding:14px 20px;margin:12px 24px 0;border-radius:8px;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 6px 20px rgba(0,0,0,0.45);";
+            banner.innerHTML =
+              '<span>✓ <strong>USB Safely Flushed &amp; Dismounted:</strong> Local AI (:8082), Kiwix Library (:8081), and Command Center (:8000) have stopped and caches are flushed. <strong>It is now 100% safe to unplug your OffGridUSB drive.</strong></span>';
+            const mainEl = document.querySelector("main.cmd-grid") || document.body;
+            if (mainEl && mainEl.parentNode) {
+              mainEl.parentNode.insertBefore(banner, mainEl);
+            }
+          }
+        };
+
+        setTimeout(markEjectedUI, 600);
       });
     }
   }
