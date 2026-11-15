@@ -443,9 +443,9 @@ html, body {
   box-shadow: 0 0 8px #B7A77A;
 }
 
-/* Multi-Architecture Readiness Bar */
+/* Multi-Architecture Readiness Bar (hidden from UI) */
 .arch-readiness-bar {
-  display: flex;
+  display: none;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
