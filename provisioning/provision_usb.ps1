@@ -740,6 +740,30 @@ if ($fsPlan.ResolvedAction -eq "FormatExFAT") {
             }
         }
     }
+    # Prune any forbidden or non-whitelisted root files/directories left from older builds
+    $allowedRootNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    [void]$allowedRootNames.Add("System Volume Information")
+    foreach ($dirName in @("bin", "src", "web", "manifests", "data")) { [void]$allowedRootNames.Add($dirName) }
+    foreach ($it in $plan.Items) {
+        if ($it.RelativePath -and ($it.RelativePath -notmatch "[/\\]")) {
+            [void]$allowedRootNames.Add($it.RelativePath)
+        }
+    }
+    foreach ($rootEntry in @(Get-ChildItem -LiteralPath $targetRoot -Force -ErrorAction SilentlyContinue)) {
+        if (-not $allowedRootNames.Contains($rootEntry.Name)) {
+            Write-Host "  [PRUNE] Removing non-customer root item $($rootEntry.Name)..." -ForegroundColor Yellow
+            Remove-Item -LiteralPath $rootEntry.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    # Prune any stale __pycache__ directories or *.pyc / *.pyo / .DS_Store files inside src\ or web
+    Get-ChildItem -Path $targetRoot -Include "__pycache__", "*.pyc", "*.pyo", ".DS_Store" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    if ([string]::IsNullOrWhiteSpace($fsPlan.FileSystemLabel)) {
+        try {
+            Set-Volume -DriveLetter $cleanDrive -NewFileSystemLabel "OFFGRIDUSB" -ErrorAction Stop | Out-Null
+        } catch {
+            & cmd.exe /c "label ${cleanDrive}: OFFGRIDUSB" >$null 2>&1
+        }
+    }
 }
 
 # ------------------------------------------------------------------------------
