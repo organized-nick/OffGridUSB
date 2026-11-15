@@ -1699,43 +1699,42 @@ class OffGridUSBAuditor:
             self._audit_posix_process_isolation(target_ports)
             return
 
-        # Windows Process Inspection via PowerShell or netstat
+        # Windows Process Inspection via netstat (fast) or PowerShell fallback
         listening_pids: Dict[int, int] = {}
         try:
-            ps_cmd = (
-                "$ports = @(8000, 8081, 8082); "
-                "$conns = Get-NetTCPConnection -LocalPort $ports -State Listen -ErrorAction SilentlyContinue; "
-                "$res = @{}; "
-                "foreach ($c in $conns) { $res[$c.LocalPort] = $c.OwningProcess }; "
-                "$res | ConvertTo-Json -Compress"
-            )
-            out = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            if out.stdout.strip():
-                raw_json = json.loads(out.stdout.strip())
-                for port_str, pid_val in raw_json.items():
-                    listening_pids[int(port_str)] = int(pid_val)
+            res = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True, timeout=10)
+            for line in res.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 5 and "LISTENING" in line.upper():
+                    local_addr = parts[1]
+                    pid_str = parts[4]
+                    for port in target_ports:
+                        if local_addr.endswith(f":{port}") and pid_str.isdigit():
+                            listening_pids[port] = int(pid_str)
         except Exception as e:
-            self.log(f"Failed querying Get-NetTCPConnection: {e}", "WARN")
+            self.log(f"netstat query error: {e}", "WARN")
 
-        # Fallback to netstat if PowerShell failed
         if not listening_pids:
             try:
-                res = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=10)
-                for line in res.stdout.splitlines():
-                    parts = line.split()
-                    if len(parts) >= 5 and "LISTENING" in line.upper():
-                        local_addr = parts[1]
-                        pid_str = parts[4]
-                        for port in target_ports:
-                            if local_addr.endswith(f":{port}"):
-                                listening_pids[port] = int(pid_str)
+                ps_cmd = (
+                    "$ports = @(8000, 8081, 8082); "
+                    "$conns = Get-NetTCPConnection -LocalPort $ports -State Listen -ErrorAction SilentlyContinue; "
+                    "$res = @{}; "
+                    "foreach ($c in $conns) { $res[$c.LocalPort] = $c.OwningProcess }; "
+                    "$res | ConvertTo-Json -Compress"
+                )
+                out = subprocess.run(
+                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps_cmd],
+                    capture_output=True,
+                    text=True,
+                    timeout=15,
+                )
+                if out.stdout.strip():
+                    raw_json = json.loads(out.stdout.strip())
+                    for port_str, pid_val in raw_json.items():
+                        listening_pids[int(port_str)] = int(pid_val)
             except Exception as e:
-                self.log(f"netstat fallback error: {e}", "WARN")
+                self.log(f"Failed querying Get-NetTCPConnection: {e}", "WARN")
 
         for port in target_ports:
             pid = listening_pids.get(port)
@@ -1756,22 +1755,40 @@ class OffGridUSBAuditor:
             exe_path = ""
             cmd_line = ""
             try:
-                query_ps = (
-                    f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'; "
-                    f"@{{ ExecutablePath = $p.ExecutablePath; CommandLine = $p.CommandLine }} | ConvertTo-Json -Compress"
-                )
-                q_out = subprocess.run(
-                    ["powershell", "-NoProfile", "-NonInteractive", "-Command", query_ps],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                )
-                if q_out.stdout.strip():
-                    p_info = json.loads(q_out.stdout.strip())
-                    exe_path = p_info.get("ExecutablePath") or ""
-                    cmd_line = p_info.get("CommandLine") or ""
-            except Exception as e:
-                exe_path = f"<Query error: {e}>"
+                import ctypes
+                import ctypes.wintypes
+                PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+                kernel32 = ctypes.windll.kernel32
+                h_proc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+                if h_proc:
+                    try:
+                        buf_len = ctypes.wintypes.DWORD(4096)
+                        buf = ctypes.create_unicode_buffer(4096)
+                        if kernel32.QueryFullProcessImageNameW(h_proc, 0, buf, ctypes.byref(buf_len)):
+                            exe_path = buf.value
+                    finally:
+                        kernel32.CloseHandle(h_proc)
+            except Exception:
+                pass
+
+            if not exe_path:
+                try:
+                    query_ps = (
+                        f"$p = Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}'; "
+                        f"@{{ ExecutablePath = $p.ExecutablePath; CommandLine = $p.CommandLine }} | ConvertTo-Json -Compress"
+                    )
+                    q_out = subprocess.run(
+                        ["powershell", "-NoProfile", "-NonInteractive", "-Command", query_ps],
+                        capture_output=True,
+                        text=True,
+                        timeout=15,
+                    )
+                    if q_out.stdout.strip():
+                        p_info = json.loads(q_out.stdout.strip())
+                        exe_path = p_info.get("ExecutablePath") or ""
+                        cmd_line = p_info.get("CommandLine") or ""
+                except Exception as e:
+                    exe_path = f"<Query error: {e}>"
 
             norm_exe = exe_path.upper()
             is_on_usb_bin = norm_exe.startswith(expected_bin_prefix) or norm_exe.startswith(allowed_polyglot_prefix)

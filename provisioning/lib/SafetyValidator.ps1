@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Enforces the Triple-Gate safety architecture protecting the host operating system,
-    validates target USB flash drive capacity per Product SKU (8 GB, 32 GB, 128 GB),
+    validates target USB flash drive capacity per Product SKU (32 GB, 64 GB, 256 GB, 512 GB),
     and cleanly resolves volume file locks before wiping or staging.
 #>
 
@@ -159,7 +159,7 @@ function Assert-DriveCapacity {
     $normSku = $ProductSku.Trim()
 
     if (-not $script:SkuMinCapacityBytes.ContainsKey($normSku)) {
-        throw "Unknown Product SKU '$ProductSku' for capacity validation. Supported: Product1, Product2, Product3, Tier0, Tier1, Tier2, Tier3, Tier4."
+        throw "Unknown Product SKU '$ProductSku' for capacity validation. Supported: Product1, Product2, Product2-256, Product3, Product3-256, Tier0, Tier1, Tier2, Tier3, Tier4."
     }
 
     $reqBytes = $script:SkuMinCapacityBytes[$normSku]
@@ -198,9 +198,11 @@ function Assert-DriveCapacity {
         $msg = "[ERROR] Target drive ${clean}: effective capacity (${effectiveGb} GB / ${effectiveGiB} GiB) is below the minimum required capacity (${reqGb} GB) for ${ProductSku}!`n"
         $msg += "Required target media: ${targetLabel}.`n"
         if ($isClamped) {
-            $msg += "Note: Physical capacity clamping to 29.00 GiB is enforced for Drive E: to protect data integrity on 32 GB flash. Higher-tier payloads (Product 3 / Tier 3 ~88 GB / Tier 4) exceed physical flash and require genuine >= 128 GB media to avoid silent blackhole corruption."
-        } elseif ($normSku -in @("Product3", "CivilizationArk", "Tier2")) {
-            $msg += "Commercial 64 GB USB drives only provide ~57.6 GiB (~61.8 GB) usable capacity, which cannot fit the ~65-72 GB CivilizationArk payload (including 50.2 GB Wikipedia). A 128 GB USB drive or SSD is strictly required."
+            $msg += "Note: Physical capacity clamping to 29.00 GiB is enforced for Drive E: to protect data integrity on 32 GB flash. Higher-tier payloads (Product 2 / Product 3 / 256 GB / 512 GB editions) exceed 32 GB flash and require >= 64 GB or >= 256 GB media."
+        } elseif ($normSku -in @("Product2-256", "Product3-256", "Tier3", "SwarmCluster")) {
+            $msg += "256 GB edition payloads (~160-195 GB) require a genuine 256 GB USB flash drive or portable SSD (>= 220 GB formatted)."
+        } elseif ($normSku -in @("Product2", "FieldReady", "Tier1", "Product3", "CivilizationArk", "Tier2")) {
+            $msg += "64 GB edition payloads (~58.6-58.9 GB) require a genuine 64 GB USB flash drive (>= 60 GB formatted)."
         }
         throw $msg
     }

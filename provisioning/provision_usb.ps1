@@ -206,6 +206,7 @@ if ($FilesystemAction -eq "Format") { $FilesystemAction = "FormatExFAT" }
 # and physical device flush ($dstStream.Flush($true)) across both throttled and unthrottled modes,
 # preventing OS RAM dirty-cache buffer bloat and USB controller lockups.
 function Copy-ItemWriteThroughPaced {
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$SourcePath,
         [Parameter(Mandatory = $true)][string]$DestinationPath,
@@ -262,6 +263,8 @@ function Copy-ItemWriteThroughPaced {
         } finally {
             $dstStream.Dispose()
         }
+    } catch {
+        throw
     } finally {
         $srcStream.Dispose()
         if (-not $completed -and (Test-Path -LiteralPath $DestinationPath)) {
@@ -320,19 +323,21 @@ if ($Info) {
     Write-Host "================================================================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "[COMMERCIAL PRODUCT SKUs & CAPACITY TIERS]" -ForegroundColor Yellow
-    Write-Host ("{0,-9} {1,-17} {2,-9} {3,-9} {4,-15} {5}" -f "SKU ID", "Commercial Name", "Tiers", "Min USB", "Payload Size", "Target Features & Media") -ForegroundColor White
-    Write-Host ("{0,-9} {1,-17} {2,-9} {3,-9} {4,-15} {5}" -f "--------", "-----------------", "-------", "-------", "------------", "------------------------------------------") -ForegroundColor DarkGray
+    Write-Host ("{0,-13} {1,-22} {2,-9} {3,-9} {4,-12} {5}" -f "SKU ID", "Commercial Name", "Tiers", "Min USB", "Payload", "Target Features & Media") -ForegroundColor White
+    Write-Host ("{0,-13} {1,-22} {2,-9} {3,-9} {4,-12} {5}" -f "------------", "----------------------", "-------", "-------", "-----------", "------------------------------------------") -ForegroundColor DarkGray
 
     $skuRows = @(
-        [PSCustomObject]@{ Sku="Product1"; Name="PocketSurvival";  Tiers="Tier 0";    MinUsb="8 GB";   Payload="<= 6.5 GB";  Desc="Offline Kiwix (:8081), Grounded AI Professor (:8082), CDC Calculators." }
-        [PSCustomObject]@{ Sku="Product2"; Name="FieldReady";      Tiers="0 + 1";     MinUsb="32 GB";  Payload="~16-20 GB";  Desc="All Product 1 + SQLite Memory Vault, Photo OCR Vault, STEM Tutor." }
-        [PSCustomObject]@{ Sku="Product3"; Name="CivilizationArk"; Tiers="0 + 1 + 2"; MinUsb="128 GB"; Payload="~65-72 GB";  Desc="All Product 2 + 50.2 GB Wikipedia No-Pic. (64 GB USB rejected)." }
-        [PSCustomObject]@{ Sku="Tier3";    Name="SwarmCluster";    Tiers="0 - 3";     MinUsb="256 GB"; Payload="~88 GB";     Desc="All Product 3 + Qwen 32B (18.9 GB) + exo LAN Swarm Clustering." }
-        [PSCustomObject]@{ Sku="Tier4";    Name="SettlementHub";   Tiers="0 - 4";     MinUsb="512 GB"; Payload="~210+ GB";   Desc="All Tier 3 + Wikipedia Maxi (110 GB) + Llama 70B (40.5 GB)." }
+        [PSCustomObject]@{ Sku="Product1";     Name="PocketSurvival";        Tiers="Tier 0";    MinUsb="32 GB";  Payload="~29.0 GB";  Desc="30 ZIMs + 2 GGUFs: Survival, Medical, Kiwix (:8081), AI (:8082), CDC Calc." }
+        [PSCustomObject]@{ Sku="Product2";     Name="FieldReady (64GB)";     Tiers="0 + 1";     MinUsb="64 GB";  Payload="~58.9 GB";  Desc="44 ZIMs + 5 GGUFs: SQLite Memory Vault, OCR Vault, STEM & Coding." }
+        [PSCustomObject]@{ Sku="Product2-256"; Name="FieldReady (256GB)";    Tiers="0 + 1";     MinUsb="256 GB"; Payload="~160.7 GB"; Desc="52 ZIMs + 5 GGUFs: Adds Wikipedia No-Pic (50 GB) + StackOverflow + Gutenberg." }
+        [PSCustomObject]@{ Sku="Product3";     Name="CivilizationArk (64G)"; Tiers="0 + 1 + 2"; MinUsb="64 GB";  Payload="~58.9 GB";  Desc="17 ZIMs + 3 GGUFs: Full English Wikipedia No-Pic (50.2 GB) + Survival Core." }
+        [PSCustomObject]@{ Sku="Product3-256"; Name="CivilizationArk(256G)"; Tiers="0 + 1 + 2"; MinUsb="256 GB"; Payload="~174.9 GB"; Desc="53 ZIMs + 8 GGUFs: Full Wikipedia + 52 Archives + Llama 3.2 3B / Vision." }
+        [PSCustomObject]@{ Sku="Tier3";        Name="SwarmCluster";          Tiers="0 - 3";     MinUsb="256 GB"; Payload="~195.3 GB"; Desc="53 ZIMs + 9 GGUFs: Adds Qwen 2.5 32B (19.9 GB) + exo LAN Swarm." }
+        [PSCustomObject]@{ Sku="Tier4";        Name="SettlementHub";         Tiers="0 - 4";     MinUsb="512 GB"; Payload="~356.9 GB"; Desc="54 ZIMs + 10 GGUFs: Adds Wikipedia Maxi (110 GB) + Llama 3.3 70B (42.5 GB)." }
     )
 
     foreach ($r in $skuRows) {
-        Write-Host ("{0,-9} {1,-17} {2,-9} {3,-9} {4,-15} {5}" -f $r.Sku, $r.Name, $r.Tiers, $r.MinUsb, $r.Payload, $r.Desc)
+        Write-Host ("{0,-13} {1,-22} {2,-9} {3,-9} {4,-12} {5}" -f $r.Sku, $r.Name, $r.Tiers, $r.MinUsb, $r.Payload, $r.Desc)
     }
 
     Write-Host ""
@@ -380,10 +385,14 @@ if ($Info) {
     }
 
     Write-Host ""
-    Write-Host "[CURRENT FACTORY READINESS STATUS]" -ForegroundColor Yellow
-    Write-Host ("  * Product 1 (PocketSurvival): {0} (Lean payload: 1.39 GB, verified <= 6.5 GB ceiling)" -f $(if ($prod1Ready) { "[100% READY]" } else { "[INCOMPLETE]" })) -ForegroundColor $(if ($prod1Ready) { "Green" } else { "Yellow" })
-    Write-Host ("  * Product 2 (FieldReady):     {0} (Lean payload: 4.69 GB, verified for 32 GB drive D:)" -f $(if ($prod2Ready) { "[100% READY]" } else { "[INCOMPLETE]" })) -ForegroundColor $(if ($prod2Ready) { "Green" } else { "Yellow" })
-    Write-Host ("  * Product 3 (CivilizationArk): {0} (Requires 50.2 GB Wikipedia ZIM in cache; 128 GB USB required)" -f $(if ($prod3Ready) { "[100% READY]" } else { "[REQUIRES CACHE DOWNLOAD]" })) -ForegroundColor $(if ($prod3Ready) { "Green" } else { "Cyan" })
+    $pJson = Join-Path $SourceRoot "manifests\products.json"
+    $inv1 = Get-ProductAssetInventory -ProductSku "Product1" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
+    $inv2 = Get-ProductAssetInventory -ProductSku "Product2" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
+    $inv3 = Get-ProductAssetInventory -ProductSku "Product3" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
+    Write-Host "[CURRENT FACTORY READINESS STATUS ($Profile profile)]" -ForegroundColor Yellow
+    Write-Host ("  * Product 1 (PocketSurvival, 32 GB):   {0} ({1}/{2} assets cached)" -f $(if ($inv1.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv1.MissingCount)]" }), ($inv1.Assets.Count - $inv1.MissingCount), $inv1.Assets.Count) -ForegroundColor $(if ($inv1.AllRequiredAvailable) { "Green" } else { "Yellow" })
+    Write-Host ("  * Product 2 (FieldReady, 64 GB):       {0} ({1}/{2} assets cached)" -f $(if ($inv2.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv2.MissingCount)]" }), ($inv2.Assets.Count - $inv2.MissingCount), $inv2.Assets.Count) -ForegroundColor $(if ($inv2.AllRequiredAvailable) { "Green" } else { "Yellow" })
+    Write-Host ("  * Product 3 (CivilizationArk, 64 GB):  {0} ({1}/{2} assets cached)" -f $(if ($inv3.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv3.MissingCount)]" }), ($inv3.Assets.Count - $inv3.MissingCount), $inv3.Assets.Count) -ForegroundColor $(if ($inv3.AllRequiredAvailable) { "Green" } else { "Cyan" })
     Write-Host "================================================================================" -ForegroundColor Cyan
     exit 0
 }
@@ -413,9 +422,9 @@ if (-not $ResolvedSku -or -not $Drive) {
     Write-Host "  OFFGRIDUSB -- FACTORY PROVISIONING SUITE (HOST ONLY)" -ForegroundColor Cyan
     Write-Host "  Universal Air-Gapped Offline Survival, Knowledge & Local AI Drives" -ForegroundColor White
     Write-Host "================================================================================" -ForegroundColor Cyan
-    Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    8 GB USB,  <= 6.5 GB payload)"
-    Write-Host "  [2] Provision Product 2: FieldReady      (Tiers 0-1, 32 GB USB,  ~16-20 GB / 4.7 GB lean)"
-    Write-Host "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 128 GB USB, ~65-72 GB payload)"
+    Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    32 GB USB,  ~29.0 GB full / 1.4 GB lean)"
+    Write-Host "  [2] Provision Product 2: FieldReady      (Tiers 0-1, 64 GB USB,  ~58.9 GB full / 4.7 GB lean)"
+    Write-Host "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 64 GB USB,  ~58.9 GB Wikipedia-first)"
     Write-Host "  ----------------------------------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  [4] Custom Technical Tier Provisioning (Tier 0, 1, 2, 3, or 4)"
     Write-Host "  [5] View Product Catalog & Hardware Specifications (-Info)"
@@ -536,7 +545,7 @@ Write-Host "  Resolved Action  : $($fsPlan.ResolvedAction) - $($fsPlan.Descripti
 #     host cache (downloading missing ones via fetch_assets.py), since the
 #     staging plan throws on missing assets.
 # ------------------------------------------------------------------------------
-$tierMap = @{ Product1 = 0; Product2 = 1; Product3 = 2; Tier3 = 3; Tier4 = 4 }
+$tierMap = @{ "Product1" = 0; "Product2" = 1; "Product2-256" = 1; "Product3" = 2; "Product3-256" = 2; "Tier3" = 3; "Tier4" = 4 }
 $assetTier = if ($tierMap.ContainsKey($ResolvedSku)) { $tierMap[$ResolvedSku] } else { 0 }
 
 $null = New-Item -ItemType Directory -Path (Join-Path $CacheDir "zim") -Force
