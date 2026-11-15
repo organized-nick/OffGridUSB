@@ -2653,3 +2653,206 @@ body.theme-matrix #safeEjectBtn:hover {
   background: #00FF41 !important;
   color: #020A04 !important;
 }
+
+/* --------------------------------------------------------------------------
+   OFFLINE WORLD MAP & GPS VIEWPORT (MAPLIBRE GL + PMTILES / NATURAL EARTH)
+   -------------------------------------------------------------------------- */
+.map-shell-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.map-search-wrap {
+  position: relative;
+  flex: 1 1 360px;
+  min-width: 260px;
+}
+
+.map-search-form {
+  display: flex;
+  gap: 8px;
+}
+
+.map-search-form .tactical-input {
+  flex: 1;
+}
+
+.map-search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--bg-panel);
+  border: 1.5px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  z-index: 60;
+  max-height: 290px;
+  overflow-y: auto;
+}
+
+.map-search-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  padding: 9px 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.map-search-item:last-child {
+  border-bottom: none;
+}
+
+.map-search-item:hover {
+  background: var(--bg-input);
+}
+
+.map-search-item-title {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.map-search-item-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.map-search-item-coords {
+  font-size: 11px;
+  color: var(--cyan);
+  white-space: nowrap;
+}
+
+.map-region-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.map-layer-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.map-layer-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.map-layer-pill input[type="checkbox"] {
+  accent-color: var(--emerald);
+  margin: 0;
+  cursor: pointer;
+}
+
+.offline-map-viewport-wrap {
+  position: relative;
+  width: 100%;
+  height: 600px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid var(--border-bright);
+  background: #0c1722;
+}
+
+.offline-map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.map-ruler-banner {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 25;
+  background: rgba(20, 23, 18, 0.92);
+  border: 1.5px solid var(--amber);
+  color: #EDE6D6;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.map-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-top: 2px;
+}
+
+.btn-active-tool {
+  background: var(--amber) !important;
+  color: #1F211C !important;
+  border-color: var(--amber) !important;
+  font-weight: 800 !important;
+}
+
+.offline-map-popup .maplibregl-popup-content {
+  background: #1A1E16;
+  color: #EDE6D6;
+  border: 1.5px solid #B7A77A;
+  border-radius: 8px;
+  padding: 10px 13px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65);
+}
+
+.offline-map-popup .maplibregl-popup-close-button {
+  color: #EDE6D6;
+  font-size: 16px;
+  padding: 2px 6px;
+}
+
+body.theme-matrix .offline-map-popup .maplibregl-popup-content {
+  background: #041007;
+  color: #D8FFE2;
+  border-color: #00FF41;
+}
+
+body.theme-bone .offline-map-popup .maplibregl-popup-content {
+  background: #F6F1E3;
+  color: #1F211C;
+  border-color: #3F4A2C;
+}

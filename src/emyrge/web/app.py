@@ -304,6 +304,214 @@ class EmyrgeRuntime:
         self._pending_close_timer: Optional[threading.Timer] = None
         self._shutting_down: bool = False
         self._shutdown_callback: Optional[Callable[[], None]] = None
+        self._gazetteer_cache: Optional[List[Dict[str, Any]]] = None
+
+    def _get_maps_dir(self) -> Path:
+        maps_dir = self.config.data_dir / "maps"
+        if maps_dir.is_dir():
+            return maps_dir
+        fallback = self.config.static_dir / "vendor" / "maps"
+        return fallback
+
+    def get_maps_catalog(self) -> Dict[str, Any]:
+        maps_dir = self._get_maps_dir()
+        layers: List[Dict[str, Any]] = []
+        pmtiles_archives: List[Dict[str, Any]] = []
+        total_bytes = 0
+        if maps_dir.is_dir():
+            for p in sorted(maps_dir.iterdir()):
+                if not p.is_file():
+                    continue
+                ext = p.suffix.lower()
+                if ext in (".geojson", ".json", ".pmtiles"):
+                    sz = p.stat().st_size
+                    total_bytes += sz
+                    entry = {
+                        "filename": p.name,
+                        "url": f"/maps/{p.name}",
+                        "size_bytes": sz,
+                        "size_mb": round(sz / (1024 * 1024), 2),
+                        "format": "pmtiles" if ext == ".pmtiles" else "geojson",
+                    }
+                    if ext == ".pmtiles":
+                        pmtiles_archives.append(entry)
+                    else:
+                        layers.append(entry)
+        photos = []
+        for ph in self.visual_vault.list_photos():
+            if ph.get("gps_lat") is not None and ph.get("gps_lon") is not None:
+                photos.append({
+                    "id": ph.get("id"),
+                    "filename": ph.get("filename"),
+                    "lat": ph.get("gps_lat"),
+                    "lon": ph.get("gps_lon"),
+                    "ocr_text": ph.get("ocr_text", ""),
+                    "notes": ph.get("notes", ""),
+                    "image_url": ph.get("image_url", ""),
+                })
+        return {
+            "ok": True,
+            "engine": "MapLibre GL JS v4.7.1 + PMTiles v3.2.0 (100% Air-Gapped)",
+            "total_size_mb": round(total_bytes / (1024 * 1024), 2),
+            "layers": layers,
+            "pmtiles": pmtiles_archives,
+            "gps_photos": photos,
+        }
+
+    def _load_gazetteer(self) -> List[Dict[str, Any]]:
+        if self._gazetteer_cache is not None:
+            return self._gazetteer_cache
+        items: List[Dict[str, Any]] = []
+        maps_dir = self._get_maps_dir()
+
+        def _extract_coords(geom: Any) -> Optional[Tuple[float, float]]:
+            if not isinstance(geom, dict):
+                return None
+            coords = geom.get("coordinates")
+            if isinstance(coords, list) and len(coords) >= 2:
+                try:
+                    return float(coords[1]), float(coords[0])
+                except (TypeError, ValueError):
+                    return None
+            return None
+
+        cities_path = maps_dir / "cities.geojson"
+        if cities_path.is_file():
+            try:
+                data = json.loads(cities_path.read_text(encoding="utf-8", errors="ignore"))
+                for feat in data.get("features", []):
+                    latlon = _extract_coords(feat.get("geometry"))
+                    if not latlon:
+                        continue
+                    props = feat.get("properties") or {}
+                    name = str(props.get("name") or props.get("nameascii") or "").strip()
+                    if not name:
+                        continue
+                    country = str(props.get("adm0name") or "").strip()
+                    region = str(props.get("adm1name") or "").strip()
+                    pop = int(props.get("pop_max") or props.get("pop_min") or 0)
+                    items.append({
+                        "name": name,
+                        "ascii": str(props.get("nameascii") or name).lower(),
+                        "subtitle": ", ".join(p for p in [region, country] if p),
+                        "category": "city",
+                        "lat": round(latlon[0], 5),
+                        "lon": round(latlon[1], 5),
+                        "population": pop,
+                        "zoom": 10 if pop > 100000 else 9,
+                    })
+            except Exception:
+                pass
+
+        airports_path = maps_dir / "airports.geojson"
+        if airports_path.is_file():
+            try:
+                data = json.loads(airports_path.read_text(encoding="utf-8", errors="ignore"))
+                for feat in data.get("features", []):
+                    latlon = _extract_coords(feat.get("geometry"))
+                    if not latlon:
+                        continue
+                    props = feat.get("properties") or {}
+                    name = str(props.get("name") or "").strip()
+                    iata = str(props.get("iata_code") or "").strip()
+                    gps_code = str(props.get("gps_code") or "").strip()
+                    if not name and not iata:
+                        continue
+                    label = f"{name} ({iata})" if iata else name
+                    items.append({
+                        "name": label,
+                        "ascii": f"{name} {iata} {gps_code}".lower(),
+                        "subtitle": f"Airport • ICAO: {gps_code}" if gps_code else "Airport",
+                        "category": "airport",
+                        "lat": round(latlon[0], 5),
+                        "lon": round(latlon[1], 5),
+                        "population": 50000,
+                        "zoom": 11,
+                    })
+            except Exception:
+                pass
+
+        peaks_path = maps_dir / "peaks.geojson"
+        if peaks_path.is_file():
+            try:
+                data = json.loads(peaks_path.read_text(encoding="utf-8", errors="ignore"))
+                for feat in data.get("features", []):
+                    latlon = _extract_coords(feat.get("geometry"))
+                    if not latlon:
+                        continue
+                    props = feat.get("properties") or {}
+                    name = str(props.get("name") or "").strip()
+                    elev = props.get("elevation")
+                    region = str(props.get("region") or "").strip()
+                    if not name:
+                        continue
+                    sub = f"Elevation: {elev}m" + (f" • {region}" if region else "") if elev else region
+                    items.append({
+                        "name": name,
+                        "ascii": f"{name} {region}".lower(),
+                        "subtitle": sub or "Elevation Point",
+                        "category": "peak",
+                        "lat": round(latlon[0], 5),
+                        "lon": round(latlon[1], 5),
+                        "population": 10000,
+                        "zoom": 9,
+                    })
+            except Exception:
+                pass
+
+        self._gazetteer_cache = items
+        return items
+
+    def search_maps_gazetteer(self, query: str, limit: int = 20) -> Dict[str, Any]:
+        q = (query or "").strip()
+        if not q:
+            return {"ok": True, "query": "", "results": []}
+
+        # Check if query is direct lat,lon coordinates
+        coord_match = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*[,;\s]\s*(-?\d+(?:\.\d+)?)\s*$", q)
+        if coord_match:
+            lat = float(coord_match.group(1))
+            lon = float(coord_match.group(2))
+            if -90 <= lat <= 90 and -180 <= lon <= 180:
+                return {
+                    "ok": True,
+                    "query": q,
+                    "results": [{
+                        "name": f"GPS Coordinate ({lat:.4f}, {lon:.4f})",
+                        "subtitle": "Direct Lat/Lon Jump",
+                        "category": "gps",
+                        "lat": lat,
+                        "lon": lon,
+                        "population": 0,
+                        "zoom": 10,
+                    }],
+                }
+
+        ql = q.lower()
+        gaz = self._load_gazetteer()
+        scored: List[Tuple[int, int, Dict[str, Any]]] = []
+        for item in gaz:
+            asc = item["ascii"]
+            name_l = item["name"].lower()
+            sub_l = item["subtitle"].lower()
+            if name_l == ql or asc == ql:
+                score = 300
+            elif name_l.startswith(ql) or asc.startswith(ql):
+                score = 200
+            elif ql in name_l or ql in asc:
+                score = 100
+            elif ql in sub_l:
+                score = 50
+            else:
+                continue
+            scored.append((score, item.get("population", 0), item))
+
+        scored.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        results = [
+            {k: v for k, v in entry.items() if k != "ascii"}
+            for _, _, entry in scored[:max(1, min(limit, 50))]
+        ]
+        return {"ok": True, "query": q, "results": results}
 
     def cancel_pending_close(self) -> None:
         with self._lock:
@@ -1620,6 +1828,9 @@ MIME_OVERRIDES: Dict[str, str] = {
     ".js": "application/javascript; charset=utf-8",
     ".mjs": "application/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".geojson": "application/geo+json; charset=utf-8",
+    ".pmtiles": "application/vnd.pmtiles",
+    ".pbf": "application/x-protobuf",
     ".wasm": "application/wasm",
     ".svg": "image/svg+xml",
     ".png": "image/png",
@@ -1651,8 +1862,9 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
     def _send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept, Range")
+        self.send_header("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges")
         self.send_header("Cache-Control", "no-store")
 
     def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
@@ -1773,6 +1985,16 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
 
             if path == "/api/swarm/inference/models":
                 self._send_json(200, self.runtime.swarm_inference_models())
+                return
+
+            if path == "/api/maps":
+                self._send_json(200, self.runtime.get_maps_catalog())
+                return
+
+            if path == "/api/maps/search":
+                q = (qs.get("q") or qs.get("query") or [""])[0]
+                lim = int((qs.get("limit") or ["20"])[0] or 20)
+                self._send_json(200, self.runtime.search_maps_gazetteer(q, limit=lim))
                 return
 
             # Static File & Uploaded Asset Serving
@@ -1985,18 +2207,36 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send_json(500, {"ok": False, "error": str(exc), "trace": traceback.format_exc()[-400:]})
 
-    def _serve_static(self, req_path: str) -> None:
+    def do_HEAD(self) -> None:
+        parsed = urllib.parse.urlparse(self.path)
+        self._serve_static(parsed.path, head_only=True)
+
+    def _serve_static(self, req_path: str, head_only: bool = False) -> None:
         static_root = self.runtime.config.static_dir.resolve()
         uploads_root = self.runtime.config.uploads_dir.resolve()
+        maps_root = (self.runtime.config.data_dir / "maps").resolve()
+        vendor_maps_root = (static_root / "vendor" / "maps").resolve()
 
         # Uploaded visual vault images (`/uploads/<name>`)
         if req_path.startswith("/uploads/"):
             rel_up = req_path[len("/uploads/"):].lstrip("/")
             candidate = (uploads_root / rel_up).resolve()
             if str(candidate).startswith(str(uploads_root)) and candidate.is_file():
-                self._stream_file(candidate)
+                self._stream_file(candidate, head_only=head_only)
                 return
             self._send_json(404, {"ok": False, "error": "Uploaded file not found"})
+            return
+
+        # Air-gapped Offline Map layers & PMTiles (`/maps/<name>`)
+        if req_path.startswith("/maps/"):
+            rel_map = req_path[len("/maps/"):].lstrip("/")
+            for root_dir in (maps_root, vendor_maps_root):
+                if root_dir.is_dir():
+                    candidate = (root_dir / rel_map).resolve()
+                    if str(candidate).startswith(str(root_dir)) and candidate.is_file():
+                        self._stream_file(candidate, head_only=head_only)
+                        return
+            self._send_json(404, {"ok": False, "error": f"Map asset not found: {rel_map}"})
             return
 
         # Normalize `/` -> `index.html` (or fallback to `wasm/chromebook.html` if index.html isn't staged yet)
@@ -2007,30 +2247,79 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
         if clean_rel == "" or clean_rel == "index.html":
             idx_file = static_root / "index.html"
             if idx_file.is_file():
-                self._stream_file(idx_file)
+                self._stream_file(idx_file, head_only=head_only)
                 return
             wasm_fallback = static_root / "wasm" / "chromebook.html"
             if wasm_fallback.is_file():
-                self._stream_file(wasm_fallback)
+                self._stream_file(wasm_fallback, head_only=head_only)
                 return
 
         candidate = (static_root / clean_rel).resolve()
         if str(candidate).startswith(str(static_root)) and candidate.is_file():
-            self._stream_file(candidate)
+            self._stream_file(candidate, head_only=head_only)
             return
 
         self._send_json(404, {"ok": False, "error": f"Path not found: {req_path}"})
 
-    def _stream_file(self, file_path: Path) -> None:
+    def _stream_file(self, file_path: Path, head_only: bool = False) -> None:
         ext = file_path.suffix.lower()
         mime = MIME_OVERRIDES.get(ext) or mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
-        data = file_path.read_bytes()
+        file_size = file_path.stat().st_size
+        range_hdr = self.headers.get("Range")
+
+        if range_hdr and range_hdr.startswith("bytes="):
+            try:
+                spec = range_hdr[len("bytes="):].split(",")[0].strip()
+                start_str, end_str = spec.split("-", 1)
+                if start_str == "":
+                    suffix_len = int(end_str)
+                    start = max(0, file_size - suffix_len)
+                    end = file_size - 1
+                else:
+                    start = int(start_str)
+                    end = int(end_str) if end_str else file_size - 1
+                if 0 <= start <= end < file_size:
+                    length = end - start + 1
+                    self.send_response(206)
+                    self.send_header("Content-Type", mime)
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+                    self.send_header("Content-Length", str(length))
+                    self._send_cors_headers()
+                    self.end_headers()
+                    if not head_only:
+                        with open(file_path, "rb") as f:
+                            f.seek(start)
+                            remaining = length
+                            while remaining > 0:
+                                chunk = f.read(min(1024 * 1024, remaining))
+                                if not chunk:
+                                    break
+                                self.wfile.write(chunk)
+                                remaining -= len(chunk)
+                    return
+                else:
+                    self.send_response(416)
+                    self.send_header("Content-Range", f"bytes */{file_size}")
+                    self._send_cors_headers()
+                    self.end_headers()
+                    return
+            except Exception:
+                pass
+
         self.send_response(200)
         self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(file_size))
         self._send_cors_headers()
         self.end_headers()
-        self.wfile.write(data)
+        if not head_only:
+            with open(file_path, "rb") as f:
+                while True:
+                    chunk = f.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
 
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):

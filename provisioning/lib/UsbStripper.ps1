@@ -189,7 +189,21 @@ function Get-WhitelistedStagingPlan {
         }
     }
 
-    # 6. Initialize empty data/vault and data/uploads dirs
+    # 6. Stage offline vector maps (data/maps) and initialize data/vault + data/uploads
+    $mapsDir = Join-Path $SourceRoot "data\maps"
+    if (Test-Path $mapsDir) {
+        Get-ChildItem -Path $mapsDir -Recurse -File | ForEach-Object {
+            $mFile = $_
+            $rel = "data\maps\$($mFile.Name)"
+            $stagedItems += [PSCustomObject]@{
+                RelativePath = $rel
+                SourcePath   = $mFile.FullName
+                TargetPath   = Join-Path $targetRoot $rel
+                SizeBytes    = $mFile.Length
+                Category     = "Offline Maps (data/maps)"
+            }
+        }
+    }
     $stagedItems += [PSCustomObject]@{
         RelativePath = "data\vault\"
         SourcePath   = "[Directory Placeholder]"

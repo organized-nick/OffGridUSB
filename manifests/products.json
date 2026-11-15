@@ -125,9 +125,9 @@
           ]
         },
         "full": {
-          "description": "Full payload for 64GB USB 3.2 Flash Drive: 44 zim archives (50.4 GiB) + 5 model files (4.1 GiB), priority-ordered greedy fill of the manifest (planner: provisioning/tools/plan_tier_payloads.py)",
-          "total_bytes": 58580815207,
-          "total_gb": 58.58,
+          "description": "Full payload for 64GB USB 3.2 Flash Drive: 42 zim archives (47.9 GiB) + 5 model files (4.1 GiB), with native offline MapLibre + Natural Earth world map",
+          "total_bytes": 55911246183,
+          "total_gb": 55.91,
           "models": [
             "smollm2-135m-instruct-q4_k_m.gguf",
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
@@ -167,7 +167,6 @@
             "engineering.stackexchange.com_en_all_2026-10.zim",
             "arduino.stackexchange.com_en_all_2026-10.zim",
             "3dprinting.stackexchange.com_en_all_2026-10.zim",
-            "gis.stackexchange.com_en_all_2026-10.zim",
             "restarters_en_all_maxi_2026-10.zim",
             "ifixit_en_all_2025-12.zim",
             "devdocs_en_man_2026-10.zim",
@@ -176,7 +175,6 @@
             "energypedia_en_all_nopic_2026-06.zim",
             "solar.lowtechmagazine.com_mul_all_2025-01.zim",
             "100r.co_en_all_2026-08.zim",
-            "openstreetmap-wiki_en_all_nopic_2026-10.zim",
             "phet_en_all_2026-08.zim",
             "libretexts.org_en_k12_2026-01.zim",
             "libretexts.org_en_phys_2026-01.zim"
@@ -239,9 +237,9 @@
           ]
         },
         "full": {
-          "description": "Full payload for 64GB USB 3.2 Flash Drive: 37 zim archives (46.7 GiB) + 8 model files (8.2 GiB), priority-ordered greedy fill of the manifest (planner: provisioning/tools/plan_tier_payloads.py)",
-          "total_bytes": 58868335751,
-          "total_gb": 58.87,
+          "description": "Full payload for 64GB USB 3.2 Flash Drive: 36 zim archives (44.7 GiB) + 8 model files (8.2 GiB), with native offline MapLibre + Natural Earth world map",
+          "total_bytes": 56733008007,
+          "total_gb": 56.73,
           "models": [
             "smollm2-135m-instruct-q4_k_m.gguf",
             "qwen2.5-0.5b-instruct-q4_k_m.gguf",
@@ -284,7 +282,6 @@
             "engineering.stackexchange.com_en_all_2026-10.zim",
             "arduino.stackexchange.com_en_all_2026-10.zim",
             "3dprinting.stackexchange.com_en_all_2026-10.zim",
-            "gis.stackexchange.com_en_all_2026-10.zim",
             "restarters_en_all_maxi_2026-10.zim",
             "ifixit_en_all_2025-12.zim",
             "devdocs_en_man_2026-10.zim",

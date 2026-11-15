@@ -124,6 +124,9 @@ data/vault/*
 !data/uploads/
 data/uploads/*
 !data/uploads/README.md
+!data/maps/
+data/maps/*
+!data/maps/README.md
 
 # ------------------------------------------------------------------------------
 # 6. Runtime Databases, Logs & Process Files

@@ -768,7 +768,6 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product2",
         "Product2-256",
         "Product3-256",
         "Tier3",
@@ -1009,9 +1008,7 @@
       "magic_header": "5A494D04",
       "verified_local": false,
       "required_for_skus": [
-        "Product2",
         "Product2-256",
-        "Product3",
         "Product3-256",
         "Tier3",
         "Tier4"

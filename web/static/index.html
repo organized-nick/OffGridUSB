@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>OffGridUSB // The Towers Are Down. Your Answers Aren't.</title>
   <link rel="icon" type="image/png" href="/static/favicon.png" />
+  <link rel="stylesheet" href="/static/vendor/maps/maplibre-gl.css" onerror="this.href='vendor/maps/maplibre-gl.css'" />
   <link rel="stylesheet" href="/static/style.css" onerror="this.href='style.css'" />
 </head>
 <body>
@@ -297,6 +298,9 @@
           <button type="button" class="subtab-btn active" id="subtab-kiwix" data-subtab="iiab-kiwix">
             📚 Live Kiwix ZIM Library Browser (:8081)
           </button>
+          <button type="button" class="subtab-btn" id="subtab-map" data-subtab="iiab-map">
+            🗺️ Offline World Map &amp; GPS
+          </button>
           <button type="button" class="subtab-btn" id="subtab-khan" data-subtab="iiab-khan">
             🎓 Khan Academy Offline STEM &amp; Survival Tutor
           </button>
@@ -322,6 +326,9 @@
             <option value="/content/zimgit-medicine_en_2024-08">zimgit-medicine_en (Field Medicine)</option>
             <option value="/content/zimgit-water_en_2024-08">zimgit-water_en (Safe Water Engineering)</option>
           </select>
+          <button type="button" id="openOfflineMapStripBtn" class="btn-secondary btn-sm" style="margin-left:auto;">
+            🗺️ Open Offline World Map &amp; GPS
+          </button>
         </div>
         <div class="iframe-shell">
           <iframe
@@ -331,7 +338,73 @@
             class="kiwix-iframe"
           ></iframe>
           <div id="kiwixFallbackNotice" class="iframe-fallback-bar">
-            <span>Tip: Browsing live portable <code>kiwix-serve</code> on port <code>8081</code>. If starting up or running headless, use <strong>Unified Instant Article Search</strong> or click <strong>Open Fullscreen Library (:8081)</strong>.</span>
+            <span>Tip: Browsing live portable <code>kiwix-serve</code> on port <code>8081</code>. For interactive offline maps &amp; GPS plotting, click <strong>🗺️ Offline World Map &amp; GPS</strong> above.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-panel 2D: Native Offline World Map & GPS (MapLibre GL + PMTiles/Natural Earth) -->
+      <div id="iiab-map" class="subtab-panel">
+        <div class="card map-shell-card">
+          <div class="map-toolbar">
+            <div class="map-search-wrap">
+              <form id="offlineMapSearchForm" class="map-search-form" autocomplete="off">
+                <input
+                  type="search"
+                  id="offlineMapSearchInput"
+                  class="tactical-input"
+                  placeholder="Search 7,300+ offline cities, airports (JFK, LHR), peaks, or enter lat, lon (e.g. 37.7749, -122.4194)..."
+                />
+                <button type="submit" class="btn-primary btn-sm">Fly To ▸</button>
+              </form>
+              <div id="offlineMapSearchResults" class="map-search-dropdown hidden"></div>
+            </div>
+
+            <div class="map-region-group">
+              <select id="offlineMapRegionSelect" class="tactical-select input-sm" title="Quick Region Jump">
+                <option value="world">🌍 Global View</option>
+                <option value="namerica">🌎 North America</option>
+                <option value="samerica">🌎 South America</option>
+                <option value="europe">🌍 Europe</option>
+                <option value="africa">🌍 Africa &amp; Middle East</option>
+                <option value="asia">🌏 Asia</option>
+                <option value="oceania">🌏 Oceania &amp; Australia</option>
+              </select>
+              <button type="button" id="mapMeasureToggleBtn" class="btn-secondary btn-sm" title="Click two or more points on the map to measure Haversine distance and compass bearing">
+                📏 Measure Distance
+              </button>
+              <button type="button" id="mapDropPinToggleBtn" class="btn-secondary btn-sm" title="Click on the map to drop a custom tactical waypoint pin">
+                📍 Drop Waypoint
+              </button>
+              <button type="button" id="mapClearPinsBtn" class="btn-ghost btn-sm" title="Clear ruler and custom pins">
+                ↺ Clear Marks
+              </button>
+            </div>
+          </div>
+
+          <div class="map-layer-bar">
+            <span class="section-eyebrow" style="margin:0;">OFFLINE VECTOR LAYERS:</span>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="roads" checked /> <span>🛣️ Highways &amp; Roads (10m)</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="cities" checked /> <span>🏙️ 7,342 World Cities</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="airports" checked /> <span>✈️ 890+ Airports</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="peaks" checked /> <span>⛰️ Elevation Peaks</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="water" checked /> <span>🌊 Rivers &amp; Lakes</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="borders" checked /> <span>🗺️ Country &amp; State Borders</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="grid" checked /> <span>🌐 Lat/Lon Graticule</span></label>
+            <label class="map-layer-pill"><input type="checkbox" data-map-layer="photos" checked /> <span>📷 Field Photo GPS Pins</span></label>
+          </div>
+
+          <div class="offline-map-viewport-wrap">
+            <div id="offlineMapCanvas" class="offline-map-canvas" role="application" aria-label="Air-Gapped Offline World Map"></div>
+            <div id="mapRulerBanner" class="map-ruler-banner hidden"></div>
+          </div>
+
+          <div class="map-status-bar mono">
+            <span id="mapCursorCoords">LAT: --.----° | LON: --.----°</span>
+            <span class="dot">•</span>
+            <span id="mapZoomReadout">ZOOM: 1.8x</span>
+            <span class="dot">•</span>
+            <span id="mapEngineBadge" class="emerald-text">100% Air-Gapped MapLibre GL + Natural Earth 10m Vector Pack</span>
           </div>
         </div>
       </div>
@@ -755,6 +828,8 @@
     </div>
   </div>
 
+  <script src="/static/vendor/maps/pmtiles.js" onerror="var s=document.createElement('script');s.src='vendor/maps/pmtiles.js';document.body.appendChild(s);"></script>
+  <script src="/static/vendor/maps/maplibre-gl.js" onerror="var s=document.createElement('script');s.src='vendor/maps/maplibre-gl.js';document.body.appendChild(s);"></script>
   <script src="/static/app.js" onerror="var s=document.createElement('script');s.src='app.js';document.body.appendChild(s);"></script>
 </body>
 </html>

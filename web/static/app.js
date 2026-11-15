@@ -1632,6 +1632,602 @@
     }
   }
 
+  // --------------------------------------------------------------------------
+  // 4b. Tab 2 — Native Offline World Map & GPS (MapLibre GL + PMTiles / GeoJSON)
+  // --------------------------------------------------------------------------
+  const MAP_THEMES = {
+    tactical: {
+      ocean: "#0c1722",
+      land: "#252B1F",
+      countryBorder: "#8A9A5B",
+      stateBorder: "#4A5638",
+      water: "#143852",
+      river: "#215B82",
+      roadMajor: "#E8622C",
+      roadMinor: "#B7A77A",
+      cityFill: "#EDE6D6",
+      cityStroke: "#1F211C",
+      airportFill: "#38BDF8",
+      peakFill: "#F59E0B",
+      grid: "rgba(183, 167, 122, 0.16)",
+      pinFill: "#E8622C",
+    },
+    matrix: {
+      ocean: "#020804",
+      land: "#071A0C",
+      countryBorder: "#00FF41",
+      stateBorder: "#146B2C",
+      water: "#042914",
+      river: "#00B84D",
+      roadMajor: "#7CFF9B",
+      roadMinor: "#1D8A3B",
+      cityFill: "#D8FFE2",
+      cityStroke: "#020804",
+      airportFill: "#00FF41",
+      peakFill: "#B8FF66",
+      grid: "rgba(0, 255, 65, 0.15)",
+      pinFill: "#00FF41",
+    },
+    bone: {
+      ocean: "#BFD7EA",
+      land: "#EFEAD8",
+      countryBorder: "#3F4A2C",
+      stateBorder: "#8D856B",
+      water: "#89B6D6",
+      river: "#4D88B5",
+      roadMajor: "#C84D1B",
+      roadMinor: "#9B7E46",
+      cityFill: "#1F211C",
+      cityStroke: "#EFEAD8",
+      airportFill: "#0284C7",
+      peakFill: "#B45309",
+      grid: "rgba(63, 74, 44, 0.16)",
+      pinFill: "#C84D1B",
+    },
+  };
+
+  let offlineMap = null;
+  let offlineMapLoaded = false;
+  let mapToolMode = "pan"; // "pan" | "measure" | "pin"
+  let mapMeasurePoints = [];
+  let mapCustomPins = [];
+  try {
+    const savedPins = JSON.parse(localStorage.getItem("offgrid_map_pins") || "[]");
+    if (Array.isArray(savedPins)) mapCustomPins = savedPins;
+  } catch (_) {}
+
+  function buildGraticuleGeoJSON() {
+    const features = [];
+    for (let lat = -80; lat <= 80; lat += 20) {
+      const coords = [];
+      for (let lon = -180; lon <= 180; lon += 5) coords.push([lon, lat]);
+      features.push({
+        type: "Feature",
+        properties: { label: `${lat}°` },
+        geometry: { type: "LineString", coordinates: coords },
+      });
+    }
+    for (let lon = -180; lon <= 180; lon += 20) {
+      const coords = [];
+      for (let lat = -80; lat <= 80; lat += 5) coords.push([lon, lat]);
+      features.push({
+        type: "Feature",
+        properties: { label: `${lon}°` },
+        geometry: { type: "LineString", coordinates: coords },
+      });
+    }
+    return { type: "FeatureCollection", features };
+  }
+
+  function buildPinsGeoJSON() {
+    return {
+      type: "FeatureCollection",
+      features: mapCustomPins.map((p, idx) => ({
+        type: "Feature",
+        properties: {
+          id: idx,
+          title: p.title || `Waypoint #${idx + 1}`,
+          notes: p.notes || "Tactical Waypoint",
+          lat: p.lat,
+          lon: p.lon,
+        },
+        geometry: { type: "Point", coordinates: [Number(p.lon), Number(p.lat)] },
+      })),
+    };
+  }
+
+  function buildPhotosGeoJSON() {
+    const features = [];
+    (state.visionItems || []).forEach((it) => {
+      let lat = it.latitude ?? it.gps_lat ?? null;
+      let lon = it.longitude ?? it.gps_lon ?? null;
+      if ((lat === null || lon === null) && it.gps) {
+        const m = String(it.gps).match(/(-?\d+\.\d+)\s*[°]?\s*([NS])?\s*[,/;\s]\s*(-?\d+\.\d+)\s*[°]?\s*([EW])?/i);
+        if (m) {
+          lat = parseFloat(m[1]) * (m[2] && m[2].toUpperCase() === "S" ? -1 : 1);
+          lon = parseFloat(m[3]) * (m[4] && m[4].toUpperCase() === "W" ? -1 : 1);
+        }
+      }
+      if (lat !== null && lon !== null && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lon))) {
+        features.push({
+          type: "Feature",
+          properties: {
+            title: it.title || it.filename || "Field Capture",
+            ocr_text: String(it.ocr_text || "").slice(0, 180),
+            lat: Number(lat),
+            lon: Number(lon),
+          },
+          geometry: { type: "Point", coordinates: [Number(lon), Number(lat)] },
+        });
+      }
+    });
+    return { type: "FeatureCollection", features };
+  }
+
+  function buildRulerGeoJSON() {
+    if (mapMeasurePoints.length === 0) {
+      return { type: "FeatureCollection", features: [] };
+    }
+    const features = mapMeasurePoints.map((pt, i) => ({
+      type: "Feature",
+      properties: { idx: i + 1 },
+      geometry: { type: "Point", coordinates: [pt.lon, pt.lat] },
+    }));
+    if (mapMeasurePoints.length >= 2) {
+      features.push({
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: mapMeasurePoints.map((pt) => [pt.lon, pt.lat]),
+        },
+      });
+    }
+    return { type: "FeatureCollection", features };
+  }
+
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371.0088;
+    const toRad = (d) => (d * Math.PI) / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+  }
+
+  function compassBearing(lat1, lon1, lat2, lon2) {
+    const toRad = (d) => (d * Math.PI) / 180;
+    const toDeg = (r) => (r * 180) / Math.PI;
+    const dLon = toRad(lon2 - lon1);
+    const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+    const x =
+      Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+      Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+    return (toDeg(Math.atan2(y, x)) + 360) % 360;
+  }
+
+  function updateRulerBanner() {
+    const banner = $("#mapRulerBanner");
+    if (!banner) return;
+    if (mapToolMode !== "measure" && mapMeasurePoints.length < 2) {
+      banner.classList.add("hidden");
+      return;
+    }
+    banner.classList.remove("hidden");
+    if (mapMeasurePoints.length === 0) {
+      banner.textContent = "📏 RULER ACTIVE: Click start point on the map...";
+      return;
+    }
+    if (mapMeasurePoints.length === 1) {
+      const p0 = mapMeasurePoints[0];
+      banner.textContent = `📏 Start: ${p0.lat.toFixed(4)}°, ${p0.lon.toFixed(4)}° — Click next point...`;
+      return;
+    }
+    let totalKm = 0;
+    for (let i = 1; i < mapMeasurePoints.length; i++) {
+      totalKm += haversineKm(
+        mapMeasurePoints[i - 1].lat,
+        mapMeasurePoints[i - 1].lon,
+        mapMeasurePoints[i].lat,
+        mapMeasurePoints[i].lon
+      );
+    }
+    const first = mapMeasurePoints[0];
+    const last = mapMeasurePoints[mapMeasurePoints.length - 1];
+    const brg = compassBearing(first.lat, first.lon, last.lat, last.lon);
+    const miles = totalKm * 0.621371;
+    const nm = totalKm * 0.539957;
+    banner.textContent = `📏 Distance: ${totalKm.toFixed(2)} km (${miles.toFixed(2)} mi / ${nm.toFixed(2)} NM) • Bearing: ${brg.toFixed(1)}° (${mapMeasurePoints.length} pts)`;
+  }
+
+  function syncOfflineMapTheme() {
+    if (!offlineMap || !offlineMapLoaded) return;
+    const curTheme = localStorage.getItem("offgrid_theme") || "tactical";
+    const pal = MAP_THEMES[curTheme] || MAP_THEMES.tactical;
+    try {
+      offlineMap.setPaintProperty("bg-ocean", "background-color", pal.ocean);
+      offlineMap.setPaintProperty("countries-fill", "fill-color", pal.land);
+      offlineMap.setPaintProperty("countries-border", "line-color", pal.countryBorder);
+      offlineMap.setPaintProperty("states-border", "line-color", pal.stateBorder);
+      offlineMap.setPaintProperty("lakes-fill", "fill-color", pal.water);
+      offlineMap.setPaintProperty("rivers-line", "line-color", pal.river);
+      offlineMap.setPaintProperty("roads-minor", "line-color", pal.roadMinor);
+      offlineMap.setPaintProperty("roads-major", "line-color", pal.roadMajor);
+      offlineMap.setPaintProperty("cities-circle", "circle-color", pal.cityFill);
+      offlineMap.setPaintProperty("cities-circle", "circle-stroke-color", pal.cityStroke);
+      offlineMap.setPaintProperty("airports-circle", "circle-color", pal.airportFill);
+      offlineMap.setPaintProperty("peaks-circle", "circle-color", pal.peakFill);
+      offlineMap.setPaintProperty("graticule-line", "line-color", pal.grid);
+      offlineMap.setPaintProperty("custom-pins-circle", "circle-color", pal.pinFill);
+    } catch (_) {}
+  }
+
+  function ensureOfflineMapLoaded() {
+    if (offlineMap) {
+      setTimeout(() => offlineMap.resize(), 60);
+      syncOfflineMapPhotos();
+      return;
+    }
+    const container = $("#offlineMapCanvas");
+    if (!container || typeof window.maplibregl === "undefined") {
+      if (container) {
+        container.innerHTML = `<div class="muted-note" style="padding:24px;">Offline MapLibre GL JS engine initializing...</div>`;
+      }
+      return;
+    }
+
+    try {
+      if (window.pmtiles && window.pmtiles.Protocol) {
+        const protocol = new window.pmtiles.Protocol();
+        window.maplibregl.addProtocol("pmtiles", protocol.tile);
+      }
+    } catch (_) {}
+
+    const curTheme = localStorage.getItem("offgrid_theme") || "tactical";
+    const pal = MAP_THEMES[curTheme] || MAP_THEMES.tactical;
+
+    offlineMap = new window.maplibregl.Map({
+      container: "offlineMapCanvas",
+      attributionControl: false,
+      center: [-20, 28],
+      zoom: 1.85,
+      minZoom: 1,
+      maxZoom: 15,
+      style: {
+        version: 8,
+        sources: {
+          countries: { type: "geojson", data: "/maps/countries.geojson" },
+          states: { type: "geojson", data: "/maps/states_lines.geojson" },
+          lakes: { type: "geojson", data: "/maps/lakes.geojson" },
+          rivers: { type: "geojson", data: "/maps/rivers.geojson" },
+          roads: { type: "geojson", data: "/maps/roads.geojson" },
+          cities: { type: "geojson", data: "/maps/cities.geojson" },
+          airports: { type: "geojson", data: "/maps/airports.geojson" },
+          peaks: { type: "geojson", data: "/maps/peaks.geojson" },
+          graticule: { type: "geojson", data: buildGraticuleGeoJSON() },
+          customPins: { type: "geojson", data: buildPinsGeoJSON() },
+          fieldPhotos: { type: "geojson", data: buildPhotosGeoJSON() },
+          ruler: { type: "geojson", data: buildRulerGeoJSON() },
+        },
+        layers: [
+          {
+            id: "bg-ocean",
+            type: "background",
+            paint: { "background-color": pal.ocean },
+          },
+          {
+            id: "graticule-line",
+            type: "line",
+            source: "graticule",
+            paint: {
+              "line-color": pal.grid,
+              "line-width": 0.8,
+              "line-dasharray": [3, 3],
+            },
+          },
+          {
+            id: "countries-fill",
+            type: "fill",
+            source: "countries",
+            paint: {
+              "fill-color": pal.land,
+              "fill-opacity": 0.96,
+            },
+          },
+          {
+            id: "lakes-fill",
+            type: "fill",
+            source: "lakes",
+            paint: {
+              "fill-color": pal.water,
+              "fill-opacity": 0.9,
+            },
+          },
+          {
+            id: "rivers-line",
+            type: "line",
+            source: "rivers",
+            paint: {
+              "line-color": pal.river,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.5, 6, 1.5, 10, 2.5],
+            },
+          },
+          {
+            id: "states-border",
+            type: "line",
+            source: "states",
+            paint: {
+              "line-color": pal.stateBorder,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.4, 6, 1.1],
+              "line-dasharray": [2, 2],
+            },
+          },
+          {
+            id: "countries-border",
+            type: "line",
+            source: "countries",
+            paint: {
+              "line-color": pal.countryBorder,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.8, 5, 1.6, 10, 2.4],
+            },
+          },
+          {
+            id: "roads-minor",
+            type: "line",
+            source: "roads",
+            minzoom: 3,
+            filter: ["!=", ["get", "type"], "Major Highway"],
+            paint: {
+              "line-color": pal.roadMinor,
+              "line-opacity": 0.65,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 3, 0.4, 6, 1.0, 10, 2.0],
+            },
+          },
+          {
+            id: "roads-major",
+            type: "line",
+            source: "roads",
+            minzoom: 2,
+            filter: ["==", ["get", "type"], "Major Highway"],
+            paint: {
+              "line-color": pal.roadMajor,
+              "line-opacity": 0.88,
+              "line-width": ["interpolate", ["linear"], ["zoom"], 2, 0.6, 5, 1.4, 9, 2.6, 12, 3.8],
+            },
+          },
+          {
+            id: "peaks-circle",
+            type: "circle",
+            source: "peaks",
+            paint: {
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 3.2, 7, 5.5],
+              "circle-color": pal.peakFill,
+              "circle-stroke-color": "#1F211C",
+              "circle-stroke-width": 1.2,
+            },
+          },
+          {
+            id: "airports-circle",
+            type: "circle",
+            source: "airports",
+            minzoom: 2.5,
+            paint: {
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2.5, 2.6, 6, 4.8, 10, 6.5],
+              "circle-color": pal.airportFill,
+              "circle-stroke-color": "#0b131e",
+              "circle-stroke-width": 1.2,
+            },
+          },
+          {
+            id: "cities-circle",
+            type: "circle",
+            source: "cities",
+            paint: {
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                1,
+                ["case", [">", ["to-number", ["get", "pop_max"]], 2000000], 3.2, [">", ["to-number", ["get", "pop_max"]], 500000], 1.8, 0.0],
+                4,
+                ["case", [">", ["to-number", ["get", "pop_max"]], 1000000], 5.0, [">", ["to-number", ["get", "pop_max"]], 100000], 3.2, 2.0],
+                8,
+                ["case", [">", ["to-number", ["get", "pop_max"]], 500000], 7.0, 4.5],
+              ],
+              "circle-color": pal.cityFill,
+              "circle-stroke-color": pal.cityStroke,
+              "circle-stroke-width": 1.2,
+            },
+          },
+          {
+            id: "field-photos-circle",
+            type: "circle",
+            source: "fieldPhotos",
+            paint: {
+              "circle-radius": 7.5,
+              "circle-color": "#10B981",
+              "circle-stroke-color": "#FFFFFF",
+              "circle-stroke-width": 2,
+            },
+          },
+          {
+            id: "custom-pins-circle",
+            type: "circle",
+            source: "customPins",
+            paint: {
+              "circle-radius": 7.5,
+              "circle-color": pal.pinFill,
+              "circle-stroke-color": "#EDE6D6",
+              "circle-stroke-width": 2,
+            },
+          },
+          {
+            id: "ruler-line",
+            type: "line",
+            source: "ruler",
+            filter: ["==", ["geometry-type"], "LineString"],
+            paint: {
+              "line-color": "#F59E0B",
+              "line-width": 2.8,
+              "line-dasharray": [2, 1.5],
+            },
+          },
+          {
+            id: "ruler-points",
+            type: "circle",
+            source: "ruler",
+            filter: ["==", ["geometry-type"], "Point"],
+            paint: {
+              "circle-radius": 5.5,
+              "circle-color": "#F59E0B",
+              "circle-stroke-color": "#1F211C",
+              "circle-stroke-width": 1.5,
+            },
+          },
+        ],
+      },
+    });
+
+    offlineMap.addControl(new window.maplibregl.NavigationControl({ showCompass: true }), "top-right");
+    offlineMap.addControl(new window.maplibregl.ScaleControl({ maxWidth: 140, unit: "metric" }), "bottom-left");
+
+    offlineMap.on("load", () => {
+      offlineMapLoaded = true;
+      syncOfflineMapPhotos();
+    });
+
+    offlineMap.on("mousemove", (e) => {
+      const el = $("#mapCursorCoords");
+      if (el && e.lngLat) {
+        el.textContent = `LAT: ${e.lngLat.lat.toFixed(4)}° | LON: ${e.lngLat.lng.toFixed(4)}°`;
+      }
+    });
+
+    offlineMap.on("zoom", () => {
+      const zEl = $("#mapZoomReadout");
+      if (zEl) {
+        zEl.textContent = `ZOOM: ${offlineMap.getZoom().toFixed(1)}x`;
+      }
+    });
+
+    offlineMap.on("click", (e) => {
+      if (!e.lngLat) return;
+      const lat = Number(e.lngLat.lat.toFixed(5));
+      const lon = Number(e.lngLat.lng.toFixed(5));
+
+      if (mapToolMode === "measure") {
+        mapMeasurePoints.push({ lat, lon });
+        const src = offlineMap.getSource("ruler");
+        if (src) src.setData(buildRulerGeoJSON());
+        updateRulerBanner();
+        return;
+      }
+
+      if (mapToolMode === "pin") {
+        const pinTitle = `Waypoint #${mapCustomPins.length + 1} (${lat.toFixed(3)}, ${lon.toFixed(3)})`;
+        mapCustomPins.push({ title: pinTitle, notes: "Saved Offline Tactical Pin", lat, lon });
+        try {
+          localStorage.setItem("offgrid_map_pins", JSON.stringify(mapCustomPins));
+        } catch (_) {}
+        const src = offlineMap.getSource("customPins");
+        if (src) src.setData(buildPinsGeoJSON());
+        new window.maplibregl.Popup({ className: "offline-map-popup" })
+          .setLngLat([lon, lat])
+          .setHTML(`<strong>📍 ${escapeHtml(pinTitle)}</strong><div class="mono" style="margin-top:4px;">LAT ${lat}°, LON ${lon}°</div>`)
+          .addTo(offlineMap);
+        return;
+      }
+
+      const features = offlineMap.queryRenderedFeatures(e.point, {
+        layers: [
+          "field-photos-circle",
+          "custom-pins-circle",
+          "cities-circle",
+          "airports-circle",
+          "peaks-circle",
+          "roads-major",
+          "countries-fill",
+        ],
+      });
+      if (!features || features.length === 0) return;
+      const f = features[0];
+      const p = f.properties || {};
+      let html = "";
+
+      if (f.layer.id === "cities-circle") {
+        const pop = Number(p.pop_max || p.pop_min || 0).toLocaleString();
+        html = `<strong>🏙️ ${escapeHtml(p.name || p.nameascii || "City")}</strong>
+          <div style="color:var(--text-secondary);margin-top:2px;">${escapeHtml([p.adm1name, p.adm0name].filter(Boolean).join(", "))}</div>
+          <div class="mono" style="margin-top:4px;font-size:11px;">Pop: ~${pop} • ${lat.toFixed(3)}°, ${lon.toFixed(3)}°</div>`;
+      } else if (f.layer.id === "airports-circle") {
+        html = `<strong>✈️ ${escapeHtml(p.name || "Airport")} ${p.iata_code ? `(${escapeHtml(p.iata_code)})` : ""}</strong>
+          <div class="mono" style="margin-top:4px;font-size:11px;">ICAO: ${escapeHtml(p.gps_code || "N/A")} • ${lat.toFixed(3)}°, ${lon.toFixed(3)}°</div>`;
+      } else if (f.layer.id === "peaks-circle") {
+        html = `<strong>⛰️ ${escapeHtml(p.name || "Peak")}</strong>
+          <div class="mono" style="margin-top:4px;font-size:11px;">Elevation: ${escapeHtml(String(p.elevation || ""))}m • ${escapeHtml(p.region || "")}</div>`;
+      } else if (f.layer.id === "field-photos-circle") {
+        html = `<strong>📷 ${escapeHtml(p.title || "Field Photo")}</strong>
+          <div class="mono" style="margin-top:3px;font-size:11px;">GPS: ${Number(p.lat).toFixed(4)}°, ${Number(p.lon).toFixed(4)}°</div>
+          <div style="margin-top:4px;font-size:11.5px;">${escapeHtml(p.ocr_text || "")}</div>`;
+      } else if (f.layer.id === "custom-pins-circle") {
+        html = `<strong>📍 ${escapeHtml(p.title || "Waypoint")}</strong>
+          <div class="mono" style="margin-top:4px;font-size:11px;">${Number(p.lat).toFixed(4)}°, ${Number(p.lon).toFixed(4)}°</div>`;
+      } else if (f.layer.id === "roads-major") {
+        html = `<strong>🛣️ ${escapeHtml(p.name || p.type || "Highway")}</strong>
+          <div class="mono" style="margin-top:3px;font-size:11px;">${escapeHtml(p.continent || "")} • ${lat.toFixed(3)}°, ${lon.toFixed(3)}°</div>`;
+      } else if (f.layer.id === "countries-fill") {
+        html = `<strong>🌍 ${escapeHtml(p.NAME || p.ADMIN || "Territory")}</strong>
+          <div class="mono" style="margin-top:3px;font-size:11px;">${escapeHtml(p.SUBREGION || p.CONTINENT || "")} • ${lat.toFixed(2)}°, ${lon.toFixed(2)}°</div>`;
+      }
+
+      if (html) {
+        new window.maplibregl.Popup({ className: "offline-map-popup" })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(offlineMap);
+      }
+    });
+  }
+
+  function syncOfflineMapPhotos() {
+    if (!offlineMap || !offlineMapLoaded) return;
+    const src = offlineMap.getSource("fieldPhotos");
+    if (src) src.setData(buildPhotosGeoJSON());
+  }
+
+  function flyToOfflineMapLocation(lat, lon, zoom = 9, title = "", subtitle = "") {
+    const iiabTabBtn = document.querySelector('.tab-btn[data-tab="tab-iiab"]');
+    if (iiabTabBtn) iiabTabBtn.click();
+    const mapSubBtn = $("#subtab-map");
+    if (mapSubBtn) mapSubBtn.click();
+    ensureOfflineMapLoaded();
+
+    const doFly = () => {
+      if (!offlineMap) return;
+      offlineMap.flyTo({ center: [Number(lon), Number(lat)], zoom: Number(zoom) || 9, essential: true });
+      if (title) {
+        new window.maplibregl.Popup({ className: "offline-map-popup" })
+          .setLngLat([Number(lon), Number(lat)])
+          .setHTML(
+            `<strong>📍 ${escapeHtml(title)}</strong>` +
+              (subtitle ? `<div style="margin-top:3px;">${escapeHtml(subtitle)}</div>` : "") +
+              `<div class="mono" style="margin-top:4px;font-size:11px;">LAT ${Number(lat).toFixed(4)}°, LON ${Number(lon).toFixed(4)}°</div>`
+          )
+          .addTo(offlineMap);
+      }
+    };
+
+    if (offlineMapLoaded) {
+      doFly();
+    } else if (offlineMap) {
+      offlineMap.once("load", doFly);
+    } else {
+      setTimeout(doFly, 250);
+    }
+  }
+
   async function loadKhanCurriculum() {
     try {
       const data = await apiGet("/api/knowledge/khan");
@@ -2138,6 +2734,19 @@
         const safetyHtml = it.safety_check
           ? `<div class="mono" style="margin-top:4px;font-size:11px;color:var(--emerald);">🛡 ${escapeHtml(it.safety_check)}</div>`
           : "";
+        let vLat = it.latitude ?? it.gps_lat ?? null;
+        let vLon = it.longitude ?? it.gps_lon ?? null;
+        if ((vLat === null || vLon === null) && it.gps) {
+          const m = String(it.gps).match(/(-?\d+\.\d+)\s*[°]?\s*([NS])?\s*[,/;\s]\s*(-?\d+\.\d+)\s*[°]?\s*([EW])?/i);
+          if (m) {
+            vLat = parseFloat(m[1]) * (m[2] && m[2].toUpperCase() === "S" ? -1 : 1);
+            vLon = parseFloat(m[3]) * (m[4] && m[4].toUpperCase() === "W" ? -1 : 1);
+          }
+        }
+        const plotMapBtnHtml =
+          vLat !== null && vLon !== null && !Number.isNaN(Number(vLat)) && !Number.isNaN(Number(vLon))
+            ? `<button type="button" class="btn-secondary btn-xs plot-on-map-btn" style="margin-top:6px;" data-lat="${Number(vLat)}" data-lon="${Number(vLon)}" data-title="${escapeHtml(it.title || it.filename || "Field Capture")}" data-sub="${escapeHtml(String(it.ocr_text || "").slice(0, 90))}">🗺️ Plot on Offline Map</button>`
+            : "";
         return `
         <div class="vision-card">
           ${previewHtml}
@@ -2149,10 +2758,12 @@
           <div class="vision-ocr-box">${escapeHtml(it.ocr_text || "OCR Text Indexed")}</div>
           ${notesHtml}
           ${safetyHtml}
+          ${plotMapBtnHtml}
         </div>
       `;
       })
       .join("");
+    syncOfflineMapPhotos();
   }
 
   async function uploadVisionDataUrl(filename, dataUrl, syntheticOcr = "") {
@@ -2681,6 +3292,7 @@
         btn.setAttribute("aria-pressed", isActive ? "true" : "false");
       });
       localStorage.setItem("offgrid_theme", next);
+      syncOfflineMapTheme();
     };
 
     const savedTheme = localStorage.getItem("offgrid_theme") || "tactical";
@@ -2744,6 +3356,183 @@
         $$(".subtab-btn").forEach((b) => b.classList.toggle("active", b === btn));
         $$(".subtab-panel").forEach((p) => p.classList.toggle("active", p.id === target));
         if (target === "iiab-kiwix") ensureKiwixFrameLoaded();
+        if (target === "iiab-map") ensureOfflineMapLoaded();
+      });
+    });
+
+    const openMapStripBtn = $("#openOfflineMapStripBtn");
+    if (openMapStripBtn) {
+      openMapStripBtn.addEventListener("click", () => {
+        const mapSubBtn = $("#subtab-map");
+        if (mapSubBtn) mapSubBtn.click();
+      });
+    }
+
+    // Offline World Map Controls (Gazetteer Search, Region Jump, Layer Toggles, Ruler, Waypoints)
+    const mapSearchForm = $("#offlineMapSearchForm");
+    const mapSearchInput = $("#offlineMapSearchInput");
+    const mapSearchDropdown = $("#offlineMapSearchResults");
+
+    const runMapGazetteerSearch = async (q, autoFlyFirst = false) => {
+      const clean = (q || "").trim();
+      if (!clean) {
+        if (mapSearchDropdown) mapSearchDropdown.classList.add("hidden");
+        return;
+      }
+      try {
+        const res = await apiGet(`/api/maps/search?q=${encodeURIComponent(clean)}&limit=12`);
+        const items = (res && res.results) || [];
+        if (autoFlyFirst && items.length > 0) {
+          const top = items[0];
+          if (mapSearchDropdown) mapSearchDropdown.classList.add("hidden");
+          flyToOfflineMapLocation(top.lat, top.lon, top.zoom || 9, top.name, top.subtitle);
+          return;
+        }
+        if (mapSearchDropdown) {
+          if (items.length === 0) {
+            mapSearchDropdown.innerHTML = `<div class="muted-note" style="padding:10px 12px;">No offline places matching "${escapeHtml(clean)}"</div>`;
+          } else {
+            mapSearchDropdown.innerHTML = items
+              .map((it) => {
+                const icon =
+                  it.category === "airport"
+                    ? "✈️"
+                    : it.category === "peak"
+                    ? "⛰️"
+                    : it.category === "gps"
+                    ? "📍"
+                    : "🏙️";
+                return `
+                  <button type="button" class="map-search-item" data-lat="${it.lat}" data-lon="${it.lon}" data-zoom="${it.zoom || 9}" data-name="${escapeHtml(it.name)}" data-sub="${escapeHtml(it.subtitle || "")}">
+                    <div>
+                      <div class="map-search-item-title">${icon} ${escapeHtml(it.name)}</div>
+                      <div class="map-search-item-sub">${escapeHtml(it.subtitle || "")}</div>
+                    </div>
+                    <span class="map-search-item-coords mono">${Number(it.lat).toFixed(2)}°, ${Number(it.lon).toFixed(2)}°</span>
+                  </button>
+                `;
+              })
+              .join("");
+          }
+          mapSearchDropdown.classList.remove("hidden");
+        }
+      } catch (_) {}
+    };
+
+    if (mapSearchForm && mapSearchInput) {
+      let searchDebounce = null;
+      mapSearchInput.addEventListener("input", () => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => runMapGazetteerSearch(mapSearchInput.value, false), 160);
+      });
+      mapSearchForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        runMapGazetteerSearch(mapSearchInput.value, true);
+      });
+    }
+
+    if (mapSearchDropdown) {
+      mapSearchDropdown.addEventListener("click", (e) => {
+        const item = e.target.closest(".map-search-item");
+        if (!item) return;
+        mapSearchDropdown.classList.add("hidden");
+        flyToOfflineMapLocation(
+          parseFloat(item.dataset.lat),
+          parseFloat(item.dataset.lon),
+          parseFloat(item.dataset.zoom || "9"),
+          item.dataset.name || "",
+          item.dataset.sub || ""
+        );
+      });
+    }
+
+    const regionSelect = $("#offlineMapRegionSelect");
+    if (regionSelect) {
+      const REGION_BOUNDS = {
+        world: { center: [-20, 28], zoom: 1.85 },
+        namerica: { center: [-98, 39], zoom: 3.3 },
+        samerica: { center: [-60, -15], zoom: 3.1 },
+        europe: { center: [14, 50], zoom: 3.8 },
+        africa: { center: [22, 6], zoom: 3.1 },
+        asia: { center: [95, 34], zoom: 3.0 },
+        oceania: { center: [138, -25], zoom: 3.5 },
+      };
+      regionSelect.addEventListener("change", () => {
+        ensureOfflineMapLoaded();
+        const cfg = REGION_BOUNDS[regionSelect.value] || REGION_BOUNDS.world;
+        if (offlineMap) {
+          offlineMap.flyTo({ center: cfg.center, zoom: cfg.zoom, essential: true });
+        }
+      });
+    }
+
+    const measureBtn = $("#mapMeasureToggleBtn");
+    const dropPinBtn = $("#mapDropPinToggleBtn");
+    const clearPinsBtn = $("#mapClearPinsBtn");
+
+    const syncMapToolButtons = () => {
+      if (measureBtn) measureBtn.classList.toggle("btn-active-tool", mapToolMode === "measure");
+      if (dropPinBtn) dropPinBtn.classList.toggle("btn-active-tool", mapToolMode === "pin");
+      const canvasEl = $("#offlineMapCanvas");
+      if (canvasEl) {
+        canvasEl.style.cursor = mapToolMode === "pan" ? "" : "crosshair";
+      }
+      updateRulerBanner();
+    };
+
+    if (measureBtn) {
+      measureBtn.addEventListener("click", () => {
+        mapToolMode = mapToolMode === "measure" ? "pan" : "measure";
+        syncMapToolButtons();
+      });
+    }
+
+    if (dropPinBtn) {
+      dropPinBtn.addEventListener("click", () => {
+        mapToolMode = mapToolMode === "pin" ? "pan" : "pin";
+        syncMapToolButtons();
+      });
+    }
+
+    if (clearPinsBtn) {
+      clearPinsBtn.addEventListener("click", () => {
+        mapMeasurePoints = [];
+        mapCustomPins = [];
+        mapToolMode = "pan";
+        try {
+          localStorage.removeItem("offgrid_map_pins");
+        } catch (_) {}
+        if (offlineMap && offlineMapLoaded) {
+          const rSrc = offlineMap.getSource("ruler");
+          if (rSrc) rSrc.setData(buildRulerGeoJSON());
+          const pSrc = offlineMap.getSource("customPins");
+          if (pSrc) pSrc.setData(buildPinsGeoJSON());
+        }
+        syncMapToolButtons();
+      });
+    }
+
+    const LAYER_GROUPS = {
+      roads: ["roads-minor", "roads-major"],
+      cities: ["cities-circle"],
+      airports: ["airports-circle"],
+      peaks: ["peaks-circle"],
+      water: ["lakes-fill", "rivers-line"],
+      borders: ["countries-border", "states-border"],
+      grid: ["graticule-line"],
+      photos: ["field-photos-circle"],
+    };
+
+    $$("input[data-map-layer]").forEach((chk) => {
+      chk.addEventListener("change", () => {
+        if (!offlineMap || !offlineMapLoaded) return;
+        const group = LAYER_GROUPS[chk.dataset.mapLayer] || [];
+        const vis = chk.checked ? "visible" : "none";
+        group.forEach((lid) => {
+          try {
+            offlineMap.setLayoutProperty(lid, "visibility", vis);
+          } catch (_) {}
+        });
       });
     });
 
@@ -2864,6 +3653,22 @@
 
     // Delegated click handler for Citation Pills & Khan Interactive Tutor
     document.body.addEventListener("click", (e) => {
+      if (mapSearchDropdown && !e.target.closest(".map-search-wrap")) {
+        mapSearchDropdown.classList.add("hidden");
+      }
+
+      const plotBtn = e.target.closest(".plot-on-map-btn");
+      if (plotBtn) {
+        flyToOfflineMapLocation(
+          parseFloat(plotBtn.dataset.lat),
+          parseFloat(plotBtn.dataset.lon),
+          11,
+          plotBtn.dataset.title || "Field Photo",
+          plotBtn.dataset.sub || ""
+        );
+        return;
+      }
+
       const citeBtn = e.target.closest(".cite-pill");
       if (citeBtn) {
         const turnId =
