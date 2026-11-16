@@ -29,12 +29,9 @@ origin/main is our trunk branch, all work should be committed to it. never force
 These are the products that will go to production at launch.
 
 - Online download: download runtime as a standalone package
-- 64 gig USB: AI free zim version (Product1 PocketSurvival), assembled via the info priorities in the provisioning script, no AI features included, no models
-- 64 gig USB: zim version WITH AI models (Product2 FieldReady) (note: should be straight superset info-wise as the 0 AI version, leave space on 0 AI if you need to
-- 64 gig USB: Product3 CivilizationArk — full wikipedia-weighted ZIM set + AI + hardware auto-selector
-- 256 gig USB: Product2-256 / Product3-256 drive-ladder variants, plus Tier3 SwarmCluster (more info + models + swarm functionality)
-
-No 32 GB tiers exist. The drive ladder is 64 / 64 / 64 / 256 / 512 GB.
+- 64 gig USB: AI free zim version, assembled via the info priorities in the provisioning script, no AI features included
+- 64 gig USB: zim version WITH AI models (note: should be straight superset info-wise as the 0 AI version, leave space on 0 AI if you need to
+- 256 gig USB: more info + models + swarm functionality
 
 ## Feature list (by product)
 
