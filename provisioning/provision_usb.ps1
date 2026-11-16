@@ -18,6 +18,14 @@
 .PARAMETER Drive
     Target USB drive letter (e.g. 'D' or 'D:').
 
+.PARAMETER Drives
+    Parallel multi-drive mode (USB hub): CSV of drive letters or
+    "<Letter>:<SKU>" per-drive SKU overrides, e.g. -Drives "D,E,F" or
+    "D:Product1,E:Product2". Provisions all drives concurrently (one child
+    engine per drive, per-drive logs in provisioning/logs/, per-drive
+    bandwidth budget, summary table, safe eject of succeeded drives).
+    Omit for single-drive behavior (unchanged).
+
 .PARAMETER DryRun
     Simulates safety validation, capacity check, asset availability, and staging plan with 0 writes.
 
@@ -57,6 +65,9 @@ param(
 
     [Parameter(Mandatory = $false)]
     [string]$Drive,
+
+    [Parameter(Mandatory = $false)]
+    [string]$Drives,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun,
@@ -314,6 +325,121 @@ function Normalize-SkuName {
 $ResolvedSku = Normalize-SkuName -InputSku $Product -InputTier $Tier
 
 # ------------------------------------------------------------------------------
+# 1.5 Handler: Parallel Multi-Drive Mode (-Drives). The top-level process
+#     becomes the orchestrator: sequential per-drive safety gate (fail fast,
+#     per-drive abort), then one background child engine per gated drive,
+#     exit-code aggregation, summary table, and safe eject of succeeded drives.
+#     Each child gets its own bandwidth budget (per-drive cap is what keeps
+#     shared-hub flash controllers alive; default 2048 KB/s per drive).
+# ------------------------------------------------------------------------------
+if ($Drives -and -not $Info) {
+    $LogDir = Join-Path $ScriptDir "logs"
+    $null = New-Item -ItemType Directory -Path $LogDir -Force
+    $timeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $perDriveBw = if ($BwLimitKBps -gt 0) { $BwLimitKBps } else { 2048 }
+
+    # Parse "<Letter>" or "<Letter>:<SKU>" specs against the default SKU.
+    function Parse-DriveSpec {
+        param([string]$Spec, [string]$DefaultSku)
+        if ($Spec -match "^([A-Za-z])(?::([A-Za-z0-9-]+))?$") {
+            @{ Drive = $Matches[1].ToUpper(); Sku = if ($Matches[2]) { Normalize-SkuName -InputSku $Matches[2] -InputTier -1 } else { $DefaultSku } }
+        } else {
+            throw "Invalid -Drives spec '$Spec'. Expected a drive letter like 'D' or 'D:Product2'."
+        }
+    }
+
+    Write-Host ""
+    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host "  >>> PARALLEL PROVISIONING: $((($Drives -split ',') | Where-Object { $_.Trim() }).Count) drives (default SKU: $ResolvedSku)" -ForegroundColor Cyan
+    Write-Host "================================================================================" -ForegroundColor Cyan
+
+    $results = @()
+    foreach ($spec in ($Drives -split ',') | Where-Object { $_.Trim() }) {
+        $parsed = Parse-DriveSpec -Spec $_.Trim() -DefaultSku $ResolvedSku
+        $d = $parsed.Drive; $sku = $parsed.Sku
+        Write-Host "  [GATE] ${d}: ($sku)..." -ForegroundColor White
+        $gateOk = $true
+        try {
+            $safety = Assert-TargetDriveSafety -DriveLetter $d
+            $cap = Assert-DriveCapacity -DriveLetter $d -ProductSku $sku
+            if ($DryRun) {
+                Write-Host "  [DRY-RUN] Gate simulated PASSED for ${d}:" -ForegroundColor Yellow
+            } else {
+                Write-Host "  [PASS] ${d}: safety + capacity ok." -ForegroundColor Green
+            }
+        } catch {
+            if ($DryRun) {
+                Write-Host "  [DRY-RUN] Gate simulated for ${d}: ($($_.Exception.Message))" -ForegroundColor Yellow
+            } else {
+                Write-Host "  [FAIL] ${d}: $($_.Exception.Message)" -ForegroundColor Red
+                $gateOk = $false
+            }
+        }
+        $results += [PSCustomObject]@{ Drive = $d; Sku = $sku; Status = "PENDING"; ExitCode = "-"; Log = ""; GateOk = $gateOk }
+    }
+
+    foreach ($r in ($results | Where-Object { -not $_.GateOk })) { $r.Status = "FAIL (gate)" }
+
+    # Spawn one child engine per gated drive.
+    foreach ($r in ($results | Where-Object { $_.GateOk })) {
+        $logFile = Join-Path $LogDir "${timeStamp}_$($r.Sku)_$($r.Drive).log"
+        $r.Log = $logFile
+        Write-Host "  [SPAWN] $($r.Sku) -> $($r.Drive): (log: $logFile)" -ForegroundColor Cyan
+        $childArgs = @(
+            "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath,
+            "-Product", $r.Sku, "-Drive", $r.Drive, "-BwLimitKBps", $perDriveBw,
+            "-FilesystemAction", $FilesystemAction, "-NonInteractive"
+        )
+        if ($CacheDir) { $childArgs += @("-CacheDir", $CacheDir) }
+        if ($Profile -ne "full") { $childArgs += @("-Profile", $Profile) }
+        if ($NoDownload) { $childArgs += "-NoDownload" }
+        if ($DryRun) { $childArgs += "-DryRun" }
+        $proc = Start-Process -FilePath "powershell.exe" -ArgumentList $childArgs `
+            -RedirectStandardOutput $logFile -RedirectStandardError "${logFile}.err" `
+            -PassThru -NoNewWindow
+        Add-Member -InputObject $r -NotePropertyName "Process" -NotePropertyValue $proc -Force
+    }
+
+    # Wait and collect exit codes.
+    foreach ($r in ($results | Where-Object { $_.GateOk })) {
+        $r.Process.WaitForExit()
+        $r.ExitCode = $r.Process.ExitCode
+        $r.Status = if ($r.Process.ExitCode -eq 0) { "SUCCESS" } else { "FAIL (exit $($r.Process.ExitCode))" }
+    }
+
+    # Safe eject for succeeded drives (skip in dry-run mode).
+    if (-not $DryRun) {
+        # Source the library (NOT eject_usb.ps1 - dot-sourcing that script would
+        # execute its main body, which ejects and exits).
+        . (Join-Path $ScriptDir "lib\SafetyValidator.ps1")
+        foreach ($r in ($results | Where-Object { $_.Status -eq "SUCCESS" })) {
+            try { Invoke-SafeUsbEject -Drive $r.Drive | Out-Null }
+            catch { Write-Host "  [WARN] Eject failed for $($r.Drive): $($_.Exception.Message)" -ForegroundColor Yellow }
+        }
+    }
+
+    # Summary table.
+    Write-Host ""
+    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host "  >>> PARALLEL PROVISIONING SUMMARY" -ForegroundColor Cyan
+    Write-Host "================================================================================" -ForegroundColor Cyan
+    Write-Host ("{0,-12} {1,-14} {2,-18} {3}" -f "Drive", "SKU", "Status", "Log") -ForegroundColor White
+    foreach ($r in $results) {
+        $color = if ($r.Status -eq "SUCCESS") { "Green" } elseif ($r.Status -eq "PENDING") { "Gray" } else { "Red" }
+        Write-Host ("{0,-12} {1,-14} {2,-18} {3}" -f "$($r.Drive):", $r.Sku, $r.Status, $r.Log) -ForegroundColor $color
+    }
+    Write-Host "================================================================================" -ForegroundColor Cyan
+
+    $failed = @($results | Where-Object { $_.Status -ne "SUCCESS" }).Count
+    if ($failed -eq 0) {
+        Write-Host "  All $($results.Count) drives provisioned successfully." -ForegroundColor Green
+        exit 0
+    }
+    Write-Host "  $failed/$($results.Count) drive(s) failed; see logs above." -ForegroundColor Red
+    exit 1
+}
+
+# ------------------------------------------------------------------------------
 # 2. Handler: -Info Mode
 # ------------------------------------------------------------------------------
 if ($Info) {
@@ -327,7 +453,7 @@ if ($Info) {
     Write-Host ("{0,-13} {1,-22} {2,-9} {3,-9} {4,-12} {5}" -f "------------", "----------------------", "-------", "-------", "-----------", "------------------------------------------") -ForegroundColor DarkGray
 
     $skuRows = @(
-        [PSCustomObject]@{ Sku="Product1";     Name="PocketSurvival";        Tiers="Tier 0";    MinUsb="32 GB";  Payload="~29.0 GB";  Desc="30 ZIMs + 2 GGUFs: Survival, Medical, Kiwix (:8081), AI (:8082), CDC Calc." }
+        [PSCustomObject]@{ Sku="Product1";     Name="PocketSurvival";        Tiers="Tier 0";    MinUsb="64 GB";  Payload="~54.0 GB";  Desc="AI-free: ZIM survival/medical knowledge + Offline Kiwix (:8081). No models." }
         [PSCustomObject]@{ Sku="Product2";     Name="FieldReady (64GB)";     Tiers="0 + 1";     MinUsb="64 GB";  Payload="~58.9 GB";  Desc="44 ZIMs + 5 GGUFs: SQLite Memory Vault, OCR Vault, STEM & Coding." }
         [PSCustomObject]@{ Sku="Product2-256"; Name="FieldReady (256GB)";    Tiers="0 + 1";     MinUsb="256 GB"; Payload="~160.7 GB"; Desc="52 ZIMs + 5 GGUFs: Adds Wikipedia No-Pic (50 GB) + StackOverflow + Gutenberg." }
         [PSCustomObject]@{ Sku="Product3";     Name="CivilizationArk (64G)"; Tiers="0 + 1 + 2"; MinUsb="64 GB";  Payload="~58.9 GB";  Desc="17 ZIMs + 3 GGUFs: Full English Wikipedia No-Pic (50.2 GB) + Survival Core." }
@@ -390,7 +516,7 @@ if ($Info) {
     $inv2 = Get-ProductAssetInventory -ProductSku "Product2" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
     $inv3 = Get-ProductAssetInventory -ProductSku "Product3" -ProductsJsonPath $pJson -CustomCacheDirs @($CacheDir) -Profile $Profile
     Write-Host "[CURRENT FACTORY READINESS STATUS ($Profile profile)]" -ForegroundColor Yellow
-    Write-Host ("  * Product 1 (PocketSurvival, 32 GB):   {0} ({1}/{2} assets cached)" -f $(if ($inv1.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv1.MissingCount)]" }), ($inv1.Assets.Count - $inv1.MissingCount), $inv1.Assets.Count) -ForegroundColor $(if ($inv1.AllRequiredAvailable) { "Green" } else { "Yellow" })
+    Write-Host ("  * Product 1 (PocketSurvival, 64 GB):   {0} ({1}/{2} assets cached)" -f $(if ($inv1.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv1.MissingCount)]" }), ($inv1.Assets.Count - $inv1.MissingCount), $inv1.Assets.Count) -ForegroundColor $(if ($inv1.AllRequiredAvailable) { "Green" } else { "Yellow" })
     Write-Host ("  * Product 2 (FieldReady, 64 GB):       {0} ({1}/{2} assets cached)" -f $(if ($inv2.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv2.MissingCount)]" }), ($inv2.Assets.Count - $inv2.MissingCount), $inv2.Assets.Count) -ForegroundColor $(if ($inv2.AllRequiredAvailable) { "Green" } else { "Yellow" })
     Write-Host ("  * Product 3 (CivilizationArk, 64 GB):  {0} ({1}/{2} assets cached)" -f $(if ($inv3.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv3.MissingCount)]" }), ($inv3.Assets.Count - $inv3.MissingCount), $inv3.Assets.Count) -ForegroundColor $(if ($inv3.AllRequiredAvailable) { "Green" } else { "Cyan" })
     Write-Host "================================================================================" -ForegroundColor Cyan
@@ -422,7 +548,7 @@ if (-not $ResolvedSku -or -not $Drive) {
     Write-Host "  OFFGRIDUSB -- FACTORY PROVISIONING SUITE (HOST ONLY)" -ForegroundColor Cyan
     Write-Host "  Universal Air-Gapped Offline Survival, Knowledge & Local AI Drives" -ForegroundColor White
     Write-Host "================================================================================" -ForegroundColor Cyan
-    Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    32 GB USB,  ~29.0 GB full / 1.4 GB lean)"
+    Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    64 GB USB,  ~54.0 GB full / 1.4 GB lean)"
     Write-Host "  [2] Provision Product 2: FieldReady      (Tiers 0-1, 64 GB USB,  ~58.9 GB full / 4.7 GB lean)"
     Write-Host "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 64 GB USB,  ~58.9 GB Wikipedia-first)"
     Write-Host "  ----------------------------------------------------------------------------" -ForegroundColor DarkGray
@@ -668,7 +794,7 @@ if ($DryRun) {
     Write-Host "  Product SKU        : $ResolvedSku"
     Write-Host "  Target Drive       : ${Drive}:"
     Write-Host "  Drive Safety Check : PASSED (Disk 0 Protected, Host NVMe Guarded)"
-    Write-Host "  Capacity Validation: $(if ($capPassed) { "PASSED ($($cap.ActualGB) GB >= $($cap.RequiredGB) GB)" } else { "INSUFFICIENT (Target drive cannot fit $ResolvedSku; 128 GB required)" })" -ForegroundColor $(if ($capPassed) { "Green" } else { "Yellow" })
+    Write-Host "  Capacity Validation: $(if ($capPassed) { "PASSED ($($cap.ActualGB) GB >= $($cap.RequiredGB) GB)" } else { "INSUFFICIENT (Target drive cannot fit $ResolvedSku; 64 GB required)" })" -ForegroundColor $(if ($capPassed) { "Green" } else { "Yellow" })
     Write-Host "  Lock Resolution    : PASSED ($($runningProcs.Count) process(es) audited)"
     Write-Host "  Filesystem Plan    : $($fsPlan.ResolvedAction) ($($fsPlan.Description))"
     Write-Host "  Asset Magic Headers: $(if ($sourceMagicFailures.Count -eq 0) { "100% PASSED" } else { "$($sourceMagicFailures.Count) Corrupted" })"

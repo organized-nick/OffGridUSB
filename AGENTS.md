@@ -29,9 +29,12 @@ origin/main is our trunk branch, all work should be committed to it. never force
 These are the products that will go to production at launch.
 
 - Online download: download runtime as a standalone package
-- 64 gig USB: AI free zim version, assembled via the info priorities in the provisioning script, no AI features included
-- 64 gig USB: zim version WITH AI models (note: should be straight superset info-wise as the 0 AI version, leave space on 0 AI if you need to
-- 256 gig USB: more info + models + swarm functionality
+- 64 gig USB: AI free zim version (Product1 PocketSurvival), assembled via the info priorities in the provisioning script, no AI features included, no models
+- 64 gig USB: zim version WITH AI models (Product2 FieldReady) (note: should be straight superset info-wise as the 0 AI version, leave space on 0 AI if you need to
+- 64 gig USB: Product3 CivilizationArk — full wikipedia-weighted ZIM set + AI + hardware auto-selector
+- 256 gig USB: Product2-256 / Product3-256 drive-ladder variants, plus Tier3 SwarmCluster (more info + models + swarm functionality)
+
+No 32 GB tiers exist. The drive ladder is 64 / 64 / 64 / 256 / 512 GB.
 
 ## Feature list (by product)
 
@@ -202,16 +205,25 @@ canonical content priority.
 5. New content/models: add to `zim.json` / `models.json` with size, sha256, magic
    header, and `required_for_skus`, then re-run the planner.
 
-## Out-of-sync flags (do not fix in this run; verify before relying on them)
+## Out-of-sync flags (status as of the 2026-11-15 audit, tasks.md task 1)
 
-- The attestation says the product ships on **256 GB or 64 GB** drives, but the repo
-  also defines **Product1 on a 32 GB drive** (`plan_tier_payloads.py` SKUS map and
-  `products.json`), and README/provisioning docs still describe an 8 GB Product1 and a
-  128 GB Product3 / 512 GB Tier4 ladder. Decide the canonical drive ladder and align
-  README ↔ products.json ↔ planner.
-- The committed `manifests/product_sku.json` says `Product2 / fieldready` with
-  `target_drive_size_gb: 32`, while `products.json` defines Product2 as a **64 GB**
-  SKU — the committed runtime descriptor appears stale relative to the current catalog.
-- README tier table (8/32/128/256/512 GB) and `provisioning/README.md` SKU table were
-  written before the 64/256 GB planner redesign; treat `products.json` + planner as
-  source of truth and update prose docs separately.
+All three flags below were **resolved** in PR #21 (drive ladder decided by john:
+Product1 = 64 GB AI-free, no 32 GB tiers):
+
+- Drive ladder aligned: `plan_tier_payloads.py` SKUS/DRIVE_GEOMETRY, `products.json`,
+  `provision_usb.ps1/.sh` display strings + `SafetyValidator.*` capacities, README tier
+  table, `provisioning/README.md` table.
+- `manifests/product_sku.json` refreshed to Product2 @ 64 GB.
+- README tier table and `provisioning/README.md` SKU table rewritten against
+  `products.json` + planner output.
+
+Still open (tracked in `tasks.md`):
+
+- Feature register: partially resolved — `docs/PRD_ARD.md` Appendix A now maps all
+  F-XX IDs found in module docstrings to code anchors; F-19..F-24 and F-37..F-40 have
+  no code anchor and remain PRD-era only.
+- UI feature lists still gate slated-for-removal features (`survival_calculators`,
+  `settlement_hub`, `lora_mesh_agent`, `distillation_on_dock`) — resolves when
+  tasks.md task 3 lands.
+- Companion task file: `tasks.md` holds the current task list (repo audit vs this
+  file — task 1 done in PR #21 — integrity-canary writeup/verdict, removals, validation work).

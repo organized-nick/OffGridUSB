@@ -18,7 +18,6 @@
       "magic_header": "47475546",
       "verified_local": true,
       "required_for_skus": [
-        "Product1",
         "Product2",
         "Product2-256",
         "Product3",
@@ -45,7 +44,6 @@
       "magic_header": "47475546",
       "verified_local": true,
       "required_for_skus": [
-        "Product1",
         "Product2",
         "Product2-256",
         "Product3",
@@ -73,7 +71,6 @@
       "magic_header": "47475546",
       "verified_local": true,
       "required_for_skus": [
-        "Product1",
         "Product2",
         "Product2-256",
         "Product3",

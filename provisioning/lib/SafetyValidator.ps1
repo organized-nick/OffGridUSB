@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     Enforces the Triple-Gate safety architecture protecting the host operating system,
-    validates target USB flash drive capacity per Product SKU (32 GB, 64 GB, 256 GB, 512 GB),
+    validates target USB flash drive capacity per Product SKU (64 GB, 256 GB, 512 GB),
     and cleanly resolves volume file locks before wiping or staging.
 #>
 
@@ -15,7 +15,7 @@ param()
 
 # SKU Minimum Required Volume Capacity in Bytes (32 / 64 / 256 / 512 GB SKU Ladder)
 $script:SkuMinCapacityBytes = @{
-    "Product1"        = 28000000000L  # 32 GB USB (~28.99 GB full payload)
+    "Product1"        = 61000000000L  # 64 GB USB (~59.9 GB full payload)
     "PocketSurvival"  = 28000000000L
     "Tier0"           = 28000000000L
     "Product2"        = 60000000000L  # 64 GB USB (~58.58 GB full payload)
@@ -33,9 +33,9 @@ $script:SkuMinCapacityBytes = @{
 }
 
 $script:SkuTargetUsbLabel = @{
-    "Product1"        = "32 GB USB Flash Drive"
-    "PocketSurvival"  = "32 GB USB Flash Drive"
-    "Tier0"           = "32 GB USB Flash Drive"
+    "Product1"        = "64 GB USB Flash Drive"
+    "PocketSurvival"  = "64 GB USB Flash Drive"
+    "Tier0"           = "64 GB USB Flash Drive"
     "Product2"        = "64 GB USB Flash Drive"
     "FieldReady"      = "64 GB USB Flash Drive"
     "Tier1"           = "64 GB USB Flash Drive"
@@ -177,8 +177,8 @@ function Assert-DriveCapacity {
     $actualGiB = [math]::Round($actualBytes / 1GB, 2)
     $reqGb = [math]::Round($reqBytes / 1e9, 2)
 
-    # Capacity Clamping for Drive E: to 29.00 GiB (protecting data integrity on 32 GB flash)
-    # Media contains a physical 32 GB NAND flash die with blackhole discard above 29.275 GiB.
+    # Capacity Clamping for Drive E: to 59.00 GiB (protecting data integrity on 64 GB flash)
+    # Media contains a physical 64 GB NAND flash die.
     # Clamping to 29.00 GiB (31,138,512,896 bytes) leaves a 282 MiB safety wear-leveling reserve.
     $effectiveBytes = $actualBytes
     $isClamped = $false
@@ -198,7 +198,7 @@ function Assert-DriveCapacity {
         $msg = "[ERROR] Target drive ${clean}: effective capacity (${effectiveGb} GB / ${effectiveGiB} GiB) is below the minimum required capacity (${reqGb} GB) for ${ProductSku}!`n"
         $msg += "Required target media: ${targetLabel}.`n"
         if ($isClamped) {
-            $msg += "Note: Physical capacity clamping to 29.00 GiB is enforced for Drive E: to protect data integrity on 32 GB flash. Higher-tier payloads (Product 2 / Product 3 / 256 GB / 512 GB editions) exceed 32 GB flash and require >= 64 GB or >= 256 GB media."
+            $msg += "Note: Physical capacity clamping to 59.00 GiB is enforced for Drive E: to protect data integrity on 64 GB flash. Higher-tier payloads (Product 2-256 / Product 3-256 / Tier3 / Tier4 editions) exceed 64 GB flash and require >= 256 GB media."
         } elseif ($normSku -in @("Product2-256", "Product3-256", "Tier3", "SwarmCluster")) {
             $msg += "256 GB edition payloads (~160-195 GB) require a genuine 256 GB USB flash drive or portable SSD (>= 220 GB formatted)."
         } elseif ($normSku -in @("Product2", "FieldReady", "Tier1", "Product3", "CivilizationArk", "Tier2")) {
