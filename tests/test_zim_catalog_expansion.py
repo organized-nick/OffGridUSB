@@ -4,7 +4,7 @@ Verifies the content-catalog contract:
 - every archive entry is schema-complete and well-formed
 - the 2026-11-04 extended content set exists, is hashed, and is claimed
   by at least one SKU (per-drive-size separation, john 2026-11-06)
-- SKU set includes the per-drive-size variants (Product2-256, Product3-256)
+- SKU set is exactly the AGENTS.md product ladder (Product1/Product2/Product3)
 - fetch_assets.load_manifests() still parses the manifest cleanly
 """
 
@@ -36,8 +36,7 @@ EXTENDED_IDS = [
 ]
 
 ALL_SKUS = {
-    "Product1", "Product2", "Product2-256", "Product3", "Product3-256",
-    "Tier3", "Tier4",
+    "Product1", "Product2", "Product3",
 }
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -97,9 +96,8 @@ def test_variant_skus_exist_and_profiles_fit_drive_budgets():
     assert p1["target_drive_size_gb"] == 64
     assert p1["tiers"] == [0]
     assert p1["payload_profiles"]["full"]["models"] == [], "Product1 is AI-free"
-    for sku in ("Product2", "Product3"):
-        assert products[sku]["target_drive_size_gb"] == 64
-        assert products[f"{sku}-256"]["target_drive_size_gb"] == 256
+    assert products["Product2"]["target_drive_size_gb"] == 64
+    assert products["Product3"]["target_drive_size_gb"] == 256
 
     zims = {a["filename"]: a for a in _load_manifest()["archives"]}
     models = {m["filename"]: m for m in
@@ -122,8 +120,8 @@ def test_variant_skus_exist_and_profiles_fit_drive_budgets():
                 f"{f} not marked required_for {sku}"
     # LLM ladder: higher tiers have strictly more model variety
     assert len(products["Product1"]["payload_profiles"]["full"]["models"]) <= \
-        len(products["Product2-256"]["payload_profiles"]["full"]["models"]) <= \
-        len(products["Tier4"]["payload_profiles"]["full"]["models"])
+        len(products["Product2"]["payload_profiles"]["full"]["models"]) <= \
+        len(products["Product3"]["payload_profiles"]["full"]["models"])
 
 
 def test_required_for_skus_are_subset_of_known_sku_set():

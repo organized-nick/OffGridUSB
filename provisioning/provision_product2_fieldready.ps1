@@ -4,17 +4,13 @@
 
 .DESCRIPTION
     Provisions OffGridUSB Product 2 (FieldReady, Tiers 0 & 1) targeting 64 GB USB flash drives
-    with ~58.9 GB full payload (44 ZIMs + 5 GGUFs + 14 engines) or 256 GB edition (-Edition 256 -> Product2-256).
+    with ~54.6 GB full payload (44 ZIMs + 5 GGUFs + 14 engines). 64 GB drive per AGENTS.md.
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
     [string]$Drive,
-
-    [Parameter(Mandatory = $false)]
-    [ValidateSet("64", "256")]
-    [string]$Edition = "64",
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun,
@@ -53,5 +49,4 @@ if (-not (Test-Path $engine)) {
     $engine = Join-Path (Split-Path -Parent $PSScriptRoot) "provision_usb.ps1"
 }
 
-$sku = if ($Edition -eq "256") { "Product2-256" } else { "Product2" }
-& $engine -Product $sku -Drive $Drive -DryRun:$DryRun -Info:$Info -NonInteractive:$NonInteractive -FilesystemAction $FilesystemAction -CacheDir $CacheDir -SourceRoot $SourceRoot -NoDownload:$NoDownload -Profile $Profile -BwLimitKBps $BwLimitKBps @RemainingArgs
+& $engine -Product "Product2" -Drive $Drive -DryRun:$DryRun -Info:$Info -NonInteractive:$NonInteractive -FilesystemAction $FilesystemAction -CacheDir $CacheDir -SourceRoot $SourceRoot -NoDownload:$NoDownload -Profile $Profile -BwLimitKBps $BwLimitKBps @RemainingArgs

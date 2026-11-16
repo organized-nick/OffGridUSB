@@ -35,15 +35,12 @@ norm() {
 [[ $(norm PocketSurvival -1) == "Product1" ]]           && ok "PocketSurvival -> Product1" || bad "PocketSurvival alias"
 [[ $(norm FieldReady     -1) == "Product2" ]]           && ok "FieldReady     -> Product2" || bad "FieldReady alias"
 [[ $(norm CivilizationArk -1) == "Product3" ]]          && ok "CivilizationArk-> Product3" || bad "CivilizationArk alias"
-[[ $(norm Product2-256   -1) == "Product2-256" ]]       && ok "Product2-256 -> itself"     || bad "Product2-256"
-[[ $(norm Product3-256   -1) == "Product3-256" ]]       && ok "Product3-256 -> itself"     || bad "Product3-256"
-[[ $(norm SwarmCluster   -1) == "Tier3" ]]              && ok "SwarmCluster -> Tier3"      || bad "SwarmCluster alias"
-[[ $(norm SettlementHub  -1) == "Tier4" ]]              && ok "SettlementHub-> Tier4"      || bad "SettlementHub alias"
+[[ $(norm Product1       -1) == "Product1" ]]           && ok "Product1     -> itself"     || bad "Product1 passthrough"
+[[ $(norm Product2       -1) == "Product2" ]]           && ok "Product2     -> itself"     || bad "Product2 passthrough"
+[[ $(norm Product3       -1) == "Product3" ]]           && ok "Product3     -> itself"     || bad "Product3 passthrough"
 [[ $(norm ""            0 ) == "Product1" ]]            && ok "tier 0  -> Product1"        || bad "tier 0 mapping"
 [[ $(norm ""            1 ) == "Product2" ]]            && ok "tier 1  -> Product2"        || bad "tier 1 mapping"
 [[ $(norm ""            2 ) == "Product3" ]]            && ok "tier 2  -> Product3"        || bad "tier 2 mapping"
-[[ $(norm ""            3 ) == "Tier3"    ]]            && ok "tier 3  -> Tier3"           || bad "tier 3 mapping"
-[[ $(norm ""            4 ) == "Tier4"    ]]            && ok "tier 4  -> Tier4"           || bad "tier 4 mapping"
 
 echo "== 2) SafetyValidator.sh capacity ladder (golden bytes vs ps1) =="
 # Sourcing SafetyValidator.sh leaks its `set -euo pipefail` into this shell;
@@ -59,26 +56,18 @@ check_cap() {
         bad "${sku}: expected ${want}, got '${SKU_MIN_BYTES[${sku}]:-MISSING}'"
     fi
 }
-# Golden values lifted from lib/SafetyValidator.ps1 SkuMinCapacityBytes.
-check_cap "Product1"         28000000000
-check_cap "PocketSurvival"   28000000000
-check_cap "Tier0"            28000000000
-check_cap "Product2"         60000000000
-check_cap "FieldReady"       60000000000
-check_cap "Tier1"            60000000000
-check_cap "Product2-256"     220000000000
-check_cap "Product3"         60000000000
-check_cap "CivilizationArk"  60000000000
-check_cap "Tier2"            60000000000
-check_cap "Product3-256"     220000000000
-check_cap "Tier3"            220000000000
-check_cap "SwarmCluster"     220000000000
-check_cap "Tier4"            450000000000
-check_cap "SettlementHub"    450000000000
+# Golden values lifted from lib/SafetyValidator.ps1 SkuMinCapacityBytes
+# (64 / 64 / 256 GB ladder per AGENTS.md product list, 2026-11-16).
+check_cap "Product1"         61000000000
+check_cap "PocketSurvival"   61000000000
+check_cap "Product2"         61000000000
+check_cap "FieldReady"       61000000000
+check_cap "Product3"         245000000000
+check_cap "CivilizationArk"  245000000000
 
 echo "== 3) provision_usb.sh --info readiness table includes every SKU =="
 INFO_OUT="$(bash "${PROVISION_SH}" --info 2>&1)"
-for sku in "Product1" "Product2" "Product3" "Product2-256" "Product3-256" "Tier3" "Tier4"; do
+for sku in "Product1" "Product2" "Product3"; do
     grep -q "${sku}" <<<"${INFO_OUT}" && ok "--info mentions ${sku}" || bad "--info missing ${sku}"
 done
 
@@ -133,8 +122,8 @@ OUT=$(PD "/media/usb/d1")
 [[ "$(echo "$OUT" | head -1)" == "/media/usb/d1" && "$(echo "$OUT" | tail -1)" == "Product1" ]] && ok "plain drive spec" || bad "plain drive spec"
 OUT=$(PD "/media/usb/d1:Product2")
 [[ "$(echo "$OUT" | head -1)" == "/media/usb/d1" && "$(echo "$OUT" | tail -1)" == "Product2" ]] && ok "per-drive SKU override" || bad "per-drive SKU override"
-OUT=$(PD "/media/usb/d1:Product2-256")
-[[ "$(echo "$OUT" | tail -1)" == "Product2-256" ]] && ok "per-drive SKU override (256)" || bad "per-drive SKU override (256)"
+OUT=$(PD "/media/usb/d1:Product3")
+[[ "$(echo "$OUT" | tail -1)" == "Product3" ]] && ok "per-drive SKU override (Product3)" || bad "per-drive SKU override (Product3)"
 OUT=$(PD "/media/usb/d1")
 [[ "$(echo "$OUT" | tail -1)" == "Product1" ]] && ok "default SKU applied" || bad "default SKU"
 
@@ -147,8 +136,8 @@ bash "${VALIDATOR_SH}" "/" "Product1" >/dev/null 2>&1
 [[ $? -ne 0 ]] && ok "safety gate fails on OS root path" || bad "safety gate root path"
 bash "${VALIDATOR_SH}" "/tmp/does_not_exist_mount" "Product1" >/dev/null 2>&1
 [[ $? -ne 0 ]] && ok "safety gate fails on nonexistent mount" || bad "safety gate nonexistent mount"
-bash "${VALIDATOR_SH}" "/tmp/does_not_exist_mount" "Product3-256" >/dev/null 2>&1
-[[ $? -ne 0 ]] && ok "capacity gate fails for impossible SKU" || bad "capacity gate impossible SKU"
+bash "${VALIDATOR_SH}" "/tmp/does_not_exist_mount" "Product3" >/dev/null 2>&1
+[[ $? -ne 0 ]] && ok "capacity gate fails for nonexistent mount (256GB SKU)" || bad "capacity gate 256GB SKU"
 bash "${VALIDATOR_SH}" "${SCRIPT_DIR}" "Product1" >/dev/null 2>&1
 [[ $? -eq 0 ]] && ok "capacity gate passes for Product1 on a real volume" || bad "capacity gate Product1"
 

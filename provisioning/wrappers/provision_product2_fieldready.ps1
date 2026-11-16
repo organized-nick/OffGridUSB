@@ -3,8 +3,8 @@
     provision_product2_fieldready.ps1 - Dedicated 1-Command Provisioner for Product 2 (FieldReady).
 
 .DESCRIPTION
-    Provisions OffGridUSB Product 2 (FieldReady, Tiers 0 & 1) targeting 32 GB USB flash drives
-    with payload ~16-20 GB (lean local payload: 4.69 GB, designed for attached drive D:).
+    Provisions OffGridUSB Product 2 (FieldReady, Tiers 0 & 1) targeting 64 GB USB flash drives
+    with ~54.6 GB full payload (44 ZIMs + 5 GGUFs) or 4.69 GB lean profile.
 #>
 
 [CmdletBinding()]

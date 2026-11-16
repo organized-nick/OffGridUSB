@@ -162,7 +162,7 @@ SELECTION = [
 
 # every purchasable SKU including the per-drive-size variants (john 2026-11-06:
 # 32GB = tier 0 only; tier 1 & tier 2 get a variant per drive size)
-ALL_SKUS = ["Product1", "Product2", "Product2-256", "Product3", "Product3-256", "Tier3", "Tier4"]
+ALL_SKUS = ["Product1", "Product2", "Product3"]
 
 
 def fetch(url: str) -> bytes:

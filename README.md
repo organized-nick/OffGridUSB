@@ -42,7 +42,7 @@ Repository Root (github.com/organized-nick/OffGridUSB)
 
 ---
 
-## Cumulative Tier 0–4 Hierarchy & Commercial SKUs
+## Cumulative Tier 0–2 Hierarchy & Commercial SKUs
 
 OffGridUSB scales dynamically across hardware tiers and commercial product editions:
 
@@ -50,10 +50,7 @@ OffGridUSB scales dynamically across hardware tiers and commercial product editi
 | :--- | :--- | :---: | :---: | :--- | :--- | :--- |
 | **Product 1**<br>(Tier 0) | **PocketSurvival** | **64 GB** | **~54.0 GB** | Full survival / medical / prepper / practical-STEM ZIM catalog (46 archives, priority-ordered) | *(none — AI-free edition)* | Offline Kiwix Reader (:8081)<br>Offline maps |
 | **Product 2**<br>(Tiers 0+1) | **FieldReady** | **64 GB** | **~54.5 GB** | *All Tier 0 content* | SmolLM2-135M, Qwen2.5-0.5B (+Q8_0), Qwen2.5-1.5B, Phi-3.5-mini | *All Product 1 features PLUS:*<br>Grounded AI Professor (:8082)<br>SQLite Semantic Memory Vault<br>Offline Photo OCR & EXIF Vault |
-| **Product 3**<br>(Tiers 0+1+2) | **CivilizationArk** | **64 GB** | **~54.8 GB** | *All Product 2 content, Wikipedia-weighted* | *All Product 2 models PLUS:*<br>Llama-3.2-3B + Qwen2-VL-2B (multimodal) | *All Product 2 features PLUS:*<br>Wikipedia RAG retrieval<br>Hardware Auto-Selector |
-| **Product 2-256 / 3-256** | **FieldReady / CivilizationArk 256** | **256 GB SSD** | **~150–163 GB** | Full ZIM catalog | Same per-tier lineups, Product3-256 adds Qwen2.5-7B + Gemma-2-9B | Same per-tier features on the 256 GB ladder |
-| **Tier 3** | **SwarmCluster** | **256 GB SSD** | **~182 GB** | Full catalog | *All Product 3-256 models PLUS:*<br>Qwen2.5-32B-Instruct (18.9 GB) | Heterogeneous LAN clustering via `exo`/`llama.cpp` RPC layer splitting |
-| **Tier 4** | **SettlementHub** | **512 GB NVMe** | **~332 GB** | Full catalog incl. Wikipedia Maxi | Llama-3.3-70B-Instruct (40.5 GB) | Full Tier 3 stack at 70B scale |
+| **Product 3**<br>(Tiers 0+1+2) | **CivilizationArk** | **256 GB SSD** | **~181.9 GB** | *All Product 2 content plus the full English Wikipedia & complete catalog (53 archives, priority-ordered)* | *All Product 2 models PLUS:*<br>Llama-3.2-3B + Qwen2-VL-2B (multimodal) + Qwen2.5-7B + Gemma-2-9B + Qwen2.5-32B | *All Product 2 features PLUS:*<br>Wikipedia RAG retrieval<br>Hardware Auto-Selector<br>Swarm / LAN RPC clustering |
 
 ---
 

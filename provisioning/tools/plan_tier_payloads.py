@@ -60,6 +60,9 @@ TIER2_HEAD_START = ["wikipedia-en-all-nopic"]
 
 # SKU -> (drive label, max_payload_bytes, tier, [model filenames])
 # Model ladder: micro -> micro+1.5B/Phi -> +3B/VL -> +7B/9B -> +32B -> +70B.
+# Drive ladder per AGENTS.md product list (2026-11-16): exactly three USB SKUs —
+# Product1 (64 GB, AI-free), Product2 (64 GB, with AI), Product3 (256 GB, more
+# info + models + swarm). No 32 GB tiers, no -256 variants, no Tier3/Tier4.
 SKUS = {
     # Product1 = AI-free edition per AGENTS.md: no models, no AI features, 64 GB drive.
     "Product1":    ("64GB USB 3.2 Flash Drive", 59_000_000_000, 0, []),
@@ -70,36 +73,7 @@ SKUS = {
         "qwen2.5-1.5b-instruct-q4_k_m.gguf",
         "Phi-3.5-mini-instruct-Q4_K_S.gguf",
     ]),
-    "Product2-256": ("256GB Portable SSD", 230_000_000_000, 1, [
-        "smollm2-135m-instruct-q4_k_m.gguf",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
-        "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "Phi-3.5-mini-instruct-Q4_K_S.gguf",
-    ]),
-    "Product3":    ("64GB USB 3.2 Flash Drive", 59_000_000_000, 2, [
-        "smollm2-135m-instruct-q4_k_m.gguf",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
-        "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "Phi-3.5-mini-instruct-Q4_K_S.gguf",
-        "llama-3.2-3b-instruct-q4_k_m.gguf",
-        "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
-        "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
-    ]),
-    "Product3-256": ("256GB Portable SSD", 230_000_000_000, 2, [
-        "smollm2-135m-instruct-q4_k_m.gguf",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
-        "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "Phi-3.5-mini-instruct-Q4_K_S.gguf",
-        "llama-3.2-3b-instruct-q4_k_m.gguf",
-        "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
-        "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
-        "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-        "gemma-2-9b-it-Q4_K_M.gguf",
-    ]),
-    "Tier3":       ("256GB Portable SSD", 230_000_000_000, 3, [
+    "Product3":    ("256GB Portable SSD", 230_000_000_000, 2, [
         "smollm2-135m-instruct-q4_k_m.gguf",
         "qwen2.5-0.5b-instruct-q4_k_m.gguf",
         "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
@@ -111,41 +85,20 @@ SKUS = {
         "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
         "gemma-2-9b-it-Q4_K_M.gguf",
         "qwen2.5-32b-instruct-q4_k_m.gguf",
-    ]),
-    "Tier4":       ("512GB NVMe SSD", 460_000_000_000, 4, [
-        "smollm2-135m-instruct-q4_k_m.gguf",
-        "qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        "Qwen2.5-0.5B-Instruct-Q8_0.gguf",
-        "qwen2.5-1.5b-instruct-q4_k_m.gguf",
-        "Phi-3.5-mini-instruct-Q4_K_S.gguf",
-        "llama-3.2-3b-instruct-q4_k_m.gguf",
-        "Qwen2-VL-2B-Instruct-Q4_K_M.gguf",
-        "mmproj-Qwen2-VL-2B-Instruct-f16.gguf",
-        "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-        "gemma-2-9b-it-Q4_K_M.gguf",
-        "qwen2.5-32b-instruct-q4_k_m.gguf",
-        "llama-3.3-70b-instruct-q4_k_m.gguf",
     ]),
 }
 
-# Variants that share a base SKU content ladder (256GB variants add the
-# next model rung on top of their 64GB sibling). Kept as data for the
-# required_for_skus model sync below.
-VARIANT_PARENTS = {
-    "Product2-256": "Product2",
-    "Product3-256": "Product3",
-}
+# Variants that share a base SKU content ladder. Empty per the AGENTS.md
+# product list (no -256 drive-ladder variants); kept as data in case a
+# variant SKU is reintroduced.
+VARIANT_PARENTS = {}
 
 # per-SKU drive geometry: (min_drive_capacity_bytes, max_payload_bytes,
 # target_drive_size_gb). Budgets in SKUS must match max_payload_bytes here.
 DRIVE_GEOMETRY = {
     "Product1":     (61_000_000_000, 59_000_000_000, 64),  # 64 GB drive, AI-free per AGENTS.md
     "Product2":     (61_000_000_000, 59_000_000_000, 64),
-    "Product2-256": (245_000_000_000, 230_000_000_000, 256),
-    "Product3":     (61_000_000_000, 59_000_000_000, 64),
-    "Product3-256": (245_000_000_000, 230_000_000_000, 256),
-    "Tier3":        (240_000_000_000, 230_000_000_000, 256),
-    "Tier4":        (480_000_000_000, 460_000_000_000, 512),
+    "Product3":     (245_000_000_000, 230_000_000_000, 256),
 }
 
 
@@ -205,7 +158,7 @@ def main():
     results = {}
     for sku, (label, budget, tier, model_files) in SKUS.items():
         order = list(PRIORITY_ORDER)
-        if sku in ("Product3", "Product3-256"):
+        if sku == "Product3":
             # tier 2 differentiator is the complete wikipedia; lead with it
             for zid in reversed(TIER2_HEAD_START):
                 order.remove(zid)
@@ -233,6 +186,14 @@ def apply_results(results, zims, models):
     with open(products_path) as f:
         products = json.load(f)
     products_by_sku = {p["sku"]: p for p in products["products"]}
+
+    # prune catalog SKUs the planner no longer defines (AGENTS.md is the
+    # source of truth for the product list; the catalog must mirror it)
+    removed = [sku for sku in products_by_sku if sku not in results]
+    if removed:
+        products["products"] = [p for p in products["products"] if p["sku"] in results]
+        products_by_sku = {p["sku"]: p for p in products["products"]}
+        print(f"pruned from products.json: {', '.join(sorted(removed))}")
 
     # create 256GB variant SKUs as deep copies of their 64GB base SKU first,
     # so the profile-writing pass below covers every SKU uniformly

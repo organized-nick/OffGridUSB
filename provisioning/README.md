@@ -9,20 +9,16 @@
 
 ## 1. Overview & Commercial Product Line
 
-The Factory Provisioning Suite productizes **OffGridUSB** into seven commercial SKUs across technical Tiers 0 through 4:
+The Factory Provisioning Suite productizes **OffGridUSB** into three commercial SKUs across technical Tiers 0 through 2 (per the AGENTS.md product list):
 
 | Commercial SKU | SKU ID | Technical Tiers | Target Media | Formatted Min Size | Max Allowed Payload | Lean Local Payload | Target Features |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **PocketSurvival** | `Product1` | Tier 0 | 64 GB USB | **59.0 GB** | **~54.0 GB** | ~1.39 GB | AI-free: Offline Kiwix (:8081) + ZIM knowledge. No models. |
 | **FieldReady** | `Product2` | Tiers 0 & 1 | 64 GB USB (e.g. `D:`) | **59.0 GB** | **~54.5 GB** | ~4.69 GB | All Product 1 + Memory Vault, Photo OCR Vault, STEM Tutor, local AI (:8082) |
-| **CivilizationArk** | `Product3` | Tiers 0, 1 & 2 | 64 GB USB / SSD | **59.0 GB** | **~54.8 GB** | N/A | All Product 2 + Wikipedia No-Pic + Hardware Auto-Selector |
-| **FieldReady 256** | `Product2-256` | Tiers 0 & 1 | 256 GB Portable SSD | **214.2 GB** | **~149.6 GB** | ~4.69 GB | Same features as Product2, full 145.5 GB ZIM catalog |
-| **CivilizationArk 256** | `Product3-256` | Tiers 0, 1 & 2 | 256 GB Portable SSD | **214.2 GB** | **~163.4 GB** | N/A | Same features as Product3, full catalog + 7B/9B models |
-| **SwarmCluster** | `Tier3` | Tiers 0–3 | 256 GB Portable SSD | **214.2 GB** | **~182 GB** | N/A | All Product 3 + Qwen 32B + exo LAN RPC Coordinator |
-| **SettlementHub** | `Tier4` | Tiers 0–4 | 512 GB NVMe | **428.4 GB** | **~332 GB** | N/A | All Tier 3 + Wikipedia Maxi + Llama 70B |
+| **CivilizationArk** | `Product3` | Tiers 0, 1 & 2 | 256 GB Portable SSD | **245.0 GB** | **~181.9 GB** | N/A | All Product 2 + full English Wikipedia + 3B/7B/9B/32B models + Hardware Auto-Selector + exo LAN Swarm |
 
 
-*(Note: drive ladder per AGENTS.md — 64 GB AI-free Product1, 64 GB Product2/Product3, 256 GB variants + Tier3, 512 GB Tier4. No 32 GB tiers anymore.)*
+*(Note: drive ladder per AGENTS.md product list — Product1 64 GB AI-free, Product2 64 GB with AI, Product3 256 GB with swarm. No 32 GB tiers, no -256 variants, no Tier3/Tier4 SKUs.)*
 
 ---
 

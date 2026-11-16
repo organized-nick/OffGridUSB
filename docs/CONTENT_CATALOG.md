@@ -14,13 +14,9 @@ LLM variety, tier 2+ and the swarm tiers ramp the model ladder.
 
 | SKU | drive | zim archives | models | full payload | budget |
 |---|---|---|---|---|---|
-| Product1 (tier 0) | 32 GB | 26 | 3 files (micro: 135M/0.5B) | ~28.5 GB | 29 GB |
-| Product2 (tier 1) | 64 GB | 43 | +1.5B, Phi-3.5 | ~58.5 GB | 59 GB |
-| Product2-256 (tier 1) | 256 GB | 53 | same as Product2 | ~160 GB | 230 GB |
-| Product3 (tier 2) | 64 GB | 37 | +3B, Qwen2-VL (+mmproj) | ~58.8 GB | 59 GB |
-| Product3-256 (tier 2) | 256 GB | 53 | +7B, gemma-2-9B | ~175 GB | 230 GB |
-| Tier3 (tier 3) | 256 GB | 53 | +Qwen2.5-32B (swarm) | ~195 GB | 230 GB |
-| Tier4 (tier 4) | 512 GB | 54 | +Llama-3.3-70B | ~357 GB | 460 GB |
+| Product1 (tier 0) | 64 GB | 46 | none (AI-free) | ~54.0 GB | 59 GB |
+| Product2 (tier 1) | 64 GB | 44 | micro ladder: 135M/0.5B(+Q8)/1.5B, Phi-3.5 | ~54.6 GB | 59 GB |
+| Product3 (tier 2) | 256 GB | 53 | +3B, Qwen2-VL (+mmproj), 7B, gemma-2-9B, Qwen2.5-32B (swarm) | ~181.9 GB | 230 GB |
 
 rules encoded in the planner:
 
