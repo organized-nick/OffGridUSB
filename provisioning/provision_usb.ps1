@@ -13,7 +13,7 @@
     Commercial Product SKU: Product1, Product2, Product3 (or PocketSurvival, FieldReady, CivilizationArk).
 
 .PARAMETER Tier
-    Technical Tier level: 0, 1, 2, 3, or 4.
+    Technical Tier level: 0, 1, or 2.
 
 .PARAMETER Drive
     Target USB drive letter (e.g. 'D' or 'D:').
@@ -56,11 +56,11 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $false)]
-    [ValidateSet("Product1", "Product2", "Product2-256", "Product3", "Product3-256", "PocketSurvival", "FieldReady", "CivilizationArk", "Tier0", "Tier1", "Tier2", "Tier3", "Tier4")]
+    [ValidateSet("Product1", "Product2", "Product3", "PocketSurvival", "FieldReady", "CivilizationArk")]
     [string]$Product,
 
     [Parameter(Mandatory = $false)]
-    [ValidateRange(0, 4)]
+    [ValidateRange(0, 2)]
     [int]$Tier = -1,
 
     [Parameter(Mandatory = $false)]
@@ -305,8 +305,6 @@ function Normalize-SkuName {
             "Tier1"           { return "Product2" }
             "CivilizationArk" { return "Product3" }
             "Tier2"           { return "Product3" }
-            "SwarmCluster"    { return "Tier3" }
-            "SettlementHub"   { return "Tier4" }
             default           { return $InputSku }
         }
     }
@@ -315,8 +313,6 @@ function Normalize-SkuName {
             0 { return "Product1" }
             1 { return "Product2" }
             2 { return "Product3" }
-            3 { return "Tier3" }
-            4 { return "Tier4" }
         }
     }
     return ""
@@ -454,12 +450,8 @@ if ($Info) {
 
     $skuRows = @(
         [PSCustomObject]@{ Sku="Product1";     Name="PocketSurvival";        Tiers="Tier 0";    MinUsb="64 GB";  Payload="~54.0 GB";  Desc="AI-free: ZIM survival/medical knowledge + Offline Kiwix (:8081). No models." }
-        [PSCustomObject]@{ Sku="Product2";     Name="FieldReady (64GB)";     Tiers="0 + 1";     MinUsb="64 GB";  Payload="~58.9 GB";  Desc="44 ZIMs + 5 GGUFs: SQLite Memory Vault, OCR Vault, STEM & Coding." }
-        [PSCustomObject]@{ Sku="Product2-256"; Name="FieldReady (256GB)";    Tiers="0 + 1";     MinUsb="256 GB"; Payload="~160.7 GB"; Desc="52 ZIMs + 5 GGUFs: Adds Wikipedia No-Pic (50 GB) + StackOverflow + Gutenberg." }
-        [PSCustomObject]@{ Sku="Product3";     Name="CivilizationArk (64G)"; Tiers="0 + 1 + 2"; MinUsb="64 GB";  Payload="~58.9 GB";  Desc="17 ZIMs + 3 GGUFs: Full English Wikipedia No-Pic (50.2 GB) + Survival Core." }
-        [PSCustomObject]@{ Sku="Product3-256"; Name="CivilizationArk(256G)"; Tiers="0 + 1 + 2"; MinUsb="256 GB"; Payload="~174.9 GB"; Desc="53 ZIMs + 8 GGUFs: Full Wikipedia + 52 Archives + Llama 3.2 3B / Vision." }
-        [PSCustomObject]@{ Sku="Tier3";        Name="SwarmCluster";          Tiers="0 - 3";     MinUsb="256 GB"; Payload="~195.3 GB"; Desc="53 ZIMs + 9 GGUFs: Adds Qwen 2.5 32B (19.9 GB) + exo LAN Swarm." }
-        [PSCustomObject]@{ Sku="Tier4";        Name="SettlementHub";         Tiers="0 - 4";     MinUsb="512 GB"; Payload="~356.9 GB"; Desc="54 ZIMs + 10 GGUFs: Adds Wikipedia Maxi (110 GB) + Llama 3.3 70B (42.5 GB)." }
+        [PSCustomObject]@{ Sku="Product2";     Name="FieldReady (64GB)";     Tiers="0 + 1";     MinUsb="64 GB";  Payload="~54.6 GB";  Desc="44 ZIMs + 5 GGUFs: SQLite Memory Vault, OCR Vault, STEM & Coding." }
+        [PSCustomObject]@{ Sku="Product3";     Name="CivilizationArk (256G)"; Tiers="0 + 1 + 2"; MinUsb="256 GB"; Payload="~181.9 GB"; Desc="53 ZIMs + 11 GGUFs: Full English Wikipedia + 3B/VL/7B/9B/32B ladder + exo LAN Swarm." }
     )
 
     foreach ($r in $skuRows) {
@@ -518,7 +510,7 @@ if ($Info) {
     Write-Host "[CURRENT FACTORY READINESS STATUS ($Profile profile)]" -ForegroundColor Yellow
     Write-Host ("  * Product 1 (PocketSurvival, 64 GB):   {0} ({1}/{2} assets cached)" -f $(if ($inv1.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv1.MissingCount)]" }), ($inv1.Assets.Count - $inv1.MissingCount), $inv1.Assets.Count) -ForegroundColor $(if ($inv1.AllRequiredAvailable) { "Green" } else { "Yellow" })
     Write-Host ("  * Product 2 (FieldReady, 64 GB):       {0} ({1}/{2} assets cached)" -f $(if ($inv2.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv2.MissingCount)]" }), ($inv2.Assets.Count - $inv2.MissingCount), $inv2.Assets.Count) -ForegroundColor $(if ($inv2.AllRequiredAvailable) { "Green" } else { "Yellow" })
-    Write-Host ("  * Product 3 (CivilizationArk, 64 GB):  {0} ({1}/{2} assets cached)" -f $(if ($inv3.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv3.MissingCount)]" }), ($inv3.Assets.Count - $inv3.MissingCount), $inv3.Assets.Count) -ForegroundColor $(if ($inv3.AllRequiredAvailable) { "Green" } else { "Cyan" })
+    Write-Host ("  * Product 3 (CivilizationArk, 256 GB): {0} ({1}/{2} assets cached)" -f $(if ($inv3.AllRequiredAvailable) { "[100% READY]" } else { "[MISSING $($inv3.MissingCount)]" }), ($inv3.Assets.Count - $inv3.MissingCount), $inv3.Assets.Count) -ForegroundColor $(if ($inv3.AllRequiredAvailable) { "Green" } else { "Cyan" })
     Write-Host "================================================================================" -ForegroundColor Cyan
     exit 0
 }
@@ -550,9 +542,9 @@ if (-not $ResolvedSku -or -not $Drive) {
     Write-Host "================================================================================" -ForegroundColor Cyan
     Write-Host "  [1] Provision Product 1: PocketSurvival  (Tier 0,    64 GB USB,  ~54.0 GB full / 1.4 GB lean)"
     Write-Host "  [2] Provision Product 2: FieldReady      (Tiers 0-1, 64 GB USB,  ~58.9 GB full / 4.7 GB lean)"
-    Write-Host "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 64 GB USB,  ~58.9 GB Wikipedia-first)"
+    Write-Host "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 256 GB SSD,  ~181.9 GB full Wikipedia + Swarm)"
     Write-Host "  ----------------------------------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  [4] Custom Technical Tier Provisioning (Tier 0, 1, 2, 3, or 4)"
+    Write-Host "  [4] Custom Technical Tier Provisioning (Tier 0, 1, or 2)"
     Write-Host "  [5] View Product Catalog & Hardware Specifications (-Info)"
     Write-Host "  [6] Run Simulation / Safety Check (-DryRun)"
     Write-Host "  [Q] Quit"
@@ -564,7 +556,7 @@ if (-not $ResolvedSku -or -not $Drive) {
         "2" { $ResolvedSku = "Product2" }
         "3" { $ResolvedSku = "Product3" }
         "4" {
-            $t = Read-Host "Enter Tier number [0, 1, 2, 3, 4]"
+            $t = Read-Host "Enter Tier number [0, 1, 2]"
             $ResolvedSku = Normalize-SkuName -InputSku "" -InputTier [int]$t
         }
         "5" {
@@ -671,7 +663,7 @@ Write-Host "  Resolved Action  : $($fsPlan.ResolvedAction) - $($fsPlan.Descripti
 #     host cache (downloading missing ones via fetch_assets.py), since the
 #     staging plan throws on missing assets.
 # ------------------------------------------------------------------------------
-$tierMap = @{ "Product1" = 0; "Product2" = 1; "Product2-256" = 1; "Product3" = 2; "Product3-256" = 2; "Tier3" = 3; "Tier4" = 4 }
+$tierMap = @{ "Product1" = 0; "Product2" = 1; "Product3" = 2 }
 $assetTier = if ($tierMap.ContainsKey($ResolvedSku)) { $tierMap[$ResolvedSku] } else { 0 }
 
 $null = New-Item -ItemType Directory -Path (Join-Path $CacheDir "zim") -Force

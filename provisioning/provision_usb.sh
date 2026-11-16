@@ -42,7 +42,7 @@ Usage: $0 [OPTIONS]
 
 Options:
   --product <sku>         Select commercial SKU (Product1, Product2, Product3)
-  --tier <0..4>           Select technical tier level
+  --tier <0..2>           Select technical tier level
   --drive, --target <path> Target USB mount directory or device. Repeatable:
                           --drive /media/usb/d1 --drive /media/usb/d2
                           Optional per-drive SKU override: --drive /media/usb/d1:Product2
@@ -106,10 +106,6 @@ normalize_sku() {
             PocketSurvival|Tier0) echo "Product1" ;;
             FieldReady|Tier1)     echo "Product2" ;;
             CivilizationArk|Tier2)echo "Product3" ;;
-            Product2-256)          echo "Product2-256" ;;
-            Product3-256)          echo "Product3-256" ;;
-            SwarmCluster|Tier3)    echo "Tier3" ;;
-            SettlementHub|Tier4)    echo "Tier4" ;;
             *)                    echo "$p" ;;
         esac
         return
@@ -119,8 +115,6 @@ normalize_sku() {
             0) echo "Product1" ;;
             1) echo "Product2" ;;
             2) echo "Product3" ;;
-            3) echo "Tier3" ;;
-            4) echo "Tier4" ;;
         esac
         return
     fi
@@ -140,18 +134,12 @@ if [[ "${INFO_MODE}" == true ]]; then
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "--------" "-----------------" "-------" "-------" "------------" "------------------------------------------"
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product1" "PocketSurvival"  "Tier 0"    "64 GB"  "~54 GB"     "AI-free: Offline Kiwix (:8081) + ZIM knowledge. No models."
     printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product2" "FieldReady"      "0 + 1"     "64 GB"  "~54.5 GB"   "All Product 1 + Memory Vault, Photo OCR Vault, STEM Tutor, local AI."
-    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product3" "CivilizationArk" "0 + 1 + 2" "64 GB"  "~54.8 GB"   "All Product 2 + Wikipedia No-Pic + Hardware Auto-Selector."
-    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product2-256" "FieldReady XL"   "0 + 1"     "256 GB" "~160 GB"    "All Product 2 + extended data vault on 256 GB USB/SSD."
-    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product3-256" "CivilizationArk XL" "0 + 1 + 2" "256 GB" "~175 GB" "All Product 3 + extended payload on 256 GB USB/SSD."
-    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Tier3"    "SwarmCluster"    "0 - 3"     "256 GB" "~182 GB"    "All Product 3 + Qwen 32B (18.9 GB) + exo LAN Swarm Clustering."
-    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Tier4"    "SettlementHub"   "0 - 4"     "512 GB" "~210+ GB"   "All Tier 3 + Wikipedia Maxi (110 GB) + Llama 70B (40.5 GB)."
+    printf "%-9s %-17s %-9s %-9s %-15s %s\n" "Product3" "CivilizationArk" "0 + 1 + 2" "256 GB" "~181.9 GB"  "All Product 2 + Full Wikipedia + 3B..32B ladder + exo LAN Swarm."
     echo ""
     echo "[CURRENT FACTORY READINESS STATUS]"
     echo "  * Product 1 (PocketSurvival): [100% READY] (Lean payload: 1.39 GB ZIM-only, AI-free)"
     echo "  * Product 2 (FieldReady):     [100% READY] (Lean payload: 4.69 GB, verified for 64 GB drive)"
-    echo "  * Product 3 (CivilizationArk): [REQUIRES CACHE DOWNLOAD] (Requires Wikipedia No-Pic ZIM; 64 GB USB required)"
-    echo "  * Product 2-256 (FieldReady XL): [REQUIRES CACHE DOWNLOAD] (Requires ~160 GB payload on 256 GB USB/SSD)"
-    echo "  * Product 3-256 (CivilizationArk XL): [REQUIRES CACHE DOWNLOAD] (Requires ~175 GB payload on 256 GB USB/SSD)"
+    echo "  * Product 3 (CivilizationArk): [REQUIRES CACHE DOWNLOAD] (Requires ~182 GB payload on 256 GB SSD)"
     echo "================================================================================"
     exit 0
 fi
@@ -355,8 +343,6 @@ sku_to_tier() {
         Product1) echo 0 ;;
         Product2) echo 1 ;;
         Product3) echo 2 ;;
-        Tier3)    echo 3 ;;
-        Tier4)    echo 4 ;;
         *)        echo 0 ;;
     esac
 }
@@ -691,8 +677,8 @@ if [[ -z "${RESOLVED_SKU}" || -z "${TARGET_DRIVE}" ]]; then
     echo "================================================================================"
     echo "  [1] Provision Product 1: PocketSurvival  (Tier 0,    64 GB USB, ~54 GB, AI-free)"
     echo "  [2] Provision Product 2: FieldReady      (Tiers 0-1, 64 GB USB,  ~54.5 GB)"
-    echo "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 64 GB USB, ~54.8 GB)"
-    echo "  [4] Custom Technical Tier Provisioning (0-4)"
+    echo "  [3] Provision Product 3: CivilizationArk (Tiers 0-2, 256 GB SSD, ~181.9 GB)"
+    echo "  [4] Custom Technical Tier Provisioning (0-2)"
     echo "  [5] View Product Catalog (-Info)"
     echo "  [6] Run Simulation (-DryRun)"
     echo "  [Q] Quit"
@@ -703,7 +689,7 @@ if [[ -z "${RESOLVED_SKU}" || -z "${TARGET_DRIVE}" ]]; then
         2) RESOLVED_SKU="Product2" ;;
         3) RESOLVED_SKU="Product3" ;;
         4)
-            read -rp "Enter Tier (0..4): " t
+            read -rp "Enter Tier (0..2): " t
             RESOLVED_SKU=$(normalize_sku "" "$t") ;;
         5) "$0" --info; exit 0 ;;
         6) DRY_RUN=true; RESOLVED_SKU="Product2" ;;

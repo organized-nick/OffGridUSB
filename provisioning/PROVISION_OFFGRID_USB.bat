@@ -10,8 +10,8 @@ echo   Universal Air-Gapped Offline Survival, Knowledge ^& Local AI USB Drives
 echo ================================================================================
 echo.
 echo   [1] Provision Product 1: PocketSurvival  (Tier 0,    8 GB USB,  ^<= 6.5 GB payload)
-echo   [2] Provision Product 2: FieldReady      (Tiers 0-1, 32 GB USB,  ~16-20 GB / 4.7 GB lean)
-echo   [3] Provision Product 3: CivilizationArk (Tiers 0-2, 128 GB USB, ~65-72 GB payload)
+echo   [2] Provision Product 2: FieldReady      (Tiers 0-1, 64 GB USB,  ~54.6 GB / 4.7 GB lean)
+echo   [3] Provision Product 3: CivilizationArk (Tiers 0-2, 256 GB SSD, ~181.9 GB payload)
 echo   ----------------------------------------------------------------------------
 echo   [4] Custom Technical Tier Provisioning (Tier 0, 1, 2, 3, or 4)
 echo   [5] View Product Catalog ^& Hardware Specifications (-Info)

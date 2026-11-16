@@ -54,10 +54,21 @@ def test_model_ladder_monotonic():
     the differentiators for higher tiers."""
     planner = _load_planner()
     ladder = {sku: tuple(files) for sku, (_, _, _, files) in planner.SKUS.items()}
-    order = ["Product1", "Product2", "Product2-256", "Product3", "Product3-256", "Tier3", "Tier4"]
+    order = ["Product1", "Product2", "Product3"]
     for prev, nxt in zip(order, order[1:]):
         assert set(ladder[prev]) <= set(ladder[nxt]), \
             f"model ladder not monotonic: {prev} -> {nxt}"
-    assert "qwen2.5-32b-instruct-q4_k_m.gguf" in ladder["Tier3"]
-    assert "llama-3.3-70b-instruct-q4_k_m.gguf" in ladder["Tier4"]
-    assert len(ladder["Product1"]) < len(ladder["Tier3"]), "tier 0 must not carry the tier-3 LLM variety"
+    assert "qwen2.5-32b-instruct-q4_k_m.gguf" in ladder["Product3"]
+    assert len(ladder["Product1"]) < len(ladder["Product3"]), "tier 0 must not carry the top LLM variety"
+
+
+def test_sku_set_matches_agents_md_product_list():
+    """AGENTS.md (post-2026-11-16 revert) defines exactly three USB SKUs:
+    Product1 (64 GB AI-free), Product2 (64 GB with AI), Product3 (256 GB swarm)."""
+    planner = _load_planner()
+    assert set(planner.SKUS) == {"Product1", "Product2", "Product3"}
+    assert planner.DRIVE_GEOMETRY["Product1"][2] == 64
+    assert planner.DRIVE_GEOMETRY["Product2"][2] == 64
+    assert planner.DRIVE_GEOMETRY["Product3"][2] == 256
+    assert planner.SKUS["Product1"][3] == [], "Product1 must be AI-free"
+    assert not planner.VARIANT_PARENTS, "no -256 drive-ladder variants per AGENTS.md"

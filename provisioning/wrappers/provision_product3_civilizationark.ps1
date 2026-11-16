@@ -3,8 +3,8 @@
     provision_product3_civilizationark.ps1 - Dedicated 1-Command Provisioner for Product 3 (CivilizationArk).
 
 .DESCRIPTION
-    Provisions OffGridUSB Product 3 (CivilizationArk, Tiers 0, 1 & 2) targeting 128 GB USB flash drives
-    with payload ~65-72 GB (including 50.2 GB Wikipedia). Rejects 64 GB USB drives.
+    Provisions OffGridUSB Product 3 (CivilizationArk, Tiers 0, 1 & 2) targeting 256 GB portable SSDs
+    (~181.9 GB full payload: complete English Wikipedia + 3B..32B model ladder + exo LAN swarm).
 #>
 
 [CmdletBinding()]

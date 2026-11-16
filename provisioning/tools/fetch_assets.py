@@ -243,7 +243,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Print planned downloads without fetching")
     parser.add_argument("--verify", action="store_true", help="Verify staged models and ZIM files on disk")
     parser.add_argument("--tier", type=int, default=0, help="Maximum hardware tier assets to fetch (0 to 4, default: 0)")
-    parser.add_argument("--sku", type=str, default=None, help="Specific Product SKU (e.g. Product1, Product2, Product2-256, Product3, Product3-256, Tier3, Tier4)")
+    parser.add_argument("--sku", type=str, default=None, help="Specific Product SKU (e.g. Product1, Product2, Product3)")
     parser.add_argument("--profile", type=str, default="full", choices=["lean", "full"], help="SKU payload profile when --sku is specified (default: full)")
     parser.add_argument("--workers", type=int, default=4, help="Parallel download worker threads (default: 4)")
     parser.add_argument("--zim-only", action="store_true", help="Download only Internet-in-a-Box (.zim) archives")

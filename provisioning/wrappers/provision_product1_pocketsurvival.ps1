@@ -3,8 +3,8 @@
     provision_product1_pocketsurvival.ps1 - Dedicated 1-Command Provisioner for Product 1 (PocketSurvival).
 
 .DESCRIPTION
-    Provisions OffGridUSB Product 1 (PocketSurvival, Tier 0) targeting 8 GB USB flash drives
-    with a payload <= 6.5 GB (lean local payload: 1.39 GB).
+    Provisions OffGridUSB Product 1 (PocketSurvival, Tier 0) targeting 64 GB USB flash drives
+    AI-free edition: full survival/medical/wiki ZIM payload (~54.0 GB, lean profile: ~1.4 GB). No models.
 #>
 
 [CmdletBinding()]
