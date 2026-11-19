@@ -718,10 +718,28 @@
     }
     $("#openKiwixFullBtn").href = state.kiwixUrl;
     const zimFiles = svc.zim_files || data.zim_files || [];
-    const kiwixLive = svc.kiwix_running !== undefined ? svc.kiwix_running : true;
+    const kiwixLive = Boolean(svc.kiwix_running);
+    const kiwixStarting = Boolean(svc.kiwix_starting) && !kiwixLive;
+    const pillKiwix = $("#pillKiwix");
+    if (pillKiwix) {
+      pillKiwix.classList.toggle("status-warn", !kiwixLive);
+      pillKiwix.classList.toggle("status-ok", kiwixLive);
+    }
     $("#valKiwix").textContent = kiwixLive
       ? `ZIM Server :${kiwixPort} LIVE (${zimFiles.length || 3} ZIMs)`
-      : `Offline ZIM Corpus Ready`;
+      : kiwixStarting
+        ? `Mounting ${zimFiles.length || ""} ZIMs :${kiwixPort}...`
+        : `Offline ZIM Corpus Ready`;
+
+    if (kiwixStarting && !state._statusWarmupTimer) {
+      state._statusWarmupTimer = setTimeout(() => {
+        state._statusWarmupTimer = null;
+        refreshStatus();
+      }, 1200);
+    }
+    if (kiwixLive && !state.kiwixLoaded && $("#tab-iiab")?.classList.contains("active")) {
+      ensureKiwixFrameLoaded();
+    }
 
     if (Array.isArray(zimFiles) && zimFiles.length > 0) {
       const strip = $("#zimArchiveStrip");
@@ -754,11 +772,8 @@
         }
         newSelect.addEventListener("change", () => {
           const targetHref = newSelect.value || "/";
-          const iframe = $("#kiwixIframe");
-          if (iframe) {
-            iframe.src = `${state.kiwixUrl.replace(/\/$/, "")}${targetHref}`;
-            state.kiwixLoaded = true;
-          }
+          const fullTarget = `${state.kiwixUrl.replace(/\/$/, "")}${targetHref}`;
+          ensureKiwixFrameLoaded(fullTarget, true);
         });
       }
     }
@@ -1626,10 +1641,72 @@
   // --------------------------------------------------------------------------
   // 4. Tab 2 — Internet-in-a-Box (Kiwix ZIM + Khan Academy + Direct Search)
   // --------------------------------------------------------------------------
-  function ensureKiwixFrameLoaded() {
-    if (!state.kiwixLoaded) {
-      $("#kiwixIframe").src = state.kiwixUrl;
-      state.kiwixLoaded = true;
+  async function ensureKiwixFrameLoaded(targetUrl = null, forceReload = false) {
+    const iframe = $("#kiwixIframe");
+    if (!iframe) return;
+
+    if (targetUrl) {
+      state._pendingKiwixTarget = targetUrl;
+    }
+
+    if (state.kiwixLoaded && !forceReload && !targetUrl) {
+      return;
+    }
+
+    const host = window.location.hostname || "127.0.0.1";
+    try {
+      const res = await apiGet("/api/kiwix/ready");
+      if (res && res.kiwix_url) {
+        state.kiwixUrl = res.kiwix_url;
+        if (host !== "127.0.0.1" && host !== "localhost") {
+          state.kiwixUrl = state.kiwixUrl.replace("127.0.0.1", host);
+        }
+        const fullBtn = $("#openKiwixFullBtn");
+        if (fullBtn) fullBtn.href = state.kiwixUrl;
+      }
+
+      if (res && res.ready) {
+        if (state._kiwixRetryTimer) {
+          clearTimeout(state._kiwixRetryTimer);
+          state._kiwixRetryTimer = null;
+        }
+        const finalUrl = state._pendingKiwixTarget || targetUrl || state.kiwixUrl;
+        state._pendingKiwixTarget = null;
+        iframe.removeAttribute("srcdoc");
+        iframe.src = finalUrl;
+        state.kiwixLoaded = true;
+        refreshStatus();
+        return;
+      }
+    } catch (_) {}
+
+    // Kiwix server is still warming up — display clean inline offline warmup card instead of browser ERR_CONNECTION_REFUSED
+    state.kiwixLoaded = false;
+    if (!iframe.hasAttribute("srcdoc")) {
+      iframe.srcdoc = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body { margin:0; height:100vh; display:flex; align-items:center; justify-content:center;
+         background:#1E241B; color:#EDE6D6; font-family:system-ui,-apple-system,sans-serif; }
+  .box { text-align:center; max-width:460px; padding:28px 32px; border:1px solid #8A9A5B;
+         border-radius:10px; background:#262E22; box-shadow:0 8px 24px rgba(0,0,0,0.35); }
+  .spin { width:28px; height:28px; border:3px solid rgba(237,230,214,0.2);
+          border-top-color:#E8622C; border-radius:50%; margin:0 auto 14px;
+          animation:sp 0.85s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  h3 { margin:0 0 8px; font-size:16px; letter-spacing:0.03em; }
+  p { margin:0; font-size:13px; color:#B7A77A; line-height:1.45; }
+</style></head><body><div class="box">
+  <div class="spin"></div>
+  <h3>Mounting Offline ZIM Library (:8081)</h3>
+  <p>Indexing local USB knowledge archives — connecting automatically in a moment (100% Air-Gapped)...</p>
+</div></body></html>`;
+    }
+
+    if (!state._kiwixRetryTimer) {
+      state._kiwixRetryTimer = setTimeout(() => {
+        state._kiwixRetryTimer = null;
+        ensureKiwixFrameLoaded(state._pendingKiwixTarget, true);
+      }, 700);
     }
   }
 
@@ -3547,8 +3624,7 @@
     });
 
     $("#reloadKiwixBtn").addEventListener("click", () => {
-      $("#kiwixIframe").src = state.kiwixUrl;
-      state.kiwixLoaded = true;
+      ensureKiwixFrameLoaded(state.kiwixUrl, true);
     });
 
     // Stage Hardware Simulator
@@ -3814,16 +3890,15 @@
         }
       }
 
-      // Mark kiwixLoaded = true BEFORE switching tabs so ensureKiwixFrameLoaded() doesn't overwrite with the home page
-      state.kiwixLoaded = true;
+      // Pre-stage pending target BEFORE switching tabs so ensureKiwixFrameLoaded() loads the deep link once ready
+      state._pendingKiwixTarget = deepLinkUrl || baseKiwix;
       const iiabTabBtn = document.querySelector('.tab-btn[data-tab="tab-iiab"]');
       if (iiabTabBtn) iiabTabBtn.click();
       const kiwixSubBtn = $("#subtab-kiwix") || $('button[data-subtab="iiab-kiwix"]');
       if (kiwixSubBtn) kiwixSubBtn.click();
 
-      const iframe = $("#kiwixIframe");
-      if (iframe && deepLinkUrl) {
-        iframe.src = deepLinkUrl;
+      if (deepLinkUrl) {
+        ensureKiwixFrameLoaded(deepLinkUrl, true);
       }
     });
 

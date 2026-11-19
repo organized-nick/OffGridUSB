@@ -935,13 +935,17 @@ $clusterSize = if ($fsPlan.AllocationUnitSize) { $fsPlan.AllocationUnitSize } el
 $skuOut = Join-Path $targetRoot "manifests\product_sku.json"
 New-ProductSkuManifest -ProductSku $ResolvedSku -ProductsJsonPath (Join-Path $SourceRoot "manifests\products.json") -TargetDriveLetter "${cleanDrive}:" -Filesystem $fsPlan.CurrentFileSystem -ClusterSizeBytes $clusterSize -ProfileName $Profile -OutputPath $skuOut | Out-Null
 
-# Generate dynamic library.xml for staged ZIMs
-Write-Host "  Generating tailored data/library.xml for staged ZIM archives..." -ForegroundColor Cyan
+# Generate dynamic library.xml for staged ZIMs (both data/library.xml and data/zim/library.xml for <1s kiwix-serve cold boot)
+Write-Host "  Generating tailored data/library.xml and data/zim/library.xml for staged ZIM archives..." -ForegroundColor Cyan
 $stagedZimDir = Join-Path $targetRoot "data\zim"
 $templateXml = Join-Path $SourceRoot "data\library.xml"
 $targetXml = Join-Path $targetRoot "data\library.xml"
+$targetZimXml = Join-Path $stagedZimDir "library.xml"
 if ((Test-Path $stagedZimDir) -and (Test-Path $templateXml)) {
     Build-LibraryXml -ZimDir $stagedZimDir -TemplateXmlPath $templateXml -OutputXmlPath $targetXml | Out-Null
+    $rawLib = Get-Content -Path $targetXml -Raw -Encoding UTF8
+    $zimLocalLib = [regex]::Replace($rawLib, 'path="zim/([^"]+\.zim)"', 'path="$1"')
+    [System.IO.File]::WriteAllText($targetZimXml, $zimLocalLib, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 # Ensure empty directories exist

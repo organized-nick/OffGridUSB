@@ -560,11 +560,13 @@ class EmyrgeRuntime:
             if not self.config.headless and remaining == 0:
                 if self._pending_close_timer is not None:
                     self._pending_close_timer.cancel()
-                timer = threading.Timer(3.5, self._on_tab_close_grace_expired)
+                # Use a 15s grace window so page reloads (F5) or slow cold-USB asset loads
+                # never trigger premature auto-shutdown & eject (explicit Eject button uses immediate=True).
+                timer = threading.Timer(15.0, self._on_tab_close_grace_expired)
                 timer.daemon = True
                 self._pending_close_timer = timer
                 timer.start()
-                return {"ok": True, "scheduled_eject": True, "grace_seconds": 3.5, "remaining_tabs": 0}
+                return {"ok": True, "scheduled_eject": True, "grace_seconds": 15.0, "remaining_tabs": 0}
 
         return {"ok": True, "scheduled_eject": False, "remaining_tabs": remaining}
 
@@ -572,7 +574,7 @@ class EmyrgeRuntime:
         with self._lock:
             self._pending_close_timer = None
             now = time.monotonic()
-            stale = [k for k, ts in self._client_tabs.items() if (now - ts) > 12.0]
+            stale = [k for k, ts in self._client_tabs.items() if (now - ts) > 20.0]
             for k in stale:
                 self._client_tabs.pop(k, None)
             if len(self._client_tabs) > 0 or self._shutting_down:
@@ -618,13 +620,28 @@ class EmyrgeRuntime:
 
     def _background_warmup(self) -> None:
         try:
-            self.kiwix_runner.ensure_started()
+            self.get_active_hardware()
+        except Exception:
+            pass
+        try:
+            self.kiwix_runner.ensure_started(wait_ready_sec=5.0)
         except Exception:
             pass
         try:
             self.model_runner.ensure_started()
         except Exception:
             pass
+
+        # Continuous self-healing watchdog: if kiwix-serve exits unexpectedly while active, restart it
+        while not self._shutting_down:
+            time.sleep(6.0)
+            if self._shutting_down:
+                break
+            try:
+                if not self.kiwix_runner.is_starting() and not self.kiwix_runner.is_running():
+                    self.kiwix_runner.ensure_started(wait_ready_sec=2.0)
+            except Exception:
+                pass
 
     def get_active_hardware(self) -> Dict[str, Any]:
         with self._lock:
@@ -703,6 +720,7 @@ class EmyrgeRuntime:
                 "llm_model": llm_st["llm_model"],
                 "llm_engine": llm_st["llm_engine"],
                 "kiwix_running": kiwix_st["kiwix_running"],
+                "kiwix_starting": kiwix_st.get("kiwix_starting", False),
                 "kiwix_port": kiwix_st["kiwix_port"],
                 "kiwix_url": kiwix_st["kiwix_url"],
                 "zim_files": kiwix_st["zim_files"],
@@ -1909,16 +1927,39 @@ class EmyrgeHTTPHandler(BaseHTTPRequestHandler):
                 self._send_json(200, self.runtime.handle_client_closing(cid, immediate=True))
                 return
 
-            if path in ("/", "/index.html", "/api/status", "/api/health", "/api/telemetry", "/api/ping"):
+            if path in ("/", "/index.html", "/api/status", "/api/health", "/api/telemetry", "/api/ping", "/api/kiwix/ready") or path.startswith("/static/"):
                 self.runtime.cancel_pending_close()
 
             if path in ("/api/ping", "/healthz"):
+                if self.runtime._shutting_down:
+                    self._send_json(503, {"ok": False, "shutting_down": True})
+                    return
                 self._send_json(
                     200,
                     {
                         "ok": True,
                         "service": "offgridusb",
                         "port": self.runtime.config.port,
+                    },
+                )
+                return
+
+            if path == "/api/kiwix/ready":
+                kr = self.runtime.kiwix_runner
+                ready = kr.is_running()
+                if not ready and not self.runtime._shutting_down:
+                    if not kr.is_starting():
+                        if kr._stopped:
+                            kr._stopped = False
+                        ready = kr.ensure_started(wait_ready_sec=1.5)
+                self._send_json(
+                    200,
+                    {
+                        "ok": True,
+                        "ready": ready,
+                        "starting": kr.is_starting() and not ready,
+                        "kiwix_port": kr.port,
+                        "kiwix_url": kr.base_url,
                     },
                 )
                 return
@@ -2452,7 +2493,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     if not base_cfg.headless:
         browser_host = "127.0.0.1" if base_cfg.host in ("0.0.0.0", "") else base_cfg.host
         target_url = f"http://{browser_host}:{base_cfg.port}"
-        threading.Thread(target=webbrowser.open, args=(target_url,), daemon=True).start()
+
+        def _open_browser_when_ready() -> None:
+            deadline = time.monotonic() + 4.5
+            while time.monotonic() < deadline:
+                if runtime._shutting_down:
+                    return
+                try:
+                    with urllib.request.urlopen(f"{target_url}/api/ping", timeout=0.4) as resp:
+                        if resp.status == 200 and runtime.kiwix_runner.is_running():
+                            break
+                except Exception:
+                    pass
+                time.sleep(0.15)
+            if not runtime._shutting_down:
+                webbrowser.open(target_url)
+
+        threading.Thread(target=_open_browser_when_ready, daemon=True).start()
 
     try:
         server.serve_forever()

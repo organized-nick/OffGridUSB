@@ -193,8 +193,9 @@ if "%EXPLICIT_PORT%"=="0" if exist "%SCRIPT_DIR%src\emyrge\web\app.py" (
         set "PORT=!PORT_VAL!"
         echo ============================================================================
         echo [INFO] OffGridUSB Engine is already running at http://127.0.0.1:!PORT!
-        echo [INFO] Opening web client in default browser...
+        echo [INFO] Verifying Kiwix ZIM Server ^(:8081^) ^& opening web client...
         echo ============================================================================
+        "!PYTHON_EXE!" !PYTHON_ARGS! -B -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:!PORT!/api/kiwix/ready', timeout=3).read()" >nul 2>&1
         if "%HEADLESS%"=="0" start "" "http://127.0.0.1:!PORT!"
         exit /b 0
     )

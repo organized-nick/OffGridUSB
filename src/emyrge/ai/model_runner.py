@@ -448,13 +448,18 @@ class KiwixRunner:
         self._proc: Optional[subprocess.Popen] = None
         self._mounted_zims: List[Path] = []
         self._zim_cache: Optional[tuple[float, List[Path], List[Dict[str, Any]]]] = None
+        self._last_healthy_ts: float = 0.0
         self._stopped: bool = False
         self._lock = threading.RLock()
         atexit.register(self.stop)
 
     @property
+    def _probe_host(self) -> str:
+        return "127.0.0.1" if self.host in ("0.0.0.0", "", "localhost") else self.host
+
+    @property
     def base_url(self) -> str:
-        return f"http://{self.host}:{self.port}"
+        return f"http://{self._probe_host}:{self.port}"
 
     def discover_binary(self) -> Optional[Path]:
         """Discovers host-compatible kiwix-serve binary in bin/, bundled POSIX tar.gz, or system PATH."""
@@ -561,80 +566,215 @@ class KiwixRunner:
         self._zim_cache = (now, valid, meta)
         return valid
 
+    def _discover_manage_binary(self, serve_binary: Optional[Path] = None) -> Optional[Path]:
+        """Discovers kiwix-manage next to kiwix-serve for self-healing library.xml updates."""
+        if serve_binary is not None:
+            ext = ".exe" if os.name == "nt" else ""
+            sibling = serve_binary.parent / f"kiwix-manage{ext}"
+            if sibling.is_file() and sibling.stat().st_size > 1024:
+                return sibling if os.name == "nt" else _ensure_posix_executable(sibling)
+        which_mgr = shutil.which("kiwix-manage.exe") if os.name == "nt" else shutil.which("kiwix-manage")
+        return Path(which_mgr) if which_mgr else None
+
+    def _resolve_library_xml(self, zims: List[Path], serve_binary: Optional[Path] = None) -> Optional[Path]:
+        """Returns a verified, OS-agnostic `data/zim/library.xml` with pure relative filenames (`path="<file>.zim"`).
+
+        Using `--library data/zim/library.xml` boots kiwix-serve in ~0.75s instead of 60-90s scanning 50+ GB of ZIMs
+        over USB, while pure filename paths avoid forward/backslash URL corruption on Windows, macOS, and Linux.
+        """
+        zim_lib = self.zim_dir / "library.xml"
+        legacy_lib = self.project_root / "data" / "library.xml"
+        zim_names = {z.name for z in zims}
+
+        # Migrate or normalize data/library.xml -> data/zim/library.xml if needed
+        if not zim_lib.is_file() and legacy_lib.is_file():
+            try:
+                raw = legacy_lib.read_text(encoding="utf-8", errors="ignore")
+                normalized = re.sub(r'\bpath="(?:zim[/\\])?([^"/\\]+\.zim)"', r'path="\1"', raw)
+                self.zim_dir.mkdir(parents=True, exist_ok=True)
+                zim_lib.write_text(normalized, encoding="utf-8")
+            except OSError:
+                pass
+
+        if zim_lib.is_file():
+            try:
+                raw = zim_lib.read_text(encoding="utf-8", errors="ignore")
+                # Ensure no directory prefixes exist inside path="..."
+                if 'path="zim/' in raw or 'path="zim\\' in raw:
+                    raw = re.sub(r'\bpath="(?:zim[/\\])?([^"/\\]+\.zim)"', r'path="\1"', raw)
+                    try:
+                        zim_lib.write_text(raw, encoding="utf-8")
+                    except OSError:
+                        pass
+                xml_paths = {Path(m.replace("\\", "/")).name for m in re.findall(r'\bpath="([^"]+)"', raw)}
+                if not zim_names:
+                    return zim_lib if xml_paths else None
+                missing_in_xml = zim_names - xml_paths
+                if not missing_in_xml:
+                    return zim_lib
+                # Self-heal: index only newly added ZIM files via kiwix-manage if available
+                mgr_bin = self._discover_manage_binary(serve_binary)
+                if mgr_bin is not None:
+                    add_cmd = [os.path.normpath(str(mgr_bin)), os.path.normpath(str(zim_lib)), "add"] + [
+                        os.path.normpath(str(self.zim_dir / name)) for name in sorted(missing_in_xml)
+                    ]
+                    add_kwargs: Dict[str, Any] = {
+                        "stdout": subprocess.DEVNULL,
+                        "stderr": subprocess.DEVNULL,
+                        "stdin": subprocess.DEVNULL,
+                        "cwd": str(self.zim_dir),
+                    }
+                    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+                        add_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                    subprocess.run(add_cmd, timeout=25, check=False, **add_kwargs)
+                    updated = zim_lib.read_text(encoding="utf-8", errors="ignore")
+                    updated = re.sub(r'\bpath="(?:[^"]*[/\\])?([^"/\\]+\.zim)"', r'path="\1"', updated)
+                    zim_lib.write_text(updated, encoding="utf-8")
+                    updated_paths = {Path(m.replace("\\", "/")).name for m in re.findall(r'\bpath="([^"]+)"', updated)}
+                    if not (zim_names - updated_paths):
+                        return zim_lib
+            except Exception:
+                pass
+
+        # If no library.xml exists yet, build it once via kiwix-manage so this and all future boots are instant
+        if zims:
+            mgr_bin = self._discover_manage_binary(serve_binary)
+            if mgr_bin is not None:
+                try:
+                    self.zim_dir.mkdir(parents=True, exist_ok=True)
+                    build_cmd = [os.path.normpath(str(mgr_bin)), os.path.normpath(str(zim_lib)), "add"] + [
+                        os.path.normpath(str(z)) for z in zims
+                    ]
+                    build_kwargs: Dict[str, Any] = {
+                        "stdout": subprocess.DEVNULL,
+                        "stderr": subprocess.DEVNULL,
+                        "stdin": subprocess.DEVNULL,
+                        "cwd": str(self.zim_dir),
+                    }
+                    if hasattr(subprocess, "CREATE_NO_WINDOW"):
+                        build_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+                    subprocess.run(build_cmd, timeout=45, check=False, **build_kwargs)
+                    if zim_lib.is_file():
+                        built = zim_lib.read_text(encoding="utf-8", errors="ignore")
+                        built = re.sub(r'\bpath="(?:[^"]*[/\\])?([^"/\\]+\.zim)"', r'path="\1"', built)
+                        zim_lib.write_text(built, encoding="utf-8")
+                        return zim_lib
+                except Exception:
+                    pass
+        return None
+
     def _is_kiwix_endpoint(self) -> bool:
         """Checks whether the active listener on self.port is actually kiwix-serve."""
         try:
-            req = urllib.request.Request(f"{self.base_url}/catalog/v2/entries")
-            with urllib.request.urlopen(req, timeout=0.6) as resp:
+            req = urllib.request.Request(f"{self.base_url}/catalog/v2/entries?count=1")
+            with urllib.request.urlopen(req, timeout=0.8) as resp:
                 return resp.status == 200
         except Exception:
             return False
 
+    def is_starting(self) -> bool:
+        """True when kiwix-serve subprocess has been spawned and has not exited."""
+        return (not self._stopped) and (self._proc is not None) and (self._proc.poll() is None)
+
     def is_running(self) -> bool:
+        """True ONLY when TCP port is actively open and verified to be kiwix-serve."""
         if self._stopped:
             return False
-        if self._proc is not None and self._proc.poll() is None:
+        if not _is_port_open(self._probe_host, self.port, timeout=0.25):
+            self._last_healthy_ts = 0.0
+            return False
+        now = time.monotonic()
+        if (now - self._last_healthy_ts) < 3.0:
             return True
-        return _is_port_open(self.host, self.port, timeout=0.25) and self._is_kiwix_endpoint()
+        if self._is_kiwix_endpoint():
+            self._last_healthy_ts = now
+            return True
+        return False
 
-    def ensure_started(self) -> bool:
-        """Starts kiwix-serve if binary + ZIMs exist (or restarts if newly downloaded ZIMs arrived)."""
+    def ensure_started(self, wait_ready_sec: float = 4.0) -> bool:
+        """Starts kiwix-serve if binary + ZIMs exist and waits until HTTP port is ready."""
         with self._lock:
             if self._stopped:
                 return False
             zims = self.discover_zim_files()
-            lib_xml = self.project_root / "data" / "library.xml"
-            if not zims and not lib_xml.is_file():
+            zim_lib_check = self.zim_dir / "library.xml"
+            legacy_lib_check = self.project_root / "data" / "library.xml"
+            if not zims and not zim_lib_check.is_file() and not legacy_lib_check.is_file():
                 return self.is_running()
 
             # If already running externally and it is actually Kiwix, keep using it; otherwise pick a free port
-            if self._proc is None and _is_port_open(self.host, self.port, timeout=0.25):
+            if self._proc is None and _is_port_open(self._probe_host, self.port, timeout=0.25):
                 if self._is_kiwix_endpoint():
                     self._mounted_zims = zims
+                    self._last_healthy_ts = time.monotonic()
                     return True
-                self.port = _find_free_port(self.host, self.port, 8083, 8095)
+                self.port = _find_free_port(self._probe_host, self.port, 8083, 8095)
 
-            # Restart if new ZIMs finished downloading since initial start
+            # Keep existing child process if same ZIM set (even if still mid-startup)
             if self._proc is not None and self._proc.poll() is None:
                 if set(zims) == set(self._mounted_zims):
-                    return True
+                    if self.is_running():
+                        return True
+                    # Wait briefly if caller asked for readiness
+                    steps = max(1, int(wait_ready_sec / 0.2))
+                    for _ in range(steps):
+                        if self._proc.poll() is not None:
+                            break
+                        if self.is_running():
+                            return True
+                        time.sleep(0.2)
+                    return self.is_running()
                 self.stop()
+                self._stopped = False
 
             binary = self.discover_binary()
             if not binary:
                 return False
 
-            lib_xml = self.project_root / "data" / "library.xml"
-            kiwix_addr = "ipv4" if self.host in ("127.0.0.1", "0.0.0.0", "localhost") else self.host
-            if zims:
-                # Pass discovered .zim paths directly using OS-native separators so libkiwix on Windows
-                # never embeds a forward-slash 'zim/' directory prefix into the book URL identifier.
+            # Bind strictly to 127.0.0.1 in localhost mode (zero Windows Firewall prompts offline);
+            # only bind 'ipv4' (0.0.0.0) when explicitly serving LAN (0.0.0.0).
+            if self.host in ("127.0.0.1", "localhost"):
+                kiwix_addr = "127.0.0.1"
+            elif self.host in ("0.0.0.0", ""):
+                kiwix_addr = "ipv4"
+            else:
+                kiwix_addr = self.host
+
+            resolved_lib = self._resolve_library_xml(zims, binary)
+            if resolved_lib is not None and resolved_lib.is_file():
                 cmd = [
                     os.path.normpath(str(binary)),
                     "-k",
                     "-z",
-                    "--port",
-                    str(self.port),
-                    "--address",
-                    kiwix_addr,
-                ] + [os.path.normpath(str(z)) for z in zims]
-            elif lib_xml.is_file():
-                cmd = [
-                    os.path.normpath(str(binary)),
+                    "--searchLimit",
+                    "6",
                     "--library",
-                    os.path.normpath(str(lib_xml)),
+                    os.path.normpath(str(resolved_lib)),
                     "--port",
                     str(self.port),
                     "--address",
                     kiwix_addr,
                 ]
+            elif zims:
+                cmd = [
+                    os.path.normpath(str(binary)),
+                    "-k",
+                    "-z",
+                    "--searchLimit",
+                    "6",
+                    "--port",
+                    str(self.port),
+                    "--address",
+                    kiwix_addr,
+                ] + [os.path.normpath(str(z)) for z in zims]
             else:
                 return False
+
             kwargs: Dict[str, Any] = {
                 "stdout": subprocess.DEVNULL,
                 "stderr": subprocess.DEVNULL,
                 "stdin": subprocess.DEVNULL,
-                "cwd": str(self.project_root),
+                "cwd": tempfile.gettempdir(),
             }
             if hasattr(subprocess, "CREATE_NO_WINDOW"):
                 kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
@@ -642,12 +782,14 @@ class KiwixRunner:
             try:
                 self._proc = subprocess.Popen(cmd, **kwargs)
                 self._mounted_zims = zims
-                # Brief readiness poll (up to 1.5s)
-                for _ in range(6):
-                    if _is_port_open(self.host, self.port, timeout=0.2):
+                steps = max(1, int(wait_ready_sec / 0.2))
+                for _ in range(steps):
+                    if self._proc.poll() is not None:
+                        break
+                    if self.is_running():
                         return True
                     time.sleep(0.2)
-                return self._proc.poll() is None
+                return self.is_running()
             except OSError:
                 self._proc = None
                 return False
@@ -656,18 +798,47 @@ class KiwixRunner:
         """Queries live kiwix-serve HTTP search endpoint and parses real ZIM passages."""
         if not query or not query.strip():
             return []
-        if not self.ensure_started() or not _is_port_open(self.host, self.port, timeout=0.25):
+        if not self.ensure_started(wait_ready_sec=2.0) or not _is_port_open(self._probe_host, self.port, timeout=0.25):
             return []
 
         encoded_q = urllib.parse.quote_plus(query.strip())
         urls_to_try = [
             f"{self.base_url}/search?pattern={encoded_q}&pageLength={limit}",
-            f"{self.base_url}/search?pattern={encoded_q}",
         ]
-        # Also try book-scoped search if multi-ZIM index needs content prefix
-        for z in self._mounted_zims[:3]:
+        # Prioritize core English medical, survival, engineering, and Wikipedia archives first
+        # (especially important when multi-language ZIMs like Spanish ready.gov_es are mounted,
+        # which cause un-scoped `/search?pattern=` to return HTTP 400).
+        priority_prefixes = (
+            "wikipedia_en_medicine_maxi",
+            "wikipedia_en_medicine_mini",
+            "mdwiki_en_all_maxi",
+            "mdwiki_en_all",
+            "wikipedia_en-simple_all",
+            "wikipedia_en_top_mini",
+            "ready.gov_en_all",
+            "zimgit-water_en",
+            "zimgit-medicine_en",
+            "zimgit-post-disaster_en",
+            "ifixit_en_all",
+            "appropedia_en_all",
+        )
+        ordered_zims: List[Path] = []
+        seen_zims: set[Path] = set()
+        for pref in priority_prefixes:
+            for z in self._mounted_zims:
+                if z not in seen_zims and z.name.lower().startswith(pref):
+                    ordered_zims.append(z)
+                    seen_zims.add(z)
+        for z in self._mounted_zims:
+            if z not in seen_zims:
+                ordered_zims.append(z)
+                seen_zims.add(z)
+
+        for z in ordered_zims[:8]:
             book_name = z.stem
-            urls_to_try.append(f"{self.base_url}/search?content={urllib.parse.quote(book_name)}&pattern={encoded_q}")
+            urls_to_try.append(
+                f"{self.base_url}/search?content={urllib.parse.quote(book_name)}&pattern={encoded_q}&pageLength={limit}"
+            )
 
         parsed_items: List[Dict[str, str]] = []
         seen_hrefs: set[str] = set()
@@ -733,18 +904,22 @@ class KiwixRunner:
         if self._stopped:
             return {
                 "kiwix_running": False,
+                "kiwix_starting": False,
                 "kiwix_port": self.port,
                 "kiwix_url": self.base_url,
                 "kiwix_binary": "",
                 "zim_files": list(self._zim_cache[2]) if self._zim_cache else [],
             }
         zims = self.discover_zim_files()
-        lib_xml = self.project_root / "data" / "library.xml"
+        zim_lib = self.zim_dir / "library.xml"
+        legacy_lib = self.project_root / "data" / "library.xml"
         running = self.is_running()
-        if not running and not self._stopped and (zims or lib_xml.is_file()):
+        starting = self.is_starting()
+        if not running and not starting and not self._stopped and (zims or zim_lib.is_file() or legacy_lib.is_file()):
             if self._lock.acquire(blocking=False):
                 try:
-                    running = self.ensure_started()
+                    running = self.ensure_started(wait_ready_sec=1.5)
+                    starting = self.is_starting()
                 finally:
                     self._lock.release()
         zim_meta = (
@@ -760,9 +935,10 @@ class KiwixRunner:
         )
         return {
             "kiwix_running": running,
+            "kiwix_starting": starting and not running,
             "kiwix_port": self.port,
             "kiwix_url": self.base_url,
-            "kiwix_binary": str(self.discover_binary() or "") if running else "",
+            "kiwix_binary": str(self.discover_binary() or "") if (running or starting) else "",
             "zim_files": zim_meta,
         }
 
