@@ -619,12 +619,13 @@ class EmyrgeRuntime:
         return eject_res
 
     def _background_warmup(self) -> None:
+        # 1. Start kiwix-serve FIRST so :8081 is already listening before the browser tab opens
         try:
-            self.get_active_hardware()
+            self.kiwix_runner.ensure_started(wait_ready_sec=5.0)
         except Exception:
             pass
         try:
-            self.kiwix_runner.ensure_started(wait_ready_sec=5.0)
+            self.get_active_hardware()
         except Exception:
             pass
         try:
@@ -2495,7 +2496,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         target_url = f"http://{browser_host}:{base_cfg.port}"
 
         def _open_browser_when_ready() -> None:
-            deadline = time.monotonic() + 4.5
+            deadline = time.monotonic() + 7.5
             while time.monotonic() < deadline:
                 if runtime._shutting_down:
                     return

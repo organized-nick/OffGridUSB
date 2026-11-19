@@ -540,27 +540,61 @@ class KiwixRunner:
         return Path(which_bin) if which_bin else None
 
     def discover_zim_files(self) -> List[Path]:
-        """Finds all valid, completely-written .zim files in data/zim/ (cached 30s to avoid USB flash wear)."""
+        """Finds all valid, completely-written .zim files in data/zim/ (cached 60s to avoid USB flash wear).
+
+        Fast path: if `data/zim/library.xml` or `data/library.xml` already lists the directory's .zim files,
+        use os.scandir() directory metadata without opening 44+ files over USB exFAT on cold start.
+        """
         if not self.zim_dir.is_dir():
             return []
         now = time.monotonic()
         cached = self._zim_cache
-        if cached is not None and (now - cached[0]) < 30.0:
+        if cached is not None and (now - cached[0]) < 60.0:
             return list(cached[1])
+
+        known_in_xml: set[str] = set()
+        for xml_cand in (self.zim_dir / "library.xml", self.project_root / "data" / "library.xml"):
+            if xml_cand.is_file():
+                try:
+                    raw_xml = xml_cand.read_text(encoding="utf-8", errors="ignore")
+                    for m in re.findall(r'\bpath="([^"]+\.zim)"', raw_xml):
+                        known_in_xml.add(Path(m.replace("\\", "/")).name)
+                    if known_in_xml:
+                        break
+                except OSError:
+                    pass
+
+        entries: List[tuple[str, Path, int]] = []
+        try:
+            with os.scandir(self.zim_dir) as it:
+                for entry in it:
+                    if not entry.name.lower().endswith(".zim"):
+                        continue
+                    try:
+                        st = entry.stat()
+                        if st.st_size >= 1024:
+                            entries.append((entry.name, Path(entry.path), st.st_size))
+                    except OSError:
+                        continue
+        except OSError:
+            return []
+
+        entries.sort(key=lambda x: x[0])
         valid: List[Path] = []
         meta: List[Dict[str, Any]] = []
-        for p in sorted(self.zim_dir.glob("*.zim")):
+        for fname, p, sz in entries:
+            if fname in known_in_xml:
+                valid.append(p)
+                meta.append({"name": fname, "size_mb": round(sz / (1024 * 1024), 2)})
+                continue
             try:
-                sz = p.stat().st_size
-                if sz < 1024:
-                    continue
                 with open(p, "rb") as f:
                     hdr = f.read(4)
                     if len(hdr) == 4:
                         magic = struct.unpack("<I", hdr)[0]
                         if magic in (self.ZIM_MAGIC, 0x5A494D04):
                             valid.append(p)
-                            meta.append({"name": p.name, "size_mb": round(sz / (1024 * 1024), 2)})
+                            meta.append({"name": fname, "size_mb": round(sz / (1024 * 1024), 2)})
             except OSError:
                 continue
         self._zim_cache = (now, valid, meta)

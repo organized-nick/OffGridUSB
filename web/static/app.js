@@ -1672,8 +1672,33 @@
         }
         const finalUrl = state._pendingKiwixTarget || targetUrl || state.kiwixUrl;
         state._pendingKiwixTarget = null;
-        iframe.removeAttribute("srcdoc");
-        iframe.src = finalUrl;
+        const hadSrcdoc = iframe.hasAttribute("srcdoc");
+        if (hadSrcdoc) {
+          iframe.removeAttribute("srcdoc");
+        }
+        // When transitioning from inline srcdoc warmup or hidden tab, schedule src assignment
+        // on the next frame (and dispatch resize on load) so Chromium/Edge always fires
+        // window.onload and Isotope masonry layout inside kiwix-serve without a manual refresh.
+        const assignSrc = () => {
+          if (forceReload && iframe.getAttribute("src") === finalUrl) {
+            const sep = finalUrl.includes("?") ? "&" : "?";
+            iframe.src = `${finalUrl}${sep}_t=${Date.now()}`;
+          } else {
+            iframe.src = finalUrl;
+          }
+        };
+        iframe.onload = () => {
+          try {
+            if (iframe.contentWindow) {
+              iframe.contentWindow.dispatchEvent(new Event("resize"));
+            }
+          } catch (_) {}
+        };
+        if (hadSrcdoc) {
+          setTimeout(assignSrc, 25);
+        } else {
+          assignSrc();
+        }
         state.kiwixLoaded = true;
         refreshStatus();
         return;
@@ -3432,7 +3457,9 @@
           b.setAttribute("aria-selected", b === btn ? "true" : "false");
         });
         $$(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === target));
-        if (target === "tab-iiab") ensureKiwixFrameLoaded();
+        if (target === "tab-iiab") {
+          ensureKiwixFrameLoaded();
+        }
       });
     });
 
