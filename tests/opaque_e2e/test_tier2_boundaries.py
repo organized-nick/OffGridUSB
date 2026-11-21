@@ -307,12 +307,16 @@ class TestTier2BinaryHeadersAndCorruptedData(BaseOpaqueTestCase):
             data = json.load(f)
 
         for m in data.get("models", []):
-            sha = m.get("sha256", "")
+            sha = m.get("sha256")
             if m["id"] == "qwen2.5-0.5b-q4":
+                self.assertIsNotNone(sha, "Flagship model must have a real sha256")
                 self.assertFalse(sha.startswith("000000000000000000000000000000000000000000000000000000000000"))
             else:
-                # Placeholders begin with zeros
-                self.assertTrue(sha.startswith("000000000000000000000000000000000000000000000000000000000000"))
+                # Entries must be either a real (non-all-zero) sha256 or a None placeholder
+                self.assertTrue(
+                    sha is None or not sha.startswith("000000000000000000000000000000000000000000000000000000000000"),
+                    f"Model {m['id']} must have a real sha256 or a None placeholder",
+                )
 
 
 class TestTier2StringsAndUnicodeBoundaries(BaseOpaqueTestCase):

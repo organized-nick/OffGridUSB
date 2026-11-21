@@ -110,18 +110,12 @@ def main():
         "START_OFFGRIDUSB_WINDOWS.bat",
         "START_OFFGRIDUSB_MAC.command",
         "START_OFFGRIDUSB_LINUX.sh",
-        "START_EMYRGE_WINDOWS.bat",
-        "START_EMYRGE_MAC.command",
-        "START_EMYRGE_LINUX.sh",
-        "MAKE_USB_DRIVES.bat",
-        "FORMAT_AND_SETUP_USB.bat",
-        "DOWNLOAD_INTERNET_IN_A_BOX.bat",
+        "START_OFFGRIDUSB_LINUX.desktop",
         "run_windows.bat",
         "run_linux.sh",
         "run_macos.command",
         "README.md",
-        "CONTRIBUTING.md",
-        "TEST_READY.md",
+        "USER_GUIDE.md",
     ]
     print("\n[1/4] Copying root launcher scripts...")
     for rf in root_files:

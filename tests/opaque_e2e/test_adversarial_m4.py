@@ -10,7 +10,7 @@ Probing:
    - `discover_model()` dynamically prioritizes Tier 2 (Llama-3.2-3B) over Tier 0 models.
    - `discover_model()` obeys `EMYRGE_TIER="0"` and explicit `OFFGRIDUSB_MODEL` overrides.
    - Non-GGUF and truncated files (< 5 MB) are discarded.
-2. `scripts/gentle_usb_installer.py`:
+2. `provisioning/tools/gentle_usb_installer.py`:
    - Safety guards refuse to target host system drive (`C:`, `C:\`, `c:/`, `c`) or root (`/`).
    - Safe target (`D:/`) is permitted.
    - All cross-platform launchers (`START_OFFGRIDUSB_*`) are present in `root_files`.
@@ -37,6 +37,23 @@ src_dir = repo_root / "src"
 for p in (str(src_dir), str(repo_root)):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+# Repo re-architecture: the former scripts/ and emyrge.assets/ modules now live under
+# provisioning/tools and provisioning/lib. Load them explicitly by path so the suite
+# tests the current code regardless of package layout.
+import importlib.util
+
+
+def _load_module_by_path(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+installer_module = _load_module_by_path("gentle_usb_installer", repo_root / "provisioning" / "tools" / "gentle_usb_installer.py")
+fetch_assets_module = _load_module_by_path("fetch_assets_lib", repo_root / "provisioning" / "lib" / "fetch_assets.py")
 
 from emyrge.ai.model_runner import probe_usb_platforms, ModelRunner
 from emyrge.core.config import EmyrgeConfig
@@ -178,7 +195,7 @@ class TestAdversarialGentleInstallerSafety(unittest.TestCase):
 
     def test_installer_refuses_system_drive_and_root(self):
         """Passing C:, C:\, c:/, or / MUST cause resolve_target_root() to exit with code 1."""
-        installer_script = repo_root / "scripts" / "gentle_usb_installer.py"
+        installer_script = repo_root / "provisioning" / "tools" / "gentle_usb_installer.py"
         self.assertTrue(installer_script.is_file())
 
         sys_drive = os.environ.get("SystemDrive", "C:").rstrip("\\/").upper()
@@ -192,7 +209,7 @@ class TestAdversarialGentleInstallerSafety(unittest.TestCase):
             "/",
         ]
 
-        import scripts.gentle_usb_installer as installer
+        installer = installer_module
 
         for bad_target in test_cases:
             with self.subTest(target=bad_target):
@@ -203,7 +220,7 @@ class TestAdversarialGentleInstallerSafety(unittest.TestCase):
 
     def test_installer_accepts_valid_removable_drive(self):
         """Targeting D: or D:/ MUST resolve without error."""
-        import scripts.gentle_usb_installer as installer
+        installer = installer_module
         for valid_target in ("D:", "D:/", "D", "e:"):
             with self.subTest(target=valid_target):
                 with mock.patch.object(sys, "argv", ["gentle_usb_installer.py", valid_target]):
@@ -212,21 +229,18 @@ class TestAdversarialGentleInstallerSafety(unittest.TestCase):
 
     def test_installer_root_files_manifest_completeness(self):
         """Confirm all cross-platform launchers exist in root_files and exist in the repository root."""
-        installer_code = (repo_root / "scripts" / "gentle_usb_installer.py").read_text(encoding="utf-8")
+        installer_code = (repo_root / "provisioning" / "tools" / "gentle_usb_installer.py").read_text(encoding="utf-8")
 
         required_launchers = [
             "START_OFFGRIDUSB_WINDOWS.bat",
             "START_OFFGRIDUSB_MAC.command",
             "START_OFFGRIDUSB_LINUX.sh",
-            "START_EMYRGE_WINDOWS.bat",
-            "START_EMYRGE_MAC.command",
-            "START_EMYRGE_LINUX.sh",
+            "START_OFFGRIDUSB_LINUX.desktop",
             "run_windows.bat",
             "run_linux.sh",
             "run_macos.command",
             "README.md",
-            "CONTRIBUTING.md",
-            "TEST_READY.md",
+            "USER_GUIDE.md",
         ]
 
         for launcher in required_launchers:
@@ -240,7 +254,7 @@ class TestAdversarialDownloadResilience(unittest.TestCase):
 
     def test_fetch_assets_preserves_part_file_on_transient_curl_exit_codes(self):
         """Simulated transient curl exits (18, 28, 56) MUST preserve the .part file."""
-        from emyrge.assets.fetch_assets import _stream_download
+        _stream_download = fetch_assets_module._stream_download
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             dest = Path(tmp_dir) / "test_download.zim"
@@ -265,7 +279,7 @@ class TestAdversarialDownloadResilience(unittest.TestCase):
 
     def test_fetch_assets_unlinks_part_file_on_code_33_range_error(self):
         """Curl exit code 33 (HTTP 416 range error) MUST trigger clean unlink and retry."""
-        from emyrge.assets.fetch_assets import _stream_download
+        _stream_download = fetch_assets_module._stream_download
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             dest = Path(tmp_dir) / "test_download.zim"
@@ -296,8 +310,8 @@ class TestAdversarialDownloadResilience(unittest.TestCase):
                 self.assertTrue(dest.is_file(), "Final destination file should exist after clean retry")
 
     def test_ps1_preserves_part_file_on_non_33_exit_codes(self):
-        """Inspect scripts/download_internet_in_a_box.ps1 logic to verify .part is not deleted on transient codes."""
-        ps1_path = repo_root / "scripts" / "download_internet_in_a_box.ps1"
+        """Inspect provisioning/tools/download_internet_in_a_box_testing.ps1 logic to verify .part is not deleted on transient codes."""
+        ps1_path = repo_root / "provisioning" / "tools" / "download_internet_in_a_box_testing.ps1"
         self.assertTrue(ps1_path.is_file())
         ps1_text = ps1_path.read_text(encoding="utf-8")
 

@@ -83,7 +83,7 @@ class TestTier4RealWorldScenarios(BaseOpaqueTestCase):
             entry_id = vault.save_interaction(
                 query=query,
                 answer=response["answer"],
-                citations=[c["raw_tag"] if isinstance(c, dict) else c.raw_tag for c in response.get("citations", [])],
+                citations=[c["raw_tag"] if isinstance(c, dict) else (c.raw_tag if hasattr(c, "raw_tag") else c) for c in response.get("citations", [])],
                 tags=["water", "hurricane_response", "500L"],
             )
             self.assertGreater(entry_id, 0)

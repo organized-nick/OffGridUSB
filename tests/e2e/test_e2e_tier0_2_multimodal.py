@@ -868,16 +868,32 @@ class TestTier3CrossFeatureCombinations(unittest.TestCase):
         self.assertEqual(expected_proj_path.name, "mmproj-Qwen2-VL-2B-Instruct-f16.gguf")
 
     def test_tier3_05_cross_platform_launcher_invariants_and_ports(self):
-        """F10 + F12: Verifies all launchers bind consistent ports (8000, 8081, 8082)."""
-        launchers = [
-            REPO_ROOT / "START_OFFGRIDUSB_WINDOWS.bat",
-            REPO_ROOT / "START_OFFGRIDUSB_LINUX.sh",
-            REPO_ROOT / "START_OFFGRIDUSB_MAC.command",
-        ]
-        for l in launchers:
+        """F10 + F12: Verifies cross-platform launcher/runner port architecture.
+
+        Launchers (START_OFFGRIDUSB_*) do integrity pre-flight and delegate to
+        their platform runner (run_*.bat/.sh/.command), which binds the backend
+        web app on port 8000 (default, env/flag overridable). Launchers also
+        advertise the Kiwix ZIM library on port 8081.
+        """
+        launchers = {
+            REPO_ROOT / "START_OFFGRIDUSB_WINDOWS.bat": "run_windows.bat",
+            REPO_ROOT / "START_OFFGRIDUSB_LINUX.sh": "run_linux.sh",
+            REPO_ROOT / "START_OFFGRIDUSB_MAC.command": "run_macos.command",
+        }
+        runners = {
+            REPO_ROOT / "run_windows.bat",
+            REPO_ROOT / "run_linux.sh",
+            REPO_ROOT / "run_macos.command",
+        }
+        for l, runner_name in launchers.items():
             if l.exists():
                 text = l.read_text(encoding="utf-8", errors="ignore")
-                self.assertIn("8000", text, f"Port 8000 missing in {l.name}")
+                self.assertIn(runner_name, text, f"Launcher {l.name} does not delegate to runner {runner_name}")
+                self.assertIn("8081", text, f"ZIM library port 8081 missing in {l.name}")
+        for r in runners:
+            self.assertTrue(r.exists(), f"Runner script missing: {r.name}")
+            text = r.read_text(encoding="utf-8", errors="ignore")
+            self.assertRegex(text, r"PORT\s*=\s*\S*:?8000", f"Backend default port 8000 missing in {r.name}")
 
 
 # =============================================================================

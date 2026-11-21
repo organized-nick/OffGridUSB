@@ -1077,7 +1077,7 @@ class ModelRunner:
         self._active_model: Optional[Path] = None
         self._active_binary: Optional[Path] = None
         self._active_mmproj: Optional[Path] = None
-        self._gguf_cache: Optional[tuple[float, List[Path]]] = None
+        self._gguf_cache: Optional[tuple[float, List[Path], Optional[float]]] = None
         self._stopped: bool = False
         self._lock = threading.RLock()
         atexit.register(self.stop)
@@ -1195,7 +1195,19 @@ class ModelRunner:
         if not self.models_dir.is_dir():
             return None
         now = time.monotonic()
-        if self._gguf_cache is not None and (now - self._gguf_cache[0]) < 30.0:
+        try:
+            dir_mtime = self.models_dir.stat().st_mtime
+        except OSError:
+            dir_mtime = None
+        # Cache is only valid within the TTL window AND when data/models/ has not
+        # changed (a newly staged model must be discoverable immediately, not after
+        # a 30s stale-cache window — directory mtime is one cheap stat vs a full
+        # exFAT metadata scan).
+        if (
+            self._gguf_cache is not None
+            and (now - self._gguf_cache[0]) < 30.0
+            and self._gguf_cache[2] == dir_mtime
+        ):
             ggufs = list(self._gguf_cache[1])
         else:
             ggufs = []
@@ -1212,7 +1224,7 @@ class ModelRunner:
                             ggufs.append(p)
                 except OSError:
                     continue
-            self._gguf_cache = (now, ggufs)
+            self._gguf_cache = (now, ggufs, dir_mtime)
 
         if not ggufs:
             return None
