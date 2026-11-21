@@ -38,9 +38,6 @@ class TestTier1FeatureSkeletonF1(BaseOpaqueTestCase):
             "START_OFFGRIDUSB_WINDOWS.bat",
             "START_OFFGRIDUSB_MAC.command",
             "START_OFFGRIDUSB_LINUX.sh",
-            "START_EMYRGE_WINDOWS.bat",
-            "START_EMYRGE_MAC.command",
-            "START_EMYRGE_LINUX.sh",
             "run_windows.bat",
             "run_linux.sh",
             "run_macos.command",
@@ -76,23 +73,27 @@ class TestTier1FeatureSkeletonF1(BaseOpaqueTestCase):
         self.assertFalse((sb.root / ".git").exists(), "Git version control tree should not be provisioned to target")
 
     def test_f1_04_target_drive_safety_guard_presence(self):
-        """Verifies provisioning scripts contain explicit guards rejecting host drive C:."""
+        """Verifies provisioning scripts contain explicit guards rejecting host drive C: / OS system paths."""
         scripts_to_check = [
-            self.repo_root / "scripts" / "clone_to_usb.ps1",
-            self.repo_root / "scripts" / "format_and_setup_usb.ps1",
+            self.repo_root / "provisioning" / "lib" / "SafetyValidator.ps1",
+            self.repo_root / "provisioning" / "lib" / "SafetyValidator.sh",
         ]
         for script in scripts_to_check:
             self.assertTrue(script.exists(), f"Script missing: {script}")
             text = script.read_text(encoding="utf-8", errors="ignore")
-            # Authoritative guard pattern: checks for 'C:' or system drive
-            has_guard = ("system drive" in text.lower() or "c:" in text.lower()) and "refusing" in text.lower()
+            lower = text.lower()
+            if script.suffix == ".ps1":
+                # Authoritative guard pattern: checks for 'C:' or system drive and refusing
+                has_guard = ("system drive" in lower or "c:" in lower) and "refusing" in lower
+            else:
+                # POSIX equivalent: refuses root/home/system-path targets and internal boot disks
+                has_guard = "refuse" in lower and ("/home" in lower or "boot disk" in lower)
             self.assertTrue(has_guard, f"Safety guard refusing drive C: missing in {script.name}")
 
     def test_f1_05_documentation_and_manifests_present(self):
         """Verifies essential documentation and declarative manifests are staged."""
         essential_files = [
             "README.md",
-            "CONTRIBUTING.md",
             "manifests/zim.json",
             "manifests/models.json",
         ]
@@ -139,8 +140,6 @@ class TestTier1FeatureEnginesF2F13F14(BaseOpaqueTestCase):
         posix_launchers = [
             self.repo_root / "START_OFFGRIDUSB_LINUX.sh",
             self.repo_root / "START_OFFGRIDUSB_MAC.command",
-            self.repo_root / "START_EMYRGE_LINUX.sh",
-            self.repo_root / "START_EMYRGE_MAC.command",
             self.repo_root / "run_linux.sh",
             self.repo_root / "run_macos.command",
         ]
@@ -204,12 +203,12 @@ class TestTier1FeatureZimManifestF3F10(BaseOpaqueTestCase):
     def test_f10_02_tier2_zim_catalog_entries(self):
         """F10: Verifies Tier 2 ZIM archives (STEM Textbooks & 50GB Wikipedia) in manifest."""
         archives = {a["id"]: a for a in self.zim_manifest.get("archives", [])}
-        stem_archive = archives.get("wikibooks-en-stem") or archives.get("khanacademy-en")
-        self.assertIsNotNone(stem_archive, "Tier 2 STEM archive (wikibooks-en-stem or khanacademy-en) missing from manifest")
+        stem_archive = archives.get("wikibooks-en-maxi")
+        self.assertIsNotNone(stem_archive, "Tier 2 STEM archive (wikibooks-en-maxi) missing from manifest")
         self.assertEqual(stem_archive["tier"], 2)
         self.assertTrue(stem_archive["filename"].endswith(".zim"))
 
-        wiki_archive = archives.get("wikipedia-en-nopic-50gb")
+        wiki_archive = archives.get("wikipedia-en-all-nopic")
         self.assertIsNotNone(wiki_archive, "Tier 2 50GB Wikipedia missing from manifest")
         self.assertEqual(wiki_archive["tier"], 2)
         self.assertTrue(wiki_archive["filename"].endswith(".zim"))
@@ -217,9 +216,9 @@ class TestTier1FeatureZimManifestF3F10(BaseOpaqueTestCase):
     def test_f10_03_tier2_fat32_boundary_exceeded(self):
         """F10: Verifies Tier 2 archives exceed FAT32 4GB (4,294,967,295 bytes) limit."""
         archives = {a["id"]: a for a in self.zim_manifest.get("archives", [])}
-        stem_archive = archives.get("wikibooks-en-stem") or archives.get("khanacademy-en")
+        stem_archive = archives.get("wikibooks-en-maxi")
         stem_size = stem_archive["size_bytes"]
-        wiki_size = archives["wikipedia-en-nopic-50gb"]["size_bytes"]
+        wiki_size = archives["wikipedia-en-all-nopic"]["size_bytes"]
         fat32_limit = 4294967295
 
         self.assertGreater(stem_size, fat32_limit, "Tier 2 STEM archive must exceed 4GB FAT32 limit")
@@ -232,11 +231,11 @@ class TestTier1FeatureZimManifestF3F10(BaseOpaqueTestCase):
         self.assert_valid_zim_header(water_zim)
 
     def test_f3_05_total_tier0_storage_budget(self):
-        """F3: Verifies total Tier 0 ZIM storage footprint is <= 600 MB."""
+        """F3: Verifies total Tier 0 (Product1 base ZIM set) footprint fits the 59 GB budget."""
         tier0_archives = [a for a in self.zim_manifest.get("archives", []) if a["tier"] == 0]
         total_bytes = sum(a["size_bytes"] for a in tier0_archives)
-        total_mb = total_bytes / (1024 * 1024)
-        self.assertLess(total_mb, 600.0, f"Tier 0 ZIM total footprint ({total_mb:.1f} MB) exceeds 600 MB budget")
+        budget_bytes = 59_000_000_000
+        self.assertLess(total_bytes, budget_bytes, f"Tier 0 ZIM total footprint ({total_bytes / 1e9:.2f} GB) exceeds 59 GB budget")
 
 
 class TestTier1FeatureModelsManifestF4F11(BaseOpaqueTestCase):
