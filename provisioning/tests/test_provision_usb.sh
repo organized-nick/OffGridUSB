@@ -195,6 +195,47 @@ PS1GREP 'Assert-TargetDriveSafety -DriveLetter \$Drive' && ok "ps1 single-drive 
 # Parse-DriveSpec regex accepts letters and :SKU, rejects paths.
 grep -qF 'Spec -match "^([A-Za-z])(?::([A-Za-z0-9-]+))?$"' "${PS1_SH}" && ok "ps1 drive-spec regex guards against paths" || bad "ps1 drive-spec regex missing"
 
+echo "== 12b) parallel gate: exit-code gating + transport-tolerant safety =="
+# Regression (ogusb-e2e r4, nixos): gate_drive output was string-matched
+# against "PASSED*" while it echoes multi-line "[PASS] ..." validator output,
+# so live-mode parallel provisioning misclassified every drive as FAIL.
+grep -q 'if gate_drive "${target}" "${sku}"; then' "${PROVISION_SH}" \
+    && ok "orchestrator gates on gate_drive exit code" \
+    || bad "orchestrator gates on gate_drive exit code"
+! grep -q 'gate_msg}" == PASSED\*' "${PROVISION_SH}" \
+    && ok "stdout string-match on PASSED* removed" \
+    || bad "stdout string-match on PASSED* still present"
+# Transport check must be informational (WARNING, non-fatal) and resolve the
+# device via findmnt with a df -P fallback (nixos gave empty TRAN).
+grep -q 'informational' "${SCRIPT_DIR}/../lib/SafetyValidator.sh" \
+    && ok "transport check documented as informational" \
+    || bad "transport check not informational"
+grep -q 'df -P "${target}"' "${SCRIPT_DIR}/../lib/SafetyValidator.sh" \
+    && ok "device resolution falls back to df -P" \
+    || bad "device resolution df -P fallback missing"
+
+# Functional: safety gate must PASS (exit 0) for a valid non-root target even
+# when lsblk cannot resolve the transport (simulated by a plain directory).
+gate_out="$(bash "${SCRIPT_DIR}/../lib/SafetyValidator.sh" "${SCRIPT_DIR}" "Product1" 2>&1)"
+gate_rc=$?
+[[ ${gate_rc} -eq 0 ]] && ok "safety gate passes for real dir despite transport" || bad "safety gate failed on real dir (rc=${gate_rc}): ${gate_out}"
+
+echo "== 12c) provisioner: free-space guard before cache prefill =="
+# Regression (ogusb-e2e r4): full-profile cache prefill had no df guard and
+# filled the host root fs to 100%.
+grep -q 'Insufficient free space for cache prefill' "${PROVISION_SH}" \
+    && ok "bash provisioner aborts on insufficient cache free space" \
+    || bad "bash free-space guard missing"
+grep -q 'profile_key=$(python3' "${PROVISION_SH}" \
+    && ok "bash provisioner fetches the resolved profile payload (not whole tier)" \
+    || bad "bash profile resolution missing"
+grep -q 'fetch_assets.py" --sku "${sku}" --profile "${profile_key}"' "${PROVISION_SH}" \
+    && ok "bash fetch_assets called with --sku/--profile" \
+    || bad "bash fetch_assets not profile-scoped"
+PS1GREP 'Insufficient free space for cache prefill' \
+    && ok "ps1 provisioner aborts on insufficient cache free space" \
+    || bad "ps1 free-space guard missing"
+
 echo "== 13) bash -n parse =="
 bash -n "${PROVISION_SH}" && ok "provision_usb.sh parses" || bad "provision_usb.sh syntax"
 bash -n "${VALIDATOR_SH}" && ok "SafetyValidator.sh parses" || bad "SafetyValidator.sh syntax"

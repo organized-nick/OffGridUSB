@@ -85,10 +85,26 @@ assert_target_drive_safety() {
         fi
         
         if command -v lsblk >/dev/null 2>&1; then
-            local tran
-            tran=$(lsblk -no TRAN "${target_src}" 2>/dev/null || echo "unknown")
+            # Resolve the backing device node robustly: findmnt first, then
+            # df -P (some setups -- e.g. NixOS with unusual mount namespaces
+            # or vfat quirks -- return nothing from findmnt). lsblk resolves
+            # the TRAN of the parent device automatically for partitions.
+            local dev_node="${target_src}"
+            if [[ -n "${target_src}" ]]; then
+                dev_node=$(findmnt -n -o SOURCE "${target}" 2>/dev/null || true)
+                if [[ -z "${dev_node}" || "${dev_node}" == "${target}" ]]; then
+                    dev_node=$(df -P "${target}" 2>/dev/null | tail -n 1 | awk '{print $1}')
+                fi
+            fi
+            local tran=""
+            if [[ -n "${dev_node}" && -e "${dev_node}" ]]; then
+                tran=$(lsblk -no TRAN "${dev_node}" 2>/dev/null | tail -n 1 || true)
+            fi
+            # Informational only: an empty/unknown transport on a valid mount
+            # (vfat/usb-storage quirks) must NOT abort provisioning. Root-fs
+            # and capacity gates above are the hard safety boundaries.
             if [[ "${tran}" != "usb" ]]; then
-                echo "[WARNING] Target device ${target_src} has transport '${tran}' (Expected 'usb')." >&2
+                echo "[WARNING] Target device ${dev_node:-unknown} has transport '${tran:-unknown}' (Expected 'usb'); continuing (informational)." >&2
             fi
         fi
     fi

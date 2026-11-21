@@ -687,6 +687,28 @@ if (-not $preInv.AllRequiredAvailable) {
     $fetchScript = Join-Path $SourceRoot "provisioning\tools\fetch_assets.py"
     if (-not (Test-Path $fetchScript)) { throw "fetch_assets.py not found at: $fetchScript" }
 
+    # Free-space guard (parity with provision_usb.sh): estimate bytes of the
+    # profile payload still missing from the cache and refuse to fetch when
+    # the host volume cannot hold it (root-fs protection).
+    $planJson = & python $fetchScript --sku $ResolvedSku --profile $effProfile --dry-run 2>$null
+    if ($LASTEXITCODE -eq 0 -and $planJson) {
+        $plan = ($planJson -join "`n") | ConvertFrom-Json
+        $alreadyCached = @($preInv.Assets | Where-Object { $_.Status -eq "AVAILABLE" } | ForEach-Object { $_.FileName })
+        $needBytes = 0L
+        foreach ($a in @($plan.planned_models) + @($plan.planned_zims)) {
+            if ($null -eq $a) { continue }
+            if ($alreadyCached -contains $a.filename) { continue }
+            $needBytes += [int64]($a.size_bytes)
+        }
+        $driveInfo = Get-PSDrive -Name ($CacheDir.Substring(0,1))
+        $freeBytes = [int64]$driveInfo.Free
+        $margin = $needBytes / 10 + 2GB
+        if (($freeBytes - $needBytes) -lt $margin) {
+            throw ([string]::Format("Insufficient free space for cache prefill: need ~{0:N0} MB for {1} ({2} profile), only {3:N0} MB free on {4}. Free up space or change -CacheDir; NOT downloading.", [int]($needBytes/1MB), $ResolvedSku, $effProfile, [int]($freeBytes/1MB), $CacheDir))
+        }
+        Write-Host ("  [OK] Free-space check passed: ~{0:N0} MB to download, {1:N0} MB free." -f [int]($needBytes/1MB), [int]($freeBytes/1MB)) -ForegroundColor Green
+    }
+
     & python $fetchScript --sku $ResolvedSku --profile $effProfile --workers 4 --dest-root $CacheDir
     if ($LASTEXITCODE -ne 0) {
         throw "Asset download failed (offline or source unreachable?). Partial files are preserved in $CacheDir and will resume on next run."
