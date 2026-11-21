@@ -97,6 +97,9 @@ class OffGridUSBAuditor:
         timeout: int = 10,
         llm_timeout: int = 45,
         verbose: bool = False,
+        sku: Optional[str] = None,
+        profile: Optional[str] = None,
+        products_json: Optional[str] = None,
     ):
         self.raw_drive = drive_path
         self.drive = self._normalize_drive_path(drive_path)
@@ -117,6 +120,70 @@ class OffGridUSBAuditor:
         self.zim_manifest: List[Dict[str, Any]] = []
         self.models_manifest: List[Dict[str, Any]] = []
         self.hardware_manifest: Optional[Dict[str, Any]] = None
+
+        # SKU / payload-profile mode. Resolved lazily in _resolve_sku_assets();
+        # when populated, asset audits target exactly the SKU profile's asset
+        # list (lean drives with 4 ZIMs / 0 models audit clean) instead of the
+        # tier ladder.
+        self.sku: Optional[str] = sku
+        self.profile: str = profile or "Auto"
+        self.products_json_path: Optional[Path] = Path(products_json).resolve() if products_json else None
+        self.active_zims: Optional[set] = None
+        self.active_models: Optional[set] = None
+        self.ai_enabled: bool = True
+
+    def _resolve_sku_assets(self) -> None:
+        """Resolve the audited asset set from product_sku.json (staged by the
+        provisioner) or from --sku/--profile against manifests/products.json.
+
+        Sets self.active_zims / self.active_models (None = fall back to the
+        tier ladder) and self.ai_enabled (False for AI-free SKUs like
+        Product1, which must not require llama-server on port 8082).
+        """
+        sku_data: Dict[str, Any] = {}
+        sku_json_path = self.drive / "manifests" / "product_sku.json"
+        if sku_json_path.exists():
+            try:
+                sku_data = json.loads(sku_json_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                self.log(f"Could not parse product_sku.json: {e}", "WARN")
+
+        if self.sku and not sku_data:
+            products_path = self.products_json_path or (
+                Path(__file__).resolve().parents[2] / "manifests" / "products.json"
+            )
+            try:
+                catalog = json.loads(products_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                self.log(f"Could not load products.json ({products_path}): {e}", "WARN")
+                catalog = {}
+            matched = next(
+                (p for p in catalog.get("products", []) if p.get("sku") == self.sku or p.get("product_id") == self.sku),
+                None,
+            )
+            if matched:
+                profiles = matched.get("payload_profiles", {})
+                profile_key = self.profile if self.profile != "Auto" else ("lean" if "lean" in profiles else "full")
+                profile_data = profiles.get(profile_key, profiles.get("full", {}))
+                sku_data = {
+                    "sku": matched.get("sku"),
+                    "active_zim_archives": profile_data.get("zim_archives", []),
+                    "active_models": profile_data.get("models", []),
+                }
+            else:
+                self.log(f"SKU '{self.sku}' not found in {products_path}", "WARN")
+
+        if sku_data.get("active_zim_archives"):
+            self.active_zims = set(sku_data["active_zim_archives"])
+        if sku_data.get("active_models") is not None:
+            self.active_models = set(sku_data["active_models"])
+            # AI-free SKU (e.g. Product1): no models staged -> llama-server
+            # (8082) never runs and must not be a hard requirement.
+            self.ai_enabled = bool(sku_data["active_models"])
+        if sku_data.get("sku"):
+            self.log(f"SKU mode: auditing {sku_data['sku']} payload "
+                     f"({len(self.active_zims or [])} zims, "
+                     f"{len(self.active_models or [])} models, ai_enabled={self.ai_enabled})", "INFO")
 
     @staticmethod
     def _normalize_drive_path(p: str) -> Path:
@@ -288,24 +355,12 @@ class OffGridUSBAuditor:
                 )
             )
 
-        # Check if product_sku.json specifies active_zim_archives / active_models
-        sku_json_path = self.drive / "manifests" / "product_sku.json"
-        sku_zims = None
-        sku_models = None
-        if sku_json_path.exists():
-            try:
-                sku_data = json.loads(sku_json_path.read_text(encoding="utf-8"))
-                if sku_data.get("active_zim_archives"):
-                    sku_zims = set(sku_data["active_zim_archives"])
-                if sku_data.get("active_models"):
-                    sku_models = set(sku_data["active_models"])
-            except Exception:
-                pass
-
-        # Validate ZIM files for requested tier
+        # Validate ZIM files: SKU/lean profile asset list when available,
+        # otherwise the tier ladder.
+        self._resolve_sku_assets()
         zim_dir = self.drive / "data" / "zim"
-        if sku_zims is not None:
-            target_zims = [z for z in self.zim_manifest if z.get("filename") in sku_zims]
+        if self.active_zims is not None:
+            target_zims = [z for z in self.zim_manifest if z.get("filename") in self.active_zims]
         else:
             target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
         self.log(f"Auditing {len(target_zims)} ZIM archives for Tier <= {self.tier}...", "INFO")
@@ -374,10 +429,11 @@ class OffGridUSBAuditor:
                     )
                 )
 
-        # Validate GGUF models for requested tier
+        # Validate GGUF models: SKU/lean profile asset list when available,
+        # otherwise the tier ladder.
         models_dir = self.drive / "data" / "models"
-        if sku_models is not None:
-            target_models = [m for m in self.models_manifest if m.get("filename") in sku_models]
+        if self.active_models is not None:
+            target_models = [m for m in self.models_manifest if m.get("filename") in self.active_models]
         else:
             target_models = [m for m in self.models_manifest if m.get("tier", 0) <= self.tier]
         self.log(f"Auditing {len(target_models)} GGUF models for Tier <= {self.tier}...", "INFO")
@@ -1174,8 +1230,23 @@ class OffGridUSBAuditor:
         # 2. Port 8081 Kiwix Server Catalog & Mount Check
         self._check_kiwix_server()
 
-        # 3. Port 8082 llama-server Health & Completions
-        self._check_llama_server()
+        # 3. Port 8082 llama-server Health & Completions (AI-enabled SKUs only;
+        # AI-free SKUs like Product1 legitimately run no 8082 service).
+        if self.ai_enabled:
+            self._check_llama_server()
+        else:
+            self.log("AI-free SKU detected; skipping llama-server (port 8082) checks.", "INFO")
+            self.results.append(
+                CheckResult(
+                    category="Live Services",
+                    check_name="llama-server Health (Port 8082)",
+                    target="127.0.0.1:8082",
+                    status=AuditStatus.SKIP,
+                    expected="llama-server health + chat completion",
+                    observed="Skipped: AI-free SKU",
+                    details="This SKU stages no GGUF models; port 8082 is intentionally absent",
+                )
+            )
 
         # 4. CDC Water Chlorination Formula Deterministic Verification
         self._check_cdc_water_calculator()
@@ -1238,17 +1309,8 @@ class OffGridUSBAuditor:
 
             if code == 200:
                 missing_zims = []
-                sku_zims = None
-                sku_json_path = self.drive / "manifests" / "product_sku.json"
-                if sku_json_path.exists():
-                    try:
-                        sku_data = json.loads(sku_json_path.read_text(encoding="utf-8"))
-                        if sku_data.get("active_zim_archives"):
-                            sku_zims = set(sku_data["active_zim_archives"])
-                    except Exception:
-                        pass
-                if sku_zims is not None:
-                    target_zims = [z for z in self.zim_manifest if z.get("filename") in sku_zims]
+                if self.active_zims is not None:
+                    target_zims = [z for z in self.zim_manifest if z.get("filename") in self.active_zims]
                 else:
                     target_zims = [z for z in self.zim_manifest if z.get("tier", 0) <= self.tier]
                 for z in target_zims:
@@ -1619,7 +1681,9 @@ class OffGridUSBAuditor:
             return
 
         self.log("Beginning Process Image Path Isolation Audit...", "INFO")
-        target_ports = [8000, 8081, 8082]
+        # AI-free SKUs (Product1) legitimately run no llama-server; 8082 must
+        # not be treated as a required listener there.
+        target_ports = [8000, 8081] + ([8082] if self.ai_enabled else [])
 
         normalized_drive_str = str(self.drive).upper()
         if not normalized_drive_str.endswith("\\"):
@@ -1820,7 +1884,14 @@ class OffGridUSBAuditor:
                 )
 
     def _audit_posix_process_isolation(self, target_ports: List[int]) -> None:
-        """POSIX lsof / procfs fallback for cross-platform process isolation check."""
+        """POSIX lsof / procfs fallback for cross-platform process isolation check.
+
+        The served CONTENT must come from the drive; the interpreter may be a
+        host-provided one (e.g. /nix/store/... python on NixOS, where no
+        interpreter is bundled). A process passes when its executable lives on
+        the drive OR any command-line argument references the drive (script/
+        model/library paths served from the deployment).
+        """
         for port in target_ports:
             try:
                 cmd = ["lsof", "-iTCP:" + str(port), "-sTCP:LISTEN", "-n", "-P", "-Fp"]
@@ -1834,16 +1905,37 @@ class OffGridUSBAuditor:
                     exe_link = Path(f"/proc/{pid}/exe")
                     real_exe = os.readlink(exe_link) if exe_link.exists() else "unknown"
                     norm_drive = str(self.drive)
-                    if real_exe.startswith(norm_drive) or "/tmp/emyrge_runtime" in real_exe:
+                    cmdline_tokens: List[str] = []
+                    try:
+                        cmdline_tokens = (
+                            Path(f"/proc/{pid}/cmdline").read_bytes().decode("utf-8", errors="replace").split("\x00")
+                        )
+                        cmdline_tokens = [t for t in cmdline_tokens if t]
+                    except Exception:
+                        pass
+                    serves_from_drive = any(t.startswith(norm_drive) for t in cmdline_tokens)
+                    if real_exe.startswith(norm_drive):
                         self.results.append(
                             CheckResult(
                                 category="Process Isolation",
                                 check_name=f"Process Image Path (Port {port})",
                                 target=f"Port {port} -> PID {pid}",
                                 status=AuditStatus.PASS,
-                                expected=f"Path starting with {self.drive} or /tmp/emyrge_runtime",
+                                expected=f"Path starting with {self.drive}",
                                 observed=real_exe,
-                                details="POSIX process path isolation verified",
+                                details="POSIX process path isolation verified (binary on drive)",
+                            )
+                        )
+                    elif serves_from_drive:
+                        self.results.append(
+                            CheckResult(
+                                category="Process Isolation",
+                                check_name=f"Process Image Path (Port {port})",
+                                target=f"Port {port} -> PID {pid}",
+                                status=AuditStatus.PASS,
+                                expected=f"Binary or served content paths starting with {self.drive}",
+                                observed=f"exe={real_exe} (host interpreter; serving from drive)",
+                                details="POSIX process isolation verified via command-line content paths on the deployment drive",
                             )
                         )
                     else:
@@ -1853,7 +1945,7 @@ class OffGridUSBAuditor:
                                 check_name=f"Process Image Path (Port {port})",
                                 target=f"Port {port} -> PID {pid}",
                                 status=AuditStatus.FAIL,
-                                expected=f"Path starting with {self.drive}",
+                                expected=f"Binary or served content paths starting with {self.drive}",
                                 observed=real_exe,
                                 details=f"PROCESS_ISOLATION_VIOLATION: POSIX process running outside deployment drive ({real_exe})",
                             )
@@ -2020,6 +2112,7 @@ Examples:
     python audit_offgrid_usb.py --drive D: --tier 2 --mode static --json D:\\audit_report.json
     python audit_offgrid_usb.py --drive /Volumes/OFFGRIDUSB --tier 2 --skip-live
     python audit_offgrid_usb.py --drive C:\\temp\\mock_drive --tier 2 --skip-live
+    python audit_offgrid_usb.py --drive /media/usb/d1 --tier 0 --sku Product1 --profile lean --skip-live
         """,
     )
     parser.add_argument(
@@ -2046,6 +2139,22 @@ Examples:
         "--manifest-dir",
         default=None,
         help="Optional path to directory containing zim.json and models.json (default: <drive>/manifests)",
+    )
+    parser.add_argument(
+        "--sku",
+        default=None,
+        help="Audit against a SKU payload profile instead of the tier ladder "
+        "(e.g. Product1). Ignored when the drive ships manifests/product_sku.json.",
+    )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Payload profile for --sku mode: lean or full (default: Auto -> lean if present)",
+    )
+    parser.add_argument(
+        "--products-json",
+        default=None,
+        help="Path to products.json for --sku mode (default: repo manifests/products.json)",
     )
     parser.add_argument(
         "--skip-live",
@@ -2131,6 +2240,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         timeout=args.timeout,
         llm_timeout=args.llm_timeout,
         verbose=args.verbose,
+        sku=args.sku,
+        profile=args.profile,
+        products_json=args.products_json,
     )
 
     report = auditor.run_full_audit()

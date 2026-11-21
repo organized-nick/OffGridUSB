@@ -213,8 +213,11 @@ run_orchestrator() {
         sku=$(parse_drive_spec "${spec}" | tail -1)
         target_list+=("${target}")
         sku_list+=("${sku}")
-        gate_msg=$(gate_drive "${target}" "${sku}") || true
-        if [[ "${gate_msg}" == PASSED* ]]; then
+        # Gate on the EXIT CODE, not on stdout matching "PASSED*". gate_drive
+        # echoes multi-line validator output ("[PASS] ..." lines), so string-
+        # matching the captured stdout misclassified every live-mode drive as
+        # FAIL (parallel mode aborted both drives; sequential bypassed this).
+        if gate_drive "${target}" "${sku}"; then
             status_list+=("PENDING")
         else
             status_list+=("FAIL")
@@ -385,8 +388,57 @@ for a in inv['assets']:
         exit 1
     fi
 
-    echo ">>> Fetching missing assets (tier <= ${tier})..."
-    if ! python3 "${SCRIPT_DIR}/tools/fetch_assets.py" --tier "${tier}" --dest-root "${CACHE_DIR}"; then
+    # Resolve the effective payload profile (must match AssetCacheManager:
+    # Auto -> lean when available, else full) so we fetch exactly the profile
+    # payload, not the whole tier ladder (a full-profile prefill once filled a
+    # host root fs to 100% overnight).
+    local profile_key
+    profile_key=$(python3 -c "
+import json, sys
+catalog = json.load(open('${SOURCE_ROOT}/manifests/products.json'))
+p = next((x for x in catalog.get('products', []) if x.get('sku') == '${sku}'), None)
+profiles = (p or {}).get('payload_profiles', {})
+key = '${PROFILE}'
+if key == 'Auto':
+    key = 'lean' if 'lean' in profiles else 'full'
+elif key not in profiles:
+    key = 'full' if 'full' in profiles else key
+print(key)
+")
+
+    # Free-space guard: compute nominal bytes of the planned profile payload
+    # and compare against df available on the cache filesystem BEFORE fetching.
+    # Abort with a clear message when the host would run out of disk.
+    local plan_json need_bytes free_bytes avail_after
+    if ! plan_json=$(python3 "${SCRIPT_DIR}/tools/fetch_assets.py" \
+        --sku "${sku}" --profile "${profile_key}" --dry-run 2>/dev/null); then
+        echo "[ERROR] Could not plan payload for ${sku} (${profile_key} profile)." >&2
+        exit 1
+    fi
+    need_bytes=$(OFFGRID_INV_JSON="${inv}" python3 -c "
+import json, sys, os
+plan = json.load(sys.stdin)
+inv = json.loads(os.environ['OFFGRID_INV_JSON'])
+available = {a['filename']: int(a.get('size_bytes', 0) or 0) for a in inv['assets'] if a['status'] == 'AVAILABLE'}
+need = sum(int(a.get('size_bytes', 0) or 0) for a in plan['planned_models'] + plan['planned_zims'])
+# Assets already present in the cache are skipped by fetch_assets; only the
+# missing remainder must fit on disk.
+have = sum(sz for name, sz in available.items())
+print(max(0, need - have))
+" <<<"${plan_json}")
+    free_bytes=$(df -k -B1 "${CACHE_DIR}" | tail -n 1 | awk '{print $4}')
+    # Keep a safety margin: 10% overhead (temp/partial files) + 2 GiB absolute floor.
+    avail_after=$(( free_bytes - need_bytes ))
+    if [[ ${avail_after} -lt $(( need_bytes / 10 + 2 * 1024 * 1024 * 1024 )) ]]; then
+        echo "[ERROR] Insufficient free space for cache prefill: need ~$(( need_bytes / 1024 / 1024 )) MB for" >&2
+        echo "        ${sku} (${profile_key} profile), only $(( free_bytes / 1024 / 1024 )) MB free on ${CACHE_DIR} filesystem." >&2
+        echo "        Free up space or point --cache-dir at a volume with room; NOT downloading (root-fs protection)." >&2
+        exit 1
+    fi
+    echo "[OK] Free-space check passed: ~$(( need_bytes / 1024 / 1024 )) MB to download, $(( free_bytes / 1024 / 1024 )) MB free."
+
+    echo ">>> Fetching missing assets (sku ${sku}, profile ${profile_key})..."
+    if ! python3 "${SCRIPT_DIR}/tools/fetch_assets.py" --sku "${sku}" --profile "${profile_key}" --dest-root "${CACHE_DIR}"; then
         echo "[ERROR] Asset download failed (offline or source unreachable?). Cache is incomplete." >&2
         echo "        Partial files are preserved in ${CACHE_DIR} and will resume on next run." >&2
         exit 1
